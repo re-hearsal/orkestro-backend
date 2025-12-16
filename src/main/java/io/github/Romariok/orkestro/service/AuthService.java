@@ -1,23 +1,28 @@
 package io.github.Romariok.orkestro.service;
-import io.github.Romariok.orkestro.security.JWTUtil;
+
 import io.github.Romariok.orkestro.dto.AuthResponseDTO;
-import io.github.Romariok.orkestro.dto.RegisterRequestDTO;
 import io.github.Romariok.orkestro.dto.LoginRequestDTO;
+import io.github.Romariok.orkestro.dto.RegisterRequestDTO;
 import io.github.Romariok.orkestro.models.User;
+import io.github.Romariok.orkestro.security.JWTUtil;
+import io.github.Romariok.orkestro.utils.exception.BusinessException;
+import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.exception.InternalServiceException;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +39,7 @@ public class AuthService {
 
         if (userService.existsByUsername(request.getUsername())) {
             log.warn("Username already taken: {}", request.getUsername());
-            throw new RuntimeException("Username is already taken");
+            throw new BusinessException("Username is already taken");
         }
 
         try {
@@ -48,7 +53,7 @@ public class AuthService {
             return new AuthResponseDTO(token, user.getUsername());
         } catch (Exception e) {
             log.error("Error during user registration: {}", e.getMessage(), e);
-            throw e;
+            throw new InternalServiceException("Error during user registration", e);
         }
     }
 
@@ -66,9 +71,40 @@ public class AuthService {
             log.info("Token generated for user: {}", request.getUsername());
 
             return new AuthResponseDTO(token, request.getUsername());
-        } catch (Exception e) {
+        } catch (BadCredentialsException e) {
             log.error("Authentication failed for user {}: {}", request.getUsername(), e.getMessage());
             throw e;
+        } catch (Exception e) {
+            log.error("Authentication failed for user {}: {}", request.getUsername(), e.getMessage(), e);
+            throw new InternalServiceException("Error during user login", e);
+        }
+    }
+
+    @Transactional
+    public void changePassword(String currentPassword, String newPassword) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()
+                || "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new BusinessException("No authenticated user found");
+        }
+
+        String username = authentication.getName();
+        changePasswordForUser(username, currentPassword, newPassword);
+    }
+
+    @Transactional
+    public void resetPassword(String username, String newPassword) {
+        log.info("Resetting password for user: {}", username);
+
+        try {
+            User user = userService.findByUsername(username);
+            user.setPassword(passwordEncoder.encode(newPassword));
+            userService.saveUser(user);
+        } catch (UsernameNotFoundException e) {
+            throw new EntityNotFoundException("User not found: " + username);
+        } catch (Exception e) {
+            log.error("Error resetting password for user {}: {}", username, e.getMessage(), e);
+            throw new InternalServiceException("Error resetting password for user: " + username, e);
         }
     }
 
@@ -84,7 +120,29 @@ public class AuthService {
             return jwtUtil.generateToken(username, authorities);
         } catch (Exception e) {
             log.error("Error generating token for user {}: {}", username, e.getMessage(), e);
+            throw new InternalServiceException("Error generating token for user: " + username, e);
+        }
+    }
+
+    private void changePasswordForUser(String username, String currentPassword, String newPassword) {
+        log.info("Changing password for user: {}", username);
+
+        try {
+            User user = userService.findByUsername(username);
+
+            if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+                throw new BusinessException("Current password is incorrect");
+            }
+
+            user.setPassword(passwordEncoder.encode(newPassword));
+            userService.saveUser(user);
+        } catch (UsernameNotFoundException e) {
+            throw new EntityNotFoundException("User not found: " + username);
+        } catch (BusinessException e) {
             throw e;
+        } catch (Exception e) {
+            log.error("Error changing password for user {}: {}", username, e.getMessage(), e);
+            throw new InternalServiceException("Error changing password for user: " + username, e);
         }
     }
 }
