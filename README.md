@@ -1,2 +1,2 @@
 # orkestro-backend
-Backend of markdown docs, powered by Spring Framework
+Backend of Orkestro, powered by Spring Framework
