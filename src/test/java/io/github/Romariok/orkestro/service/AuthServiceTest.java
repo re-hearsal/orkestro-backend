@@ -58,9 +58,10 @@ class AuthServiceTest {
             List.of());
       SecurityContextHolder.getContext().setAuthentication(auth);
 
-      User user = new User();
-      user.setUsername(username);
-      user.setPassword("encoded-old");
+      User user = User.builder()
+            .username(username)
+            .password("encoded-old")
+            .build();
 
       when(userService.findByUsername(username)).thenReturn(user);
       when(passwordEncoder.matches(currentPassword, "encoded-old")).thenReturn(true);
@@ -82,9 +83,10 @@ class AuthServiceTest {
             List.of());
       SecurityContextHolder.getContext().setAuthentication(auth);
 
-      User user = new User();
-      user.setUsername(username);
-      user.setPassword("encoded-old");
+      User user = User.builder()
+            .username(username)
+            .password("encoded-old")
+            .build();
 
       when(userService.findByUsername(username)).thenReturn(user);
       when(passwordEncoder.matches(currentPassword, "encoded-old")).thenReturn(false);
@@ -101,9 +103,10 @@ class AuthServiceTest {
       String username = "user";
       String newPassword = "newPass";
 
-      User user = new User();
-      user.setUsername(username);
-      user.setPassword("old-encoded");
+      User user = User.builder()
+            .username(username)
+            .password("old-encoded")
+            .build();
 
       when(userService.findByUsername(username)).thenReturn(user);
       when(passwordEncoder.encode(newPassword)).thenReturn("encoded-new");

@@ -10,6 +10,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -18,6 +21,8 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @Entity
+@Builder
+@AllArgsConstructor
 @Table(name = "file")
 public class StoredFile {
 
@@ -47,5 +52,3 @@ public class StoredFile {
     @Column(name = "uploaded_by", nullable = false)
     private Long uploadedByUserId;
 }
-
-

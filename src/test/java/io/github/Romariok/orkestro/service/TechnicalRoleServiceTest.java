@@ -50,8 +50,9 @@ class TechnicalRoleServiceTest {
     @Test
     void getUserRoles_returnsMappedDtos() {
         Long userId = 1L;
-        Role role = new Role();
-        role.setId(10L);
+        Role role = Role.builder()
+                .id(10L)
+                .build();
         TechnicalRoleDTO dto = new TechnicalRoleDTO();
         dto.setId(10L);
 
@@ -93,8 +94,9 @@ class TechnicalRoleServiceTest {
         Long userId = 1L;
         Long roleId = 10L;
 
-        Role role = new Role();
-        role.setId(roleId);
+        Role role = Role.builder()
+                .id(roleId)
+                .build();
 
         when(userRepository.existsById(userId)).thenReturn(true);
         when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
@@ -110,8 +112,9 @@ class TechnicalRoleServiceTest {
         Long userId = 1L;
         Long roleId = 10L;
 
-        Role role = new Role();
-        role.setId(roleId);
+        Role role = Role.builder()
+                .id(roleId)
+                .build();
 
         when(userRepository.existsById(userId)).thenReturn(true);
         when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));

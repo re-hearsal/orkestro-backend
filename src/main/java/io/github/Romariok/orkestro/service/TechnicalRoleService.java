@@ -53,27 +53,28 @@ public class TechnicalRoleService {
                 .findById(roleId)
                 .orElseThrow(() -> new EntityNotFoundException("Role not found: " + roleId));
 
-        UserRoleId id = new UserRoleId();
-        id.setUserId(userId);
-        id.setRoleId(roleId);
+        UserRoleId id = UserRoleId.builder()
+                .userId(userId)
+                .roleId(roleId)
+                .build();
 
         if (userRoleRepository.existsById(id)) {
             return;
         }
 
-        UserRole userRole = new UserRole();
-        userRole.setUserId(userId);
-        userRole.setRoleId(role.getId());
+        UserRole userRole = UserRole.builder()
+                .userId(userId)
+                .roleId(role.getId())
+                .build();
         userRoleRepository.save(userRole);
     }
 
     @Transactional
     public void removeRoleFromUser(Long userId, Long roleId) {
-        UserRoleId id = new UserRoleId();
-        id.setUserId(userId);
-        id.setRoleId(roleId);
+        UserRoleId id = UserRoleId.builder()
+                .userId(userId)
+                .roleId(roleId)
+                .build();
         userRoleRepository.deleteById(id);
     }
 }
-
-

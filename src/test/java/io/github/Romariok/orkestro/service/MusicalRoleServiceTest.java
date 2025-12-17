@@ -49,9 +49,10 @@ class MusicalRoleServiceTest {
    @Test
    void getUserMusicalRoles_returnsMappedDtos() {
       Long userId = 1L;
-      Instrument instrument = new Instrument();
-      instrument.setId(5L);
-      instrument.setName("Violin");
+      Instrument instrument = Instrument.builder()
+            .id(5L)
+            .name("Violin")
+            .build();
 
       MusicalRoleDTO dto = new MusicalRoleDTO(5L, "Violin");
 
@@ -153,8 +154,9 @@ class MusicalRoleServiceTest {
       Long userId = 1L;
       when(userRepository.existsById(userId)).thenReturn(true);
 
-      Instrument instrument = new Instrument();
-      instrument.setId(1L);
+      Instrument instrument = Instrument.builder()
+            .id(1L)
+            .build();
 
       when(instrumentRepository.findAllById(any()))
             .thenReturn(List.of(instrument));
@@ -170,21 +172,25 @@ class MusicalRoleServiceTest {
 
       when(userRepository.existsById(userId)).thenReturn(true);
 
-      Instrument instrument1 = new Instrument();
-      instrument1.setId(1L);
-      Instrument instrument3 = new Instrument();
-      instrument3.setId(3L);
+      Instrument instrument1 = Instrument.builder()
+            .id(1L)
+            .build();
+      Instrument instrument3 = Instrument.builder()
+            .id(3L)
+            .build();
 
       when(instrumentRepository.findAllById(any()))
             .thenReturn(List.of(instrument1, instrument3));
 
-      UserInstrument ui1 = new UserInstrument();
-      ui1.setUserId(userId);
-      ui1.setInstrumentId(1L);
+      UserInstrument ui1 = UserInstrument.builder()
+            .userId(userId)
+            .instrumentId(1L)
+            .build();
 
-      UserInstrument ui2 = new UserInstrument();
-      ui2.setUserId(userId);
-      ui2.setInstrumentId(2L);
+      UserInstrument ui2 = UserInstrument.builder()
+            .userId(userId)
+            .instrumentId(2L)
+            .build();
 
       when(userInstrumentRepository.findByUserId(userId)).thenReturn(List.of(ui1, ui2));
 

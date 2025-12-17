@@ -2,11 +2,15 @@ package io.github.Romariok.orkestro.service;
 
 import io.github.Romariok.orkestro.models.Permission;
 import io.github.Romariok.orkestro.models.Role;
+import io.github.Romariok.orkestro.models.StoredFile;
 import io.github.Romariok.orkestro.models.User;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.repository.RolePermissionRepository;
+import io.github.Romariok.orkestro.repository.StoredFileRepository;
 import io.github.Romariok.orkestro.repository.UserRepository;
 import io.github.Romariok.orkestro.repository.UserRoleRepository;
+import io.github.Romariok.orkestro.security.SecurityUtils;
+import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -25,6 +29,8 @@ public class UserService implements UserDetailsService {
    private final UserRepository userRepository;
    private final UserRoleRepository userRoleRepository;
    private final RolePermissionRepository rolePermissionRepository;
+   private final StoredFileRepository storedFileRepository;
+   private final SecurityUtils securityUtils;
 
    @Override
    @Transactional(readOnly = true)
@@ -72,18 +78,38 @@ public class UserService implements UserDetailsService {
    }
 
    @Transactional(readOnly = true)
-    public User findByUsername(String username) {
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
-    }
+   public User findByUsername(String username) {
+      return userRepository.findByUsername(username)
+            .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+   }
 
-    @Transactional(readOnly = true)
-    public boolean existsByUsername(String username) {
-        return userRepository.existsByUsername(username);
-    }
+   @Transactional(readOnly = true)
+   public boolean existsByUsername(String username) {
+      return userRepository.existsByUsername(username);
+   }
 
-    @Transactional
-    public User saveUser(User user) {
-        return userRepository.save(user);
-    }
+   @Transactional
+   public User saveUser(User user) {
+      return userRepository.save(user);
+   }
+
+
+   @Transactional
+   public void updateCurrentUserProfileImage(Long fileId) {
+      Long currentUserId = securityUtils.getCurrentUserId();
+      updateProfileImage(currentUserId, fileId);
+   }
+
+
+   @Transactional
+   public void updateProfileImage(Long userId, Long fileId) {
+      User user = userRepository.findById(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+
+      StoredFile file = storedFileRepository.findById(fileId)
+            .orElseThrow(() -> new EntityNotFoundException("File not found: " + fileId));
+
+      user.setProfileImageFileId(file.getId());
+      userRepository.save(user);
+   }
 }

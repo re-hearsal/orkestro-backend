@@ -43,9 +43,10 @@ public class AuthService {
         }
 
         try {
-            User user = new User();
-            user.setUsername(request.getUsername());
-            user.setPassword(passwordEncoder.encode(request.getPassword()));
+            User user = User.builder()
+                    .username(request.getUsername())
+                    .password(passwordEncoder.encode(request.getPassword()))
+                    .build();
             userService.saveUser(user);
             log.info("User saved successfully: {}", user.getUsername());
             String token = generateTokenForUser(request.getUsername());

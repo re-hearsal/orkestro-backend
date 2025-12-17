@@ -50,20 +50,23 @@ class UserServiceTest {
     @Test
     void loadUserByUsername_withOrganizationRole_buildsContextualAuthorities() {
         // given
-        User user = new User();
-        user.setId(1L);
-        user.setUsername("user");
-        user.setPassword("password");
+        User user = User.builder()
+                .id(1L)
+                .username("user")
+                .password("password")
+                .build();
 
-        Role role = new Role();
-        role.setId(10L);
-        role.setName("Leader");
-        role.setScope(RoleScopeType.ORGANIZATION);
-        role.setOrganizationId(100L);
+        Role role = Role.builder()
+                .id(10L)
+                .name("Leader")
+                .scope(RoleScopeType.ORGANIZATION)
+                .organizationId(100L)
+                .build();
 
-        Permission permission = new Permission();
-        permission.setCode("ORG_EDIT");
-        permission.setDescription("Edit organization");
+        Permission permission = Permission.builder()
+                .code("ORG_EDIT")
+                .description("Edit organization")
+                .build();
 
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(userRoleRepository.findRolesByUserId(1L)).thenReturn(List.of(role));
@@ -84,20 +87,23 @@ class UserServiceTest {
 
     @Test
     void loadUserByUsername_withSectionRole_buildsContextualAuthorities() {
-        User user = new User();
-        user.setId(2L);
-        user.setUsername("section-user");
-        user.setPassword("password");
+        User user = User.builder()
+                .id(2L)
+                .username("section-user")
+                .password("password")
+                .build();
 
-        Role role = new Role();
-        role.setId(20L);
-        role.setName("SectionLeader");
-        role.setScope(RoleScopeType.SECTION);
-        role.setSectionId(5L);
+        Role role = Role.builder()
+                .id(20L)
+                .name("SectionLeader")
+                .scope(RoleScopeType.SECTION)
+                .sectionId(5L)
+                .build();
 
-        Permission permission = new Permission();
-        permission.setCode("SECTION_EDIT");
-        permission.setDescription("Edit section");
+        Permission permission = Permission.builder()
+                .code("SECTION_EDIT")
+                .description("Edit section")
+                .build();
 
         when(userRepository.findByUsername("section-user")).thenReturn(Optional.of(user));
         when(userRoleRepository.findRolesByUserId(2L)).thenReturn(List.of(role));

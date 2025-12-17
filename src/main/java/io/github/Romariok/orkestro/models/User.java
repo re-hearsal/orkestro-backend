@@ -14,63 +14,66 @@ import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
-
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
+@Builder
+@AllArgsConstructor
 @Table(name = "users")
-public class User implements UserDetails{
+public class User implements UserDetails {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+   @Id
+   @GeneratedValue(strategy = GenerationType.IDENTITY)
+   private Long id;
 
-    @Column(name = "username", nullable = false)
-    private String username;
+   @Column(name = "username", nullable = false)
+   private String username;
 
-    @Column(name = "name", nullable = false)
-    private String name;
+   @Column(name = "name", nullable = false)
+   private String name;
 
-    @Column(name = "email", nullable = false)
-    private String email;
+   @Column(name = "email", nullable = false)
+   private String email;
 
-    @Column(name = "password", nullable = false)
-    private String password;
+   @Column(name = "password", nullable = false)
+   private String password;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
+   @Column(name = "created_at", nullable = false)
+   private Instant createdAt;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
+   @Column(name = "updated_at", nullable = false)
+   private Instant updatedAt;
 
-    @Column(name = "telegram_chat_id", nullable = false)
-    private Long telegramChatId;
+   @Column(name = "telegram_chat_id", nullable = false)
+   private Long telegramChatId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "notification_channel_id", nullable = false)
-    private NotificationChannelType notificationChannel;
+   @Enumerated(EnumType.STRING)
+   @Column(name = "notification_channel_id", nullable = false)
+   private NotificationChannelType notificationChannel;
 
-    @Column(name = "location")
-    private String location;
+   @Column(name = "location")
+   private String location;
 
-    @Column(name = "birth_date")
-    private LocalDate birthDate;
+   @Column(name = "birth_date")
+   private LocalDate birthDate;
 
-    @Column(name = "profile_image_file_id", nullable = false)
-    private Long profileImageFileId;
+   @Column(name = "profile_image_file_id", nullable = false)
+   private Long profileImageFileId;
 
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("USER"));
-    }
+   @Override
+   public Collection<? extends GrantedAuthority> getAuthorities() {
+      return List.of(new SimpleGrantedAuthority("USER"));
+   }
 
    @Override
    public boolean isAccountNonExpired() {
@@ -92,5 +95,3 @@ public class User implements UserDetails{
       return true;
    }
 }
-
-

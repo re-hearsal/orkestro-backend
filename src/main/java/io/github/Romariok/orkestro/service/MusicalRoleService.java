@@ -43,20 +43,21 @@ public class MusicalRoleService {
          throw new EntityNotFoundException("Instrument not found: " + instrumentId);
       }
 
-      UserInstrumentId id = new UserInstrumentId();
-      id.setUserId(userId);
-      id.setInstrumentId(instrumentId);
+      UserInstrumentId id = UserInstrumentId.builder()
+            .userId(userId)
+            .instrumentId(instrumentId)
+            .build();
 
       if (userInstrumentRepository.existsById(id)) {
          return;
       }
 
-      UserInstrument userInstrument = new UserInstrument();
-      userInstrument.setUserId(userId);
-      userInstrument.setInstrumentId(instrumentId);
+      UserInstrument userInstrument = UserInstrument.builder()
+            .userId(userId)
+            .instrumentId(instrumentId)
+            .build();
       userInstrumentRepository.save(userInstrument);
    }
-
 
    @Transactional
    public void setUserInstruments(Long userId, List<Long> instrumentIds) {
@@ -91,9 +92,10 @@ public class MusicalRoleService {
       // Добавляем недостающие
       for (Long instrumentId : newIds) {
          if (!currentIds.contains(instrumentId)) {
-            UserInstrument ui = new UserInstrument();
-            ui.setUserId(userId);
-            ui.setInstrumentId(instrumentId);
+            UserInstrument ui = UserInstrument.builder()
+                  .userId(userId)
+                  .instrumentId(instrumentId)
+                  .build();
             userInstrumentRepository.save(ui);
          }
       }
@@ -101,9 +103,10 @@ public class MusicalRoleService {
 
    @Transactional
    public void removeInstrumentFromUser(Long userId, Long instrumentId) {
-      UserInstrumentId id = new UserInstrumentId();
-      id.setUserId(userId);
-      id.setInstrumentId(instrumentId);
+      UserInstrumentId id = UserInstrumentId.builder()
+            .userId(userId)
+            .instrumentId(instrumentId)
+            .build();
       userInstrumentRepository.deleteById(id);
    }
 }
