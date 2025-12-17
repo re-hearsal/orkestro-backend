@@ -1,6 +1,5 @@
 HELP.md
 target/
-.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 
@@ -34,3 +33,8 @@ build/
 
 ### Environment variables ###
 .env
+
+### Postgres Docker ###
+/InitDatabase
+/pgadmin
+/pgdata
