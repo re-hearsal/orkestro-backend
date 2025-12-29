@@ -93,13 +93,29 @@ public class UserService implements UserDetailsService {
       return userRepository.save(user);
    }
 
+   @Transactional(readOnly = true)
+   public List<User> searchUsers(String nameQuery, List<Long> roleIds) {
+      String normalizedName = (nameQuery == null || nameQuery.isBlank())
+            ? null
+            : nameQuery.trim();
+
+      boolean filterByRoles = roleIds != null && !roleIds.isEmpty();
+
+      if (!filterByRoles) {
+         if (normalizedName == null) {
+            return userRepository.findAll();
+         }
+         return userRepository.findByNameContainingIgnoreCase(normalizedName);
+      }
+
+      return userRepository.findByNameAndRoleIds(normalizedName, roleIds);
+   }
 
    @Transactional
    public void updateCurrentUserProfileImage(Long fileId) {
       Long currentUserId = securityUtils.getCurrentUserId();
       updateProfileImage(currentUserId, fileId);
    }
-
 
    @Transactional
    public void updateProfileImage(Long userId, Long fileId) {
