@@ -12,6 +12,8 @@ import lombok.Setter;
 @EqualsAndHashCode
 public class TaskVisibilityRoleId implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private Long taskId;
     private Long roleId;
 }

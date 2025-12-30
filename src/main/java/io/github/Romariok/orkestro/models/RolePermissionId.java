@@ -12,6 +12,8 @@ import lombok.Setter;
 @EqualsAndHashCode
 public class RolePermissionId implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private Long roleId;
     private String permissionCode;
 }

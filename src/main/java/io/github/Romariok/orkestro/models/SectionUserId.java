@@ -12,6 +12,8 @@ import lombok.Setter;
 @EqualsAndHashCode
 public class SectionUserId implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private Long sectionId;
     private Long userId;
 }

@@ -2,9 +2,9 @@ package io.github.Romariok.orkestro.security;
 
 
 import java.security.Key;
+import java.util.Base64;
 import java.util.Date;
 import java.util.Set;
-import java.util.Base64;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -15,6 +15,7 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.WeakKeyException;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -32,20 +33,20 @@ public class JWTUtil {
     
     @PostConstruct
     public void init() {
-        try {
+        if (secretKeyString != null && !secretKeyString.isBlank()) {
             try {
                 secretKey = Keys.hmacShaKeyFor(Base64.getDecoder().decode(secretKeyString));
                 log.info("Using provided JWT secret key");
-            } catch (Exception e) {
-                log.warn("Provided JWT secret key is invalid or too weak. Generating a secure key...");
-                secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-                log.info("Generated secure JWT secret key");
+                return;
+            } catch (IllegalArgumentException | WeakKeyException e) {
+                log.warn("Provided JWT secret key is invalid or too weak. Generating a secure key...", e);
             }
-        } catch (Exception e) {
-            log.error("Error initializing JWT secret key", e);
-            secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-            log.info("Using fallback secure JWT secret key");
+        } else {
+            log.warn("JWT secret key is not configured. Generating a secure key...");
         }
+
+        secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+        log.info("Using generated secure JWT secret key");
     }
 
     public String generateToken(String username, Set<String> authorities) {

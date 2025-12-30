@@ -12,9 +12,9 @@ import lombok.Setter;
 @EqualsAndHashCode
 public class SongInstrumentId implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private Long songId;
     private Long instrumentId;
     private Integer count;
 }
-
-

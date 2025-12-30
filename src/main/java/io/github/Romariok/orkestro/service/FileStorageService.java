@@ -12,8 +12,17 @@ import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.errors.ErrorResponseException;
+import io.minio.errors.InsufficientDataException;
+import io.minio.errors.InternalException;
+import io.minio.errors.InvalidResponseException;
+import io.minio.errors.ServerException;
+import io.minio.errors.XmlParserException;
 import io.minio.http.Method;
+import java.io.IOException;
 import java.io.InputStream;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
@@ -65,7 +74,15 @@ public class FileStorageService {
                .build();
 
          return storedFileRepository.save(stored);
-      } catch (Exception e) {
+      } catch (ErrorResponseException
+               | InsufficientDataException
+               | InternalException
+               | InvalidKeyException
+               | InvalidResponseException
+               | IOException
+               | NoSuchAlgorithmException
+               | ServerException
+               | XmlParserException e) {
          throw new InternalServiceException(
                "Error uploading file: " + originalName, e);
       }
@@ -83,7 +100,15 @@ public class FileStorageService {
                .object(storedFile.getObjectName())
                .build();
          return minioClient.getObject(args);
-      } catch (Exception e) {
+      } catch (ErrorResponseException
+               | InsufficientDataException
+               | InternalException
+               | InvalidKeyException
+               | InvalidResponseException
+               | IOException
+               | NoSuchAlgorithmException
+               | ServerException
+               | XmlParserException e) {
          throw new InternalServiceException("Error downloading file: " + fileId, e);
       }
    }
@@ -100,7 +125,15 @@ public class FileStorageService {
                .object(storedFile.getObjectName())
                .build();
          minioClient.removeObject(removeArgs);
-      } catch (Exception e) {
+      } catch (ErrorResponseException
+               | InsufficientDataException
+               | InternalException
+               | InvalidKeyException
+               | InvalidResponseException
+               | IOException
+               | NoSuchAlgorithmException
+               | ServerException
+               | XmlParserException e) {
          throw new InternalServiceException("Error deleting file from storage: " + fileId, e);
       }
 
@@ -127,7 +160,15 @@ public class FileStorageService {
                .build();
 
          return minioClient.getPresignedObjectUrl(args);
-      } catch (Exception e) {
+      } catch (ErrorResponseException
+               | InsufficientDataException
+               | InternalException
+               | InvalidKeyException
+               | InvalidResponseException
+               | IOException
+               | NoSuchAlgorithmException
+               | ServerException
+               | XmlParserException e) {
          throw new InternalServiceException(
                "Error generating download URL for file: " + fileId, e);
       }

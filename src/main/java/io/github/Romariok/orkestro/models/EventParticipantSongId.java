@@ -12,6 +12,8 @@ import lombok.Setter;
 @EqualsAndHashCode
 public class EventParticipantSongId implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private Long eventId;
     private Long songId;
     private Long instrumentId;

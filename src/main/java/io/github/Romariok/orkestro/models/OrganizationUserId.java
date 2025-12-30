@@ -12,6 +12,8 @@ import lombok.Setter;
 @EqualsAndHashCode
 public class OrganizationUserId implements Serializable {
 
+   private static final long serialVersionUID = 1L;
+
    private Long organizationId;
    private Long userId;
 }
