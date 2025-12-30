@@ -1,5 +1,6 @@
 package io.github.Romariok.orkestro.service;
 
+import io.github.Romariok.orkestro.dto.UserProfileUpdateRequestDTO;
 import io.github.Romariok.orkestro.models.Permission;
 import io.github.Romariok.orkestro.models.Role;
 import io.github.Romariok.orkestro.models.StoredFile;
@@ -7,10 +8,12 @@ import io.github.Romariok.orkestro.models.User;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.repository.StoredFileRepository;
+import io.github.Romariok.orkestro.repository.UserInstrumentRepository;
 import io.github.Romariok.orkestro.repository.UserRepository;
 import io.github.Romariok.orkestro.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -30,6 +33,7 @@ public class UserService implements UserDetailsService {
    private final UserRoleRepository userRoleRepository;
    private final RolePermissionRepository rolePermissionRepository;
    private final StoredFileRepository storedFileRepository;
+   private final UserInstrumentRepository userInstrumentRepository;
    private final SecurityUtils securityUtils;
 
    @Override
@@ -91,6 +95,55 @@ public class UserService implements UserDetailsService {
    @Transactional
    public User saveUser(User user) {
       return userRepository.save(user);
+   }
+
+   @Transactional
+   public User updateUserProfile(Long userId, UserProfileUpdateRequestDTO request) {
+      User user = userRepository.findById(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+
+      if (request.getName() != null) {
+         user.setName(request.getName());
+      }
+      if (request.getEmail() != null) {
+         user.setEmail(request.getEmail());
+      }
+      if (request.getLocation() != null) {
+         user.setLocation(request.getLocation());
+      }
+      if (request.getBirthDate() != null) {
+         user.setBirthDate(request.getBirthDate());
+      }
+      if (request.getNotificationChannel() != null) {
+         user.setNotificationChannel(request.getNotificationChannel());
+      }
+
+      user.setUpdatedAt(Instant.now());
+      return userRepository.save(user);
+   }
+
+   @Transactional
+   public User updateCurrentUserProfile(UserProfileUpdateRequestDTO request) {
+      Long currentUserId = securityUtils.getCurrentUserId();
+      return updateUserProfile(currentUserId, request);
+   }
+
+   @Transactional
+   public void deleteUserAccount(Long userId) {
+      if (!userRepository.existsById(userId)) {
+         throw new EntityNotFoundException("User not found: " + userId);
+      }
+
+      userInstrumentRepository.deleteByUserId(userId);
+      userRoleRepository.deleteByUserId(userId);
+
+      userRepository.deleteById(userId);
+   }
+
+   @Transactional
+   public void deleteCurrentUserAccount() {
+      Long currentUserId = securityUtils.getCurrentUserId();
+      deleteUserAccount(currentUserId);
    }
 
    @Transactional(readOnly = true)

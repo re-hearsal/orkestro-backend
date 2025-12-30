@@ -16,4 +16,6 @@ public interface UserInstrumentRepository extends JpaRepository<UserInstrument, 
     List<Instrument> findInstrumentsByUserId(@Param("userId") Long userId);
 
     List<UserInstrument> findByUserId(Long userId);
+
+    void deleteByUserId(Long userId);
 }

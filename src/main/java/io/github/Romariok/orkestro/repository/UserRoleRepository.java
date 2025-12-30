@@ -14,4 +14,6 @@ public interface UserRoleRepository extends JpaRepository<UserRole, UserRoleId> 
 
    @Query("SELECT r FROM Role r JOIN UserRole ur ON ur.roleId = r.id WHERE ur.userId = :userId")
    List<Role> findRolesByUserId(@Param("userId") Long userId);
+
+   void deleteByUserId(Long userId);
 }

@@ -7,13 +7,19 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.github.Romariok.orkestro.dto.UserProfileUpdateRequestDTO;
 import io.github.Romariok.orkestro.models.Permission;
 import io.github.Romariok.orkestro.models.Role;
 import io.github.Romariok.orkestro.models.User;
+import io.github.Romariok.orkestro.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.repository.RolePermissionRepository;
+import io.github.Romariok.orkestro.repository.UserInstrumentRepository;
 import io.github.Romariok.orkestro.repository.UserRepository;
 import io.github.Romariok.orkestro.repository.UserRoleRepository;
+import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -37,6 +43,9 @@ class UserServiceTest {
 
         @Mock
         private RolePermissionRepository rolePermissionRepository;
+
+        @Mock
+        private UserInstrumentRepository userInstrumentRepository;
 
         @InjectMocks
         private UserService userService;
@@ -179,5 +188,66 @@ class UserServiceTest {
                 verify(userRepository).findByNameAndRoleIds("Alice", roleIds);
                 verify(userRepository, never()).findAll();
                 verify(userRepository, never()).findByNameContainingIgnoreCase(org.mockito.Mockito.anyString());
+        }
+
+        @Test
+        void updateUserProfile_updatesNonNullFieldsAndTimestamp() {
+                Long userId = 1L;
+                User user = User.builder()
+                                .id(userId)
+                                .name("Old Name")
+                                .email("old@example.com")
+                                .location("Old City")
+                                .birthDate(LocalDate.of(1990, 1, 1))
+                                .notificationChannel(NotificationChannelType.EMAIL)
+                                .updatedAt(Instant.parse("2020-01-01T00:00:00Z"))
+                                .build();
+
+                when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+                when(userRepository.save(org.mockito.Mockito.any(User.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                UserProfileUpdateRequestDTO request = new UserProfileUpdateRequestDTO();
+                request.setName("New Name");
+                request.setEmail("new@example.com");
+                request.setLocation("New City");
+                request.setBirthDate(LocalDate.of(1995, 5, 5));
+                request.setNotificationChannel(NotificationChannelType.TELEGRAM);
+
+                User result = userService.updateUserProfile(userId, request);
+
+                assertEquals("New Name", result.getName());
+                assertEquals("new@example.com", result.getEmail());
+                assertEquals("New City", result.getLocation());
+                assertEquals(LocalDate.of(1995, 5, 5), result.getBirthDate());
+                assertEquals(NotificationChannelType.TELEGRAM, result.getNotificationChannel());
+                assertTrue(result.getUpdatedAt() != null);
+                verify(userRepository).save(user);
+        }
+
+        @Test
+        void deleteUserAccount_existingUser_cleansRelationsAndDeletesUser() {
+                Long userId = 1L;
+                when(userRepository.existsById(userId)).thenReturn(true);
+
+                userService.deleteUserAccount(userId);
+
+                verify(userInstrumentRepository).deleteByUserId(userId);
+                verify(userRoleRepository).deleteByUserId(userId);
+                verify(userRepository).deleteById(userId);
+        }
+
+        @Test
+        void deleteUserAccount_userNotFound_throwsEntityNotFound() {
+                Long userId = 1L;
+                when(userRepository.existsById(userId)).thenReturn(false);
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> userService.deleteUserAccount(userId));
+
+                verify(userInstrumentRepository, never()).deleteByUserId(org.mockito.Mockito.any());
+                verify(userRoleRepository, never()).deleteByUserId(org.mockito.Mockito.any());
+                verify(userRepository, never()).deleteById(org.mockito.Mockito.any());
         }
 }

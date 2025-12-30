@@ -81,6 +81,10 @@ public class AuthService {
         }
     }
 
+    public void logout() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Transactional
     public void changePassword(String currentPassword, String newPassword) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
