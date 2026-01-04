@@ -27,6 +27,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,7 @@ public class RepertoireService {
    private final SongMapper songMapper;
 
    @Transactional
+   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':REPERTOIRE_CREATE_SONG')")
    public SongDTO createSong(Long organizationId, SongCreateRequestDTO request) {
       validateInstruments(request.getInstrumentation());
       validateFiles(request.getFileIds());
@@ -65,6 +67,8 @@ public class RepertoireService {
    }
 
    @Transactional
+   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + "
+         + "@songRepository.findById(#songId).orElse(null)?.organizationId + ':REPERTOIRE_EDIT_SONG')")
    public SongDTO updateSong(Long songId, SongUpdateRequestDTO request) {
       Song song = songRepository
             .findById(songId)
@@ -104,6 +108,8 @@ public class RepertoireService {
    }
 
    @Transactional
+   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + "
+         + "@songRepository.findById(#songId).orElse(null)?.organizationId + ':REPERTOIRE_DELETE_SONG')")
    public void deleteSong(Long songId) {
       if (!songRepository.existsById(songId)) {
          throw new EntityNotFoundException("Song not found: " + songId);
