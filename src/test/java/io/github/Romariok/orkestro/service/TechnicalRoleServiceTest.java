@@ -10,10 +10,16 @@ import static org.mockito.Mockito.when;
 import io.github.Romariok.orkestro.dao.TechnicalRoleDao;
 import io.github.Romariok.orkestro.dto.role.TechnicalRoleDTO;
 import io.github.Romariok.orkestro.mapper.TechnicalRoleMapper;
+import io.github.Romariok.orkestro.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.models.enums.RoleScopeType;
+import io.github.Romariok.orkestro.models.organization.OrganizationUser;
 import io.github.Romariok.orkestro.models.role.Role;
+import io.github.Romariok.orkestro.models.section.SectionUser;
 import io.github.Romariok.orkestro.models.user.UserRole;
 import io.github.Romariok.orkestro.models.user.UserRoleId;
+import io.github.Romariok.orkestro.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.repository.RoleRepository;
+import io.github.Romariok.orkestro.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.repository.UserRepository;
 import io.github.Romariok.orkestro.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
@@ -29,121 +35,217 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class TechnicalRoleServiceTest {
 
-    @Mock
-    private TechnicalRoleDao technicalRoleDao;
+        @Mock
+        private TechnicalRoleDao technicalRoleDao;
 
-    @Mock
-    private TechnicalRoleMapper technicalRoleMapper;
+        @Mock
+        private TechnicalRoleMapper technicalRoleMapper;
 
-    @Mock
-    private UserRoleRepository userRoleRepository;
+        @Mock
+        private UserRoleRepository userRoleRepository;
 
-    @Mock
-    private RoleRepository roleRepository;
+        @Mock
+        private RoleRepository roleRepository;
 
-    @Mock
-    private UserRepository userRepository;
+        @Mock
+        private UserRepository userRepository;
 
-    @InjectMocks
-    private TechnicalRoleService technicalRoleService;
+        @Mock
+        private OrganizationUserRepository organizationUserRepository;
 
-    @Test
-    void getUserRoles_returnsMappedDtos() {
-        Long userId = 1L;
-        Role role = Role.builder()
-                .id(10L)
-                .build();
-        TechnicalRoleDTO dto = new TechnicalRoleDTO();
-        dto.setId(10L);
+        @Mock
+        private SectionUserRepository sectionUserRepository;
 
-        when(technicalRoleDao.findUserRoles(userId)).thenReturn(List.of(role));
-        when(technicalRoleMapper.toDtoList(List.of(role))).thenReturn(List.of(dto));
+        @InjectMocks
+        private TechnicalRoleService technicalRoleService;
 
-        List<TechnicalRoleDTO> result = technicalRoleService.getUserRoles(userId);
+        @Test
+        void getUserRoles_returnsMappedDtos() {
+                Long userId = 1L;
+                Role role = Role.builder()
+                                .id(10L)
+                                .build();
+                TechnicalRoleDTO dto = new TechnicalRoleDTO();
+                dto.setId(10L);
 
-        assertEquals(1, result.size());
-        assertEquals(10L, result.getFirst().getId());
-    }
+                when(technicalRoleDao.findUserRoles(userId)).thenReturn(List.of(role));
+                when(technicalRoleMapper.toDtoList(List.of(role))).thenReturn(List.of(dto));
 
-    @Test
-    void assignRoleToUser_userNotFound_throwsEntityNotFound() {
-        Long userId = 1L;
-        Long roleId = 10L;
-        when(userRepository.existsById(userId)).thenReturn(false);
+                List<TechnicalRoleDTO> result = technicalRoleService.getUserRoles(userId);
 
-        assertThrows(
-                EntityNotFoundException.class,
-                () -> technicalRoleService.assignRoleToUser(userId, roleId));
-    }
+                assertEquals(1, result.size());
+                assertEquals(10L, result.getFirst().getId());
+        }
 
-    @Test
-    void assignRoleToUser_roleNotFound_throwsEntityNotFound() {
-        Long userId = 1L;
-        Long roleId = 10L;
+        @Test
+        void assignOrganizationRoleToUser_userNotFound_throwsEntityNotFound() {
+                Long organizationId = 100L;
+                Long userId = 1L;
+                Long roleId = 10L;
+                when(userRepository.existsById(userId)).thenReturn(false);
 
-        when(userRepository.existsById(userId)).thenReturn(true);
-        when(roleRepository.findById(roleId)).thenReturn(Optional.empty());
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> technicalRoleService.assignOrganizationRoleToUser(organizationId, userId,
+                                                roleId));
+        }
 
-        assertThrows(
-                EntityNotFoundException.class,
-                () -> technicalRoleService.assignRoleToUser(userId, roleId));
-    }
+        @Test
+        void assignOrganizationRoleToUser_roleNotFound_throwsEntityNotFound() {
+                Long organizationId = 100L;
+                Long userId = 1L;
+                Long roleId = 10L;
 
-    @Test
-    void assignRoleToUser_roleAlreadyAssigned_doesNotSave() {
-        Long userId = 1L;
-        Long roleId = 10L;
+                when(userRepository.existsById(userId)).thenReturn(true);
+                when(roleRepository.findById(roleId)).thenReturn(Optional.empty());
 
-        Role role = Role.builder()
-                .id(roleId)
-                .build();
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> technicalRoleService.assignOrganizationRoleToUser(organizationId, userId,
+                                                roleId));
+        }
 
-        when(userRepository.existsById(userId)).thenReturn(true);
-        when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
-        when(userRoleRepository.existsById(any(UserRoleId.class))).thenReturn(true);
+        @Test
+        void assignOrganizationRoleToUser_roleAlreadyAssigned_doesNotSave() {
+                Long organizationId = 100L;
+                Long userId = 1L;
+                Long roleId = 10L;
 
-        technicalRoleService.assignRoleToUser(userId, roleId);
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .build();
 
-        verify(userRoleRepository, never()).save(any(UserRole.class));
-    }
+                when(userRepository.existsById(userId)).thenReturn(true);
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
 
-    @Test
-    void assignRoleToUser_success_savesUserRole() {
-        Long userId = 1L;
-        Long roleId = 10L;
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
 
-        Role role = Role.builder()
-                .id(roleId)
-                .build();
+                when(userRoleRepository.existsById(any(UserRoleId.class))).thenReturn(true);
 
-        when(userRepository.existsById(userId)).thenReturn(true);
-        when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
-        when(userRoleRepository.existsById(any(UserRoleId.class))).thenReturn(false);
+                technicalRoleService.assignOrganizationRoleToUser(organizationId, userId, roleId);
 
-        technicalRoleService.assignRoleToUser(userId, roleId);
+                verify(userRoleRepository, never()).save(any(UserRole.class));
+        }
 
-        ArgumentCaptor<UserRole> captor = ArgumentCaptor.forClass(UserRole.class);
-        verify(userRoleRepository).save(captor.capture());
-        UserRole saved = captor.getValue();
+        @Test
+        void assignOrganizationRoleToUser_success_savesUserRole() {
+                Long organizationId = 100L;
+                Long userId = 1L;
+                Long roleId = 10L;
 
-        assertEquals(userId, saved.getUserId());
-        assertEquals(roleId, saved.getRoleId());
-    }
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .build();
 
-    @Test
-    void removeRoleFromUser_deletesUserRole() {
-        Long userId = 1L;
-        Long roleId = 10L;
+                when(userRepository.existsById(userId)).thenReturn(true);
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
 
-        technicalRoleService.removeRoleFromUser(userId, roleId);
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
 
-        ArgumentCaptor<UserRoleId> captor = ArgumentCaptor.forClass(UserRoleId.class);
-        verify(userRoleRepository).deleteById(captor.capture());
-        UserRoleId id = captor.getValue();
+                when(userRoleRepository.existsById(any(UserRoleId.class))).thenReturn(false);
 
-        assertEquals(userId, id.getUserId());
-        assertEquals(roleId, id.getRoleId());
-    }
+                technicalRoleService.assignOrganizationRoleToUser(organizationId, userId, roleId);
+
+                ArgumentCaptor<UserRole> captor = ArgumentCaptor.forClass(UserRole.class);
+                verify(userRoleRepository).save(captor.capture());
+                UserRole saved = captor.getValue();
+
+                assertEquals(userId, saved.getUserId());
+                assertEquals(roleId, saved.getRoleId());
+        }
+
+        @Test
+        void removeOrganizationRoleFromUser_deletesUserRole() {
+                Long organizationId = 100L;
+                Long userId = 1L;
+                Long roleId = 10L;
+
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+
+                technicalRoleService.removeOrganizationRoleFromUser(organizationId, userId, roleId);
+
+                ArgumentCaptor<UserRoleId> captor = ArgumentCaptor.forClass(UserRoleId.class);
+                verify(userRoleRepository).deleteById(captor.capture());
+                UserRoleId id = captor.getValue();
+
+                assertEquals(userId, id.getUserId());
+                assertEquals(roleId, id.getRoleId());
+        }
+
+        @Test
+        void assignSectionRoleToUser_success_savesUserRole() {
+                Long sectionId = 5L;
+                Long userId = 1L;
+                Long roleId = 20L;
+
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .build();
+
+                when(userRepository.existsById(userId)).thenReturn(true);
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+
+                SectionUser su = new SectionUser();
+                su.setSectionId(sectionId);
+                su.setUserId(userId);
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId))
+                                .thenReturn(Optional.of(su));
+
+                when(userRoleRepository.existsById(any(UserRoleId.class))).thenReturn(false);
+
+                technicalRoleService.assignSectionRoleToUser(sectionId, userId, roleId);
+
+                ArgumentCaptor<UserRole> captor = ArgumentCaptor.forClass(UserRole.class);
+                verify(userRoleRepository).save(captor.capture());
+                UserRole saved = captor.getValue();
+
+                assertEquals(userId, saved.getUserId());
+                assertEquals(roleId, saved.getRoleId());
+        }
+
+        @Test
+        void removeSectionRoleFromUser_deletesUserRole() {
+                Long sectionId = 5L;
+                Long userId = 1L;
+                Long roleId = 20L;
+
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+
+                technicalRoleService.removeSectionRoleFromUser(sectionId, userId, roleId);
+
+                ArgumentCaptor<UserRoleId> captor = ArgumentCaptor.forClass(UserRoleId.class);
+                verify(userRoleRepository).deleteById(captor.capture());
+                UserRoleId id = captor.getValue();
+
+                assertEquals(userId, id.getUserId());
+                assertEquals(roleId, id.getRoleId());
+        }
 }
-
-
