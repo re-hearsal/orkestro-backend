@@ -88,12 +88,9 @@ class UserServiceTest {
                                 .map(GrantedAuthority::getAuthority)
                                 .collect(java.util.stream.Collectors.toSet());
 
-                assertTrue(authorityStrings.contains("ROLE_Leader"));
                 assertTrue(authorityStrings.contains("CTX_ROLE_ORG:100:Leader"));
-                assertTrue(authorityStrings.contains("ORG_EDIT"));
                 assertTrue(authorityStrings.contains("CTX_PERM_ORG:100:ORG_EDIT"));
-
-                assertEquals(4, authorityStrings.size());
+                assertEquals(2, authorityStrings.size());
         }
 
         @Test
@@ -125,12 +122,9 @@ class UserServiceTest {
                                 .map(GrantedAuthority::getAuthority)
                                 .collect(java.util.stream.Collectors.toSet());
 
-                assertTrue(authorityStrings.contains("ROLE_SectionLeader"));
                 assertTrue(authorityStrings.contains("CTX_ROLE_SECTION:5:SectionLeader"));
-                assertTrue(authorityStrings.contains("SECTION_EDIT"));
                 assertTrue(authorityStrings.contains("CTX_PERM_SECTION:5:SECTION_EDIT"));
-
-                assertEquals(4, authorityStrings.size());
+                assertEquals(2, authorityStrings.size());
         }
 
         @Test

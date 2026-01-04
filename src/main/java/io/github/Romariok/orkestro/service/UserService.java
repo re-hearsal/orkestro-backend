@@ -46,8 +46,6 @@ public class UserService implements UserDetailsService {
       Set<SimpleGrantedAuthority> authorities = new HashSet<>();
 
       for (Role role : roles) {
-         authorities.add(new SimpleGrantedAuthority("ROLE_" + role.getName()));
-
          String scopePrefix = null;
          Long contextId = null;
 
@@ -66,8 +64,6 @@ public class UserService implements UserDetailsService {
 
          List<Permission> rolePermissions = rolePermissionRepository.findPermissionsByRoleId(role.getId());
          for (Permission permission : rolePermissions) {
-            authorities.add(new SimpleGrantedAuthority(permission.getCode()));
-
             if (scopePrefix != null && contextId != null) {
                authorities.add(new SimpleGrantedAuthority(
                      "CTX_PERM_" + scopePrefix + ":" + contextId + ":" + permission.getCode()));
