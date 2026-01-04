@@ -407,10 +407,6 @@
             'Set and change visibility level (PUBLIC / PRIVATE)'
         ),
         (
-            'ORG_MANAGE_LINKS',
-            'Manage organization external links'
-        ),
-        (
             'ORG_MEMBER_INVITE',
             'Invite/add users to organization'
         ),
