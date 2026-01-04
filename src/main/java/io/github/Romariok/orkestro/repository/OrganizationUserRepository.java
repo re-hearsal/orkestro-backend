@@ -17,4 +17,6 @@ public interface OrganizationUserRepository extends JpaRepository<OrganizationUs
    List<OrganizationUser> findByOrganizationIdAndStatus(Long organizationId, OrganizationUserStatusType status);
 
    void deleteByUserId(Long userId);
+
+   void deleteByOrganizationId(Long organizationId);
 }

@@ -11,4 +11,6 @@ import io.github.Romariok.orkestro.models.song.Song;
 public interface SongRepository extends JpaRepository<Song, Long> {
 
    Page<Song> findByOrganizationId(Long organizationId, Pageable pageable);
+
+   void deleteByOrganizationId(Long organizationId);
 }
