@@ -6,23 +6,33 @@ import io.github.Romariok.orkestro.dto.organization.OrganizationLinkDTO;
 import io.github.Romariok.orkestro.dto.organization.OrganizationUpdateRequestDTO;
 import io.github.Romariok.orkestro.mapper.OrganizationMapper;
 import io.github.Romariok.orkestro.models.StoredFile;
+import io.github.Romariok.orkestro.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.models.enums.VisibilityLevelType;
 import io.github.Romariok.orkestro.models.organization.Organization;
 import io.github.Romariok.orkestro.models.organization.OrganizationLink;
+import io.github.Romariok.orkestro.models.organization.OrganizationUser;
+import io.github.Romariok.orkestro.models.role.Permission;
 import io.github.Romariok.orkestro.models.role.Role;
+import io.github.Romariok.orkestro.models.role.RolePermission;
 import io.github.Romariok.orkestro.models.song.Song;
 import io.github.Romariok.orkestro.repository.OrganizationLinkRepository;
 import io.github.Romariok.orkestro.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.repository.RoleRepository;
 import io.github.Romariok.orkestro.repository.SongRepository;
 import io.github.Romariok.orkestro.repository.StoredFileRepository;
+import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +47,9 @@ public class OrganizationService {
    private final SongRepository songRepository;
    private final RoleRepository roleRepository;
    private final OrganizationMapper organizationMapper;
+   private final RolePermissionRepository rolePermissionRepository;
+   private final SecurityUtils securityUtils;
+   private final TechnicalRoleService technicalRoleService;
 
    @Transactional
    public OrganizationDTO createOrganization(OrganizationCreateRequestDTO request) {
@@ -58,6 +71,28 @@ public class OrganizationService {
 
       saveLinks(saved.getId(), request.getLinks());
 
+      // Создатель автоматически становится участником организации
+      Long creatorId = securityUtils.getCurrentUserId();
+      OrganizationUser creatorMembership = OrganizationUser.builder()
+            .organizationId(saved.getId())
+            .userId(creatorId)
+            .status(OrganizationUserStatusType.ACCEPTED)
+            .joinedAt(Instant.now())
+            .build();
+      organizationUserRepository.save(creatorMembership);
+
+      // и получает роль Leader внутри этой организации
+      ensureOrganizationBaseRoles(saved.getId());
+
+      Role leaderRole = roleRepository.findByScopeAndOrganizationIdAndName(
+            RoleScopeType.ORGANIZATION,
+            saved.getId(),
+            "Leader")
+            .orElseThrow(() -> new EntityNotFoundException(
+                  "Role not found for organization " + saved.getId() + " and name Leader"));
+
+      technicalRoleService.assignOrganizationRoleToUser(saved.getId(), creatorId, leaderRole.getId());
+
       return buildOrganizationDto(saved);
    }
 
@@ -65,6 +100,7 @@ public class OrganizationService {
     * Обновить параметры организации (кроме уровня видимости).
     */
    @Transactional
+   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_EDIT')")
    public OrganizationDTO updateOrganization(Long organizationId, OrganizationUpdateRequestDTO request) {
       Organization organization = organizationRepository.findById(organizationId)
             .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
@@ -115,6 +151,7 @@ public class OrganizationService {
     * - роли с областью ORGANIZATION для этой организации.
     */
    @Transactional
+   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_DELETE')")
    public void deleteOrganization(Long organizationId) {
       if (!organizationRepository.existsById(organizationId)) {
          throw new EntityNotFoundException("Organization not found: " + organizationId);
@@ -146,6 +183,7 @@ public class OrganizationService {
     * Установить уровень видимости организации.
     */
    @Transactional
+   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_SET_VISIBILITY')")
    public OrganizationDTO setVisibility(Long organizationId, VisibilityLevelType visibilityLevel) {
       Organization organization = organizationRepository.findById(organizationId)
             .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
@@ -204,5 +242,76 @@ public class OrganizationService {
             .toList();
 
       organizationLinkRepository.saveAll(entities);
+   }
+
+   private void ensureOrganizationBaseRoles(Long organizationId) {
+      List<Role> existing = roleRepository.findByScopeAndOrganizationId(
+            RoleScopeType.ORGANIZATION,
+            organizationId);
+
+      boolean hasLeader = existing.stream().anyMatch(r -> "Leader".equals(r.getName()));
+      boolean hasCoLeader = existing.stream().anyMatch(r -> "Co-leader".equals(r.getName()));
+
+      if (hasLeader && hasCoLeader) {
+         return;
+      }
+
+      List<Role> templates = roleRepository.findByScopeAndSystemTrue(RoleScopeType.ORGANIZATION);
+      Map<String, Role> templateByName = new HashMap<>();
+      for (Role template : templates) {
+         templateByName.put(template.getName(), template);
+      }
+
+      List<Role> toCreate = new ArrayList<>();
+
+      if (!hasLeader && templateByName.containsKey("Leader")) {
+         Role template = templateByName.get("Leader");
+         Role role = Role.builder()
+               .scope(RoleScopeType.ORGANIZATION)
+               .organizationId(organizationId)
+               .name(template.getName())
+               .system(true)
+               .createdAt(Instant.now())
+               .build();
+         toCreate.add(role);
+      }
+
+      if (!hasCoLeader && templateByName.containsKey("Co-leader")) {
+         Role template = templateByName.get("Co-leader");
+         Role role = Role.builder()
+               .scope(RoleScopeType.ORGANIZATION)
+               .organizationId(organizationId)
+               .name(template.getName())
+               .system(true)
+               .createdAt(Instant.now())
+               .build();
+         toCreate.add(role);
+      }
+
+      if (toCreate.isEmpty()) {
+         return;
+      }
+
+      List<Role> created = roleRepository.saveAll(toCreate);
+
+      // Копируем права с шаблонных ролей
+      List<RolePermission> permissionsToCreate = new ArrayList<>();
+      for (Role createdRole : created) {
+         Role template = templateByName.get(createdRole.getName());
+         if (template == null) {
+            continue;
+         }
+         List<Permission> templatePermissions = rolePermissionRepository.findPermissionsByRoleId(template.getId());
+         for (Permission permission : templatePermissions) {
+            RolePermission rp = new RolePermission();
+            rp.setRoleId(createdRole.getId());
+            rp.setPermissionCode(permission.getCode());
+            permissionsToCreate.add(rp);
+         }
+      }
+
+      if (!permissionsToCreate.isEmpty()) {
+         rolePermissionRepository.saveAll(permissionsToCreate);
+      }
    }
 }

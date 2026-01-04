@@ -3,7 +3,6 @@ package io.github.Romariok.orkestro.repository;
 import io.github.Romariok.orkestro.models.role.Role;
 import io.github.Romariok.orkestro.models.user.UserRole;
 import io.github.Romariok.orkestro.models.user.UserRoleId;
-
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -17,4 +16,6 @@ public interface UserRoleRepository extends JpaRepository<UserRole, UserRoleId> 
    List<Role> findRolesByUserId(@Param("userId") Long userId);
 
    void deleteByUserId(Long userId);
+
+   void deleteByUserIdAndRoleIdIn(Long userId, List<Long> roleIds);
 }
