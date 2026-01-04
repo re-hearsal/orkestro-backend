@@ -23,5 +23,3 @@ public class SongDTO {
    private List<SongInstrumentDTO> instrumentation;
    private List<Long> fileIds;
 }
-
-

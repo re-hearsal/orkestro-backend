@@ -26,5 +26,3 @@ public class SongUpdateRequestDTO {
     */
    private List<Long> fileIds;
 }
-
-

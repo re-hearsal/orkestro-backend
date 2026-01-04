@@ -17,5 +17,3 @@ public class UserProfileUpdateRequestDTO {
    private LocalDate birthDate;
    private NotificationChannelType notificationChannel;
 }
-
-

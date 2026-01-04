@@ -22,5 +22,3 @@ public class SongCreateRequestDTO {
    private List<SongInstrumentDTO> instrumentation;
    private List<Long> fileIds;
 }
-
-

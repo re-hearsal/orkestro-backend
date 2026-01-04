@@ -13,5 +13,3 @@ public class AuthResponseDTO {
 
    private String username;
 }
-
-

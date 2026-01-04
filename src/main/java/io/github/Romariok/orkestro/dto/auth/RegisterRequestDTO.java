@@ -24,5 +24,3 @@ public class RegisterRequestDTO {
    @NotBlank
    private String email;
 }
-
-

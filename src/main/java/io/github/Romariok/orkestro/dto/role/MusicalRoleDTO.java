@@ -12,5 +12,3 @@ public class MusicalRoleDTO {
    private Long instrumentId;
    private String instrumentName;
 }
-
-

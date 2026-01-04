@@ -13,5 +13,3 @@ public interface TechnicalRoleMapper {
 
     List<TechnicalRoleDTO> toDtoList(List<Role> roles);
 }
-
-

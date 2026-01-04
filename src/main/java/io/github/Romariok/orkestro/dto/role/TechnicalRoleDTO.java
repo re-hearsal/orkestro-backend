@@ -17,5 +17,3 @@ public class TechnicalRoleDTO {
     private String name;
     private boolean system;
 }
-
-
