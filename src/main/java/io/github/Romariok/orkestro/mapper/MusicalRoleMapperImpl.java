@@ -1,7 +1,8 @@
 package io.github.Romariok.orkestro.mapper;
 
-import io.github.Romariok.orkestro.dto.MusicalRoleDTO;
-import io.github.Romariok.orkestro.models.Instrument;
+import io.github.Romariok.orkestro.dto.role.MusicalRoleDTO;
+import io.github.Romariok.orkestro.models.role.Instrument;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

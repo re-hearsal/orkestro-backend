@@ -1,7 +1,7 @@
 package io.github.Romariok.orkestro.dao;
 
-import io.github.Romariok.orkestro.models.Role;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
+import io.github.Romariok.orkestro.models.role.Role;
 import io.github.Romariok.orkestro.repository.RoleRepository;
 import io.github.Romariok.orkestro.repository.UserRoleRepository;
 import java.util.List;

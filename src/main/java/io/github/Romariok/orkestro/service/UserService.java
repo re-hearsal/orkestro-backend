@@ -1,11 +1,11 @@
 package io.github.Romariok.orkestro.service;
 
-import io.github.Romariok.orkestro.dto.UserProfileUpdateRequestDTO;
-import io.github.Romariok.orkestro.models.Permission;
-import io.github.Romariok.orkestro.models.Role;
+import io.github.Romariok.orkestro.dto.user.UserProfileUpdateRequestDTO;
 import io.github.Romariok.orkestro.models.StoredFile;
-import io.github.Romariok.orkestro.models.User;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
+import io.github.Romariok.orkestro.models.role.Permission;
+import io.github.Romariok.orkestro.models.role.Role;
+import io.github.Romariok.orkestro.models.user.User;
 import io.github.Romariok.orkestro.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.repository.StoredFileRepository;
 import io.github.Romariok.orkestro.repository.UserInstrumentRepository;

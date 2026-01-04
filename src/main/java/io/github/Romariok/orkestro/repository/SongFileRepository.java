@@ -1,10 +1,11 @@
 package io.github.Romariok.orkestro.repository;
 
-import io.github.Romariok.orkestro.models.SongFile;
-import io.github.Romariok.orkestro.models.SongFileId;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+
+import io.github.Romariok.orkestro.models.song.SongFile;
+import io.github.Romariok.orkestro.models.song.SongFileId;
 
 @Repository
 public interface SongFileRepository extends JpaRepository<SongFile, SongFileId> {

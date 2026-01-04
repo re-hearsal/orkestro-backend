@@ -1,7 +1,7 @@
 package io.github.Romariok.orkestro.service;
 
-import io.github.Romariok.orkestro.models.OrganizationUser;
 import io.github.Romariok.orkestro.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.models.organization.OrganizationUser;
 import io.github.Romariok.orkestro.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;

@@ -1,8 +1,9 @@
 package io.github.Romariok.orkestro.repository;
 
-import io.github.Romariok.orkestro.models.Role;
-import io.github.Romariok.orkestro.models.UserRole;
-import io.github.Romariok.orkestro.models.UserRoleId;
+import io.github.Romariok.orkestro.models.role.Role;
+import io.github.Romariok.orkestro.models.user.UserRole;
+import io.github.Romariok.orkestro.models.user.UserRoleId;
+
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

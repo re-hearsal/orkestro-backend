@@ -8,11 +8,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.Romariok.orkestro.dao.MusicalRoleDao;
-import io.github.Romariok.orkestro.dto.MusicalRoleDTO;
+import io.github.Romariok.orkestro.dto.role.MusicalRoleDTO;
 import io.github.Romariok.orkestro.mapper.MusicalRoleMapper;
-import io.github.Romariok.orkestro.models.Instrument;
-import io.github.Romariok.orkestro.models.UserInstrument;
-import io.github.Romariok.orkestro.models.UserInstrumentId;
+import io.github.Romariok.orkestro.models.role.Instrument;
+import io.github.Romariok.orkestro.models.user.UserInstrument;
+import io.github.Romariok.orkestro.models.user.UserInstrumentId;
 import io.github.Romariok.orkestro.repository.InstrumentRepository;
 import io.github.Romariok.orkestro.repository.UserInstrumentRepository;
 import io.github.Romariok.orkestro.repository.UserRepository;

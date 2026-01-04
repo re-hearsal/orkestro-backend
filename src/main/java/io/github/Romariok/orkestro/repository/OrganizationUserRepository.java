@@ -1,8 +1,9 @@
 package io.github.Romariok.orkestro.repository;
 
-import io.github.Romariok.orkestro.models.OrganizationUser;
-import io.github.Romariok.orkestro.models.OrganizationUserId;
 import io.github.Romariok.orkestro.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.models.organization.OrganizationUser;
+import io.github.Romariok.orkestro.models.organization.OrganizationUserId;
+
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;

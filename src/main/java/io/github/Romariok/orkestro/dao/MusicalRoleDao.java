@@ -1,6 +1,6 @@
 package io.github.Romariok.orkestro.dao;
 
-import io.github.Romariok.orkestro.models.Instrument;
+import io.github.Romariok.orkestro.models.role.Instrument;
 import io.github.Romariok.orkestro.repository.UserInstrumentRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

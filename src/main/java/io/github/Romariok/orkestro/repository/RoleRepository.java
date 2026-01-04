@@ -1,7 +1,8 @@
 package io.github.Romariok.orkestro.repository;
 
-import io.github.Romariok.orkestro.models.Role;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
+import io.github.Romariok.orkestro.models.role.Role;
+
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;

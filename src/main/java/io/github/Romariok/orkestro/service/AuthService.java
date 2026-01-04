@@ -1,9 +1,9 @@
 package io.github.Romariok.orkestro.service;
 
-import io.github.Romariok.orkestro.dto.AuthResponseDTO;
-import io.github.Romariok.orkestro.dto.LoginRequestDTO;
-import io.github.Romariok.orkestro.dto.RegisterRequestDTO;
-import io.github.Romariok.orkestro.models.User;
+import io.github.Romariok.orkestro.dto.auth.AuthResponseDTO;
+import io.github.Romariok.orkestro.dto.auth.LoginRequestDTO;
+import io.github.Romariok.orkestro.dto.auth.RegisterRequestDTO;
+import io.github.Romariok.orkestro.models.user.User;
 import io.github.Romariok.orkestro.security.JWTUtil;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
