@@ -17,11 +17,13 @@ import io.github.Romariok.orkestro.models.enums.LinkType;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.models.enums.VisibilityLevelType;
 import io.github.Romariok.orkestro.models.organization.Organization;
+import io.github.Romariok.orkestro.models.organization.OrganizationInvite;
 import io.github.Romariok.orkestro.models.organization.OrganizationLink;
 import io.github.Romariok.orkestro.models.organization.OrganizationUser;
 import io.github.Romariok.orkestro.models.role.Role;
 import io.github.Romariok.orkestro.models.role.RolePermission;
 import io.github.Romariok.orkestro.models.song.Song;
+import io.github.Romariok.orkestro.repository.OrganizationInviteRepository;
 import io.github.Romariok.orkestro.repository.OrganizationLinkRepository;
 import io.github.Romariok.orkestro.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.repository.OrganizationUserRepository;
@@ -31,6 +33,7 @@ import io.github.Romariok.orkestro.repository.SongRepository;
 import io.github.Romariok.orkestro.repository.StoredFileRepository;
 import io.github.Romariok.orkestro.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
+import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
 import java.util.List;
@@ -80,6 +83,9 @@ class OrganizationServiceTest {
 
       @Mock
       private TechnicalRoleService technicalRoleService;
+
+      @Mock
+      private OrganizationInviteRepository organizationInviteRepository;
 
       @InjectMocks
       private OrganizationService organizationService;
@@ -179,6 +185,9 @@ class OrganizationServiceTest {
 
             // и для него вызван сервис назначения роли Leader
             verify(technicalRoleService).assignOrganizationRoleToUser(1L, 100L, orgLeaderRole.getId());
+
+            // для публичной организации пригласительная ссылка не создаётся автоматически
+            verify(organizationInviteRepository, never()).save(any());
 
             assertEquals(1L, result.getId());
             assertEquals(2, result.getLinks().size());
@@ -416,6 +425,184 @@ class OrganizationServiceTest {
 
             assertEquals(VisibilityLevelType.PRIVATE, organization.getVisibilityLevel());
             assertEquals(VisibilityLevelType.PRIVATE, result.getVisibilityLevel());
+      }
+
+      @Test
+      void setVisibility_privateToPublic_deletesInvite() {
+            Organization organization = new Organization();
+            organization.setId(1L);
+            organization.setName("Orkestro");
+            organization.setLocation("Moscow");
+            organization.setVisibilityLevel(VisibilityLevelType.PRIVATE);
+
+            when(organizationRepository.findById(1L)).thenReturn(Optional.of(organization));
+            when(organizationRepository.save(any(Organization.class)))
+                        .thenAnswer(invocation -> invocation.getArgument(0));
+
+            OrganizationDTO baseDto = new OrganizationDTO();
+            baseDto.setId(1L);
+            baseDto.setVisibilityLevel(VisibilityLevelType.PUBLIC);
+            when(organizationMapper.toDto(organization)).thenReturn(baseDto);
+            when(organizationLinkRepository.findByOrganizationId(1L)).thenReturn(List.of());
+
+            organizationService.setVisibility(1L, VisibilityLevelType.PUBLIC);
+
+            verify(organizationInviteRepository).deleteById(1L);
+      }
+
+      @Test
+      void createOrganization_private_generatesInvite() {
+            OrganizationCreateRequestDTO request = new OrganizationCreateRequestDTO(
+                        "Private Orkestro",
+                        "Moscow",
+                        "Wind orchestra",
+                        10L,
+                        VisibilityLevelType.PRIVATE,
+                        null);
+
+            StoredFile file = StoredFile.builder()
+                        .id(10L)
+                        .name("profile.png")
+                        .build();
+            when(storedFileRepository.findById(10L)).thenReturn(Optional.of(file));
+
+            Organization saved = Organization.builder()
+                        .id(1L)
+                        .name("Private Orkestro")
+                        .location("Moscow")
+                        .profileImageFileId(10L)
+                        .createdAt(Instant.now())
+                        .visibilityLevel(VisibilityLevelType.PRIVATE)
+                        .build();
+
+            when(organizationRepository.save(any(Organization.class))).thenReturn(saved);
+            when(securityUtils.getCurrentUserId()).thenReturn(100L);
+
+            Role templateLeader = Role.builder()
+                        .id(10L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .name("Leader")
+                        .system(true)
+                        .build();
+            Role templateCoLeader = Role.builder()
+                        .id(11L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .name("Co-leader")
+                        .system(true)
+                        .build();
+            when(roleRepository.findByScopeAndSystemTrue(RoleScopeType.ORGANIZATION))
+                        .thenReturn(List.of(templateLeader, templateCoLeader));
+            when(roleRepository.findByScopeAndOrganizationId(RoleScopeType.ORGANIZATION, 1L))
+                        .thenReturn(List.of());
+
+            Role orgLeaderRole = Role.builder()
+                        .id(20L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .organizationId(1L)
+                        .name("Leader")
+                        .build();
+            when(roleRepository.saveAll(any())).thenReturn(List.of(orgLeaderRole));
+            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Leader"))
+                        .thenReturn(Optional.of(orgLeaderRole));
+
+            when(organizationInviteRepository.findById(1L)).thenReturn(Optional.empty());
+            when(organizationInviteRepository.save(any(OrganizationInvite.class)))
+                        .thenAnswer(invocation -> invocation.getArgument(0));
+
+            OrganizationDTO baseDto = new OrganizationDTO();
+            baseDto.setId(1L);
+            baseDto.setName("Private Orkestro");
+            when(organizationMapper.toDto(saved)).thenReturn(baseDto);
+            when(organizationLinkRepository.findByOrganizationId(1L)).thenReturn(List.of());
+
+            organizationService.createOrganization(request);
+
+            ArgumentCaptor<OrganizationInvite> inviteCaptor = ArgumentCaptor.forClass(OrganizationInvite.class);
+            verify(organizationInviteRepository).save(inviteCaptor.capture());
+            OrganizationInvite invite = inviteCaptor.getValue();
+
+            assertEquals(1L, invite.getOrganizationId());
+            assertEquals(100L, invite.getCreatedByUserId());
+            // код должен быть непустым
+            org.junit.jupiter.api.Assertions.assertTrue(
+                        invite.getCode() != null && !invite.getCode().isBlank());
+      }
+
+      @Test
+      void setVisibility_publicToPrivate_generatesInvite() {
+            Organization organization = new Organization();
+            organization.setId(1L);
+            organization.setName("Orkestro");
+            organization.setLocation("Moscow");
+            organization.setVisibilityLevel(VisibilityLevelType.PUBLIC);
+
+            when(organizationRepository.findById(1L)).thenReturn(Optional.of(organization));
+            when(organizationRepository.save(any(Organization.class)))
+                        .thenAnswer(invocation -> invocation.getArgument(0));
+
+            OrganizationDTO baseDto = new OrganizationDTO();
+            baseDto.setId(1L);
+            baseDto.setVisibilityLevel(VisibilityLevelType.PRIVATE);
+            when(organizationMapper.toDto(organization)).thenReturn(baseDto);
+            when(organizationLinkRepository.findByOrganizationId(1L)).thenReturn(List.of());
+
+            when(securityUtils.getCurrentUserId()).thenReturn(200L);
+            when(organizationInviteRepository.findById(1L)).thenReturn(Optional.empty());
+            when(organizationInviteRepository.save(any(OrganizationInvite.class)))
+                        .thenAnswer(invocation -> invocation.getArgument(0));
+
+            organizationService.setVisibility(1L, VisibilityLevelType.PRIVATE);
+
+            ArgumentCaptor<OrganizationInvite> inviteCaptor = ArgumentCaptor.forClass(OrganizationInvite.class);
+            verify(organizationInviteRepository).save(inviteCaptor.capture());
+            OrganizationInvite invite = inviteCaptor.getValue();
+
+            assertEquals(1L, invite.getOrganizationId());
+            assertEquals(200L, invite.getCreatedByUserId());
+      }
+
+      @Test
+      void regenerateInviteLink_privateOrganization_generatesAndReturnsCode() {
+            Organization organization = new Organization();
+            organization.setId(1L);
+            organization.setName("Orkestro");
+            organization.setLocation("Moscow");
+            organization.setVisibilityLevel(VisibilityLevelType.PRIVATE);
+
+            when(organizationRepository.findById(1L)).thenReturn(Optional.of(organization));
+            when(securityUtils.getCurrentUserId()).thenReturn(300L);
+
+            when(organizationInviteRepository.findById(1L)).thenReturn(Optional.empty());
+            when(organizationInviteRepository.save(any(OrganizationInvite.class)))
+                        .thenAnswer(invocation -> invocation.getArgument(0));
+
+            String code = organizationService.regenerateInviteLink(1L);
+
+            ArgumentCaptor<OrganizationInvite> inviteCaptor = ArgumentCaptor.forClass(OrganizationInvite.class);
+            verify(organizationInviteRepository).save(inviteCaptor.capture());
+            OrganizationInvite invite = inviteCaptor.getValue();
+
+            assertEquals(1L, invite.getOrganizationId());
+            assertEquals(300L, invite.getCreatedByUserId());
+            assertEquals(invite.getCode(), code);
+            org.junit.jupiter.api.Assertions.assertEquals(32, code.length());
+      }
+
+      @Test
+      void regenerateInviteLink_publicOrganization_throwsBusinessException() {
+            Organization organization = new Organization();
+            organization.setId(1L);
+            organization.setName("Orkestro");
+            organization.setLocation("Moscow");
+            organization.setVisibilityLevel(VisibilityLevelType.PUBLIC);
+
+            when(organizationRepository.findById(1L)).thenReturn(Optional.of(organization));
+
+            assertThrows(
+                        BusinessException.class,
+                        () -> organizationService.regenerateInviteLink(1L));
+
+            verify(organizationInviteRepository, never()).save(any());
       }
 
       @Test

@@ -1,10 +1,10 @@
 version: "3.9"
 services:
   postgres:
-    container_name: postgres_container
+    container_name: postgres_orkestro
     image: postgres:latest
     environment:
-      POSTGRES_DB: "orkestro"
+      POSTGRES_DB: "postgres"
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "pgpwd"
       PGDATA: "/var/lib/postgresql/data/pgdata"
@@ -14,7 +14,7 @@ services:
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d orkestro"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,7 +29,7 @@ services:
       - postgres
 
   pgadmin:
-    container_name: pga5432dmin_container
+    container_name: pgadmin_container
     image: dpage/pgadmin4:latest
     environment:
       PGADMIN_DEFAULT_EMAIL: "alexeasy11@gmail.com"

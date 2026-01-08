@@ -230,6 +230,14 @@
         FOREIGN KEY (user_id) REFERENCES users (id)
     );
 
+    CREATE TABLE organization_invite (
+        organization_id BIGINT PRIMARY KEY,
+        code TEXT NOT NULL UNIQUE,
+        created_by_user_id BIGINT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (organization_id) REFERENCES organization (id),
+        FOREIGN KEY (created_by_user_id) REFERENCES users (id)
+    );
     CREATE TABLE song (
         id BIGSERIAL PRIMARY KEY,
         organization_id BIGINT NOT NULL,
@@ -521,7 +529,6 @@
         (1, 'ORG_DELETE'),
         (1, 'ORG_EDIT'),
         (1, 'ORG_SET_VISIBILITY'),
-        (1, 'ORG_MANAGE_LINKS'),
         (1, 'ORG_MEMBER_INVITE'),
         (1, 'ORG_MEMBER_REMOVE'),
         (1, 'ORG_JOIN_REQUEST_VIEW'),
@@ -548,7 +555,6 @@
         (1, 'TASK_MANAGE'),
         -- Co-leader: reduced permission set
         (2, 'ORG_EDIT'),
-        (2, 'ORG_MANAGE_LINKS'),
         (2, 'ORG_MEMBER_INVITE'),
         (2, 'ORG_MEMBER_REMOVE'),
         (2, 'ORG_JOIN_REQUEST_VIEW'),
@@ -559,7 +565,7 @@
         (2, 'SECTION_MEMBER_ADD'),
         (2, 'SECTION_MEMBER_REMOVE'),
         (2, 'SECTION_ASSIGN_TECH_ROLE'),
-        (2, 'REPERTOIRE_CREATE_SONG'),
+        (2, 'REPERTOIRE_CREATE_SONG'),  
         (2, 'REPERTOIRE_EDIT_SONG'),
         (2, 'REPERTOIRE_DELETE_SONG'),
         (2, 'REPERTOIRE_MANAGE_FILES'),
