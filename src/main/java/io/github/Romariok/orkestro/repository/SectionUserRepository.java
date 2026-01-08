@@ -10,4 +10,6 @@ import org.springframework.stereotype.Repository;
 public interface SectionUserRepository extends JpaRepository<SectionUser, SectionUserId> {
 
     Optional<SectionUser> findBySectionIdAndUserId(Long sectionId, Long userId);
+
+    void deleteBySectionId(Long sectionId);
 }
