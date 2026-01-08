@@ -8,20 +8,26 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.Romariok.orkestro.dao.TechnicalRoleDao;
+import io.github.Romariok.orkestro.dto.role.TechnicalRoleCreateRequestDTO;
 import io.github.Romariok.orkestro.dto.role.TechnicalRoleDTO;
 import io.github.Romariok.orkestro.mapper.TechnicalRoleMapper;
 import io.github.Romariok.orkestro.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.models.organization.OrganizationUser;
+import io.github.Romariok.orkestro.models.role.Permission;
 import io.github.Romariok.orkestro.models.role.Role;
+import io.github.Romariok.orkestro.models.role.RolePermission;
 import io.github.Romariok.orkestro.models.section.SectionUser;
 import io.github.Romariok.orkestro.models.user.UserRole;
 import io.github.Romariok.orkestro.models.user.UserRoleId;
 import io.github.Romariok.orkestro.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.repository.PermissionRepository;
+import io.github.Romariok.orkestro.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.repository.RoleRepository;
 import io.github.Romariok.orkestro.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.repository.UserRepository;
 import io.github.Romariok.orkestro.repository.UserRoleRepository;
+import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +62,12 @@ class TechnicalRoleServiceTest {
         @Mock
         private SectionUserRepository sectionUserRepository;
 
+        @Mock
+        private RolePermissionRepository rolePermissionRepository;
+
+        @Mock
+        private PermissionRepository permissionRepository;
+
         @InjectMocks
         private TechnicalRoleService technicalRoleService;
 
@@ -75,6 +87,133 @@ class TechnicalRoleServiceTest {
 
                 assertEquals(1, result.size());
                 assertEquals(10L, result.getFirst().getId());
+        }
+
+        @Test
+        void createOrganizationRole_success_savesRoleAndPermissions() {
+                Long organizationId = 100L;
+                TechnicalRoleCreateRequestDTO request = new TechnicalRoleCreateRequestDTO(
+                                "Editor",
+                                List.of("ORG_EDIT", "REPERTOIRE_CREATE_SONG"));
+
+                when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION,
+                                organizationId, "Editor"))
+                                .thenReturn(Optional.empty());
+
+                Role savedRole = Role.builder()
+                                .id(10L)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .name("Editor")
+                                .build();
+                when(roleRepository.save(any(Role.class))).thenReturn(savedRole);
+
+                Permission p1 = Permission.builder().code("ORG_EDIT").description("d").build();
+                Permission p2 = Permission.builder().code("REPERTOIRE_CREATE_SONG").description("d").build();
+                when(permissionRepository.findByCodeIn(any())).thenReturn(List.of(p1, p2));
+
+                TechnicalRoleDTO dto = new TechnicalRoleDTO();
+                dto.setId(10L);
+                when(technicalRoleMapper.toDto(savedRole)).thenReturn(dto);
+
+                TechnicalRoleDTO result = technicalRoleService.createOrganizationRole(organizationId, request);
+
+                assertEquals(10L, result.getId());
+
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<RolePermission>> captor = (ArgumentCaptor<List<RolePermission>>) (ArgumentCaptor<?>) ArgumentCaptor
+                                .forClass(List.class);
+                verify(rolePermissionRepository).saveAll(captor.capture());
+                List<RolePermission> stored = captor.getValue();
+                assertEquals(2, stored.size());
+        }
+
+        @Test
+        void createOrganizationRole_duplicateName_throwsBusinessException() {
+                Long organizationId = 100L;
+                TechnicalRoleCreateRequestDTO request = new TechnicalRoleCreateRequestDTO(
+                                "Editor",
+                                List.of("ORG_EDIT"));
+
+                Role existing = Role.builder()
+                                .id(5L)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .name("Editor")
+                                .build();
+                when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION,
+                                organizationId, "Editor"))
+                                .thenReturn(Optional.of(existing));
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> technicalRoleService.createOrganizationRole(organizationId, request));
+
+                verify(roleRepository, never()).save(any(Role.class));
+                verify(rolePermissionRepository, never()).saveAll(any());
+        }
+
+        @Test
+        void createSectionRole_success_savesRoleAndPermissions() {
+                Long sectionId = 5L;
+                TechnicalRoleCreateRequestDTO request = new TechnicalRoleCreateRequestDTO(
+                                "SectionEditor",
+                                List.of("SECTION_EDIT"));
+
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION,
+                                sectionId, "SectionEditor"))
+                                .thenReturn(Optional.empty());
+
+                Role savedRole = Role.builder()
+                                .id(20L)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .name("SectionEditor")
+                                .build();
+                when(roleRepository.save(any(Role.class))).thenReturn(savedRole);
+
+                Permission p = Permission.builder().code("SECTION_EDIT").description("d").build();
+                when(permissionRepository.findByCodeIn(any())).thenReturn(List.of(p));
+
+                TechnicalRoleDTO dto = new TechnicalRoleDTO();
+                dto.setId(20L);
+                when(technicalRoleMapper.toDto(savedRole)).thenReturn(dto);
+
+                TechnicalRoleDTO result = technicalRoleService.createSectionRole(sectionId, request);
+
+                assertEquals(20L, result.getId());
+
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<RolePermission>> captor = (ArgumentCaptor<List<RolePermission>>) (ArgumentCaptor<?>) ArgumentCaptor
+                                .forClass(List.class);
+                verify(rolePermissionRepository).saveAll(captor.capture());
+                List<RolePermission> stored = captor.getValue();
+                assertEquals(1, stored.size());
+        }
+
+        @Test
+        void createSectionRole_duplicateName_throwsBusinessException() {
+                Long sectionId = 5L;
+                TechnicalRoleCreateRequestDTO request = new TechnicalRoleCreateRequestDTO(
+                                "SectionEditor",
+                                List.of("SECTION_EDIT"));
+
+                Role existing = Role.builder()
+                                .id(21L)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .name("SectionEditor")
+                                .build();
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION,
+                                sectionId, "SectionEditor"))
+                                .thenReturn(Optional.of(existing));
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> technicalRoleService.createSectionRole(sectionId, request));
+
+                verify(roleRepository, never()).save(any(Role.class));
+                verify(rolePermissionRepository, never()).saveAll(any());
         }
 
         @Test
