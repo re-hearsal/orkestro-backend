@@ -3,19 +3,29 @@ package io.github.Romariok.orkestro.service;
 import io.github.Romariok.orkestro.dto.section.SectionCreateRequestDTO;
 import io.github.Romariok.orkestro.dto.section.SectionDTO;
 import io.github.Romariok.orkestro.mapper.SectionMapper;
+import io.github.Romariok.orkestro.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.models.organization.Organization;
+import io.github.Romariok.orkestro.models.organization.OrganizationUser;
+import io.github.Romariok.orkestro.models.role.Permission;
 import io.github.Romariok.orkestro.models.role.Role;
+import io.github.Romariok.orkestro.models.role.RolePermission;
 import io.github.Romariok.orkestro.models.section.Section;
+import io.github.Romariok.orkestro.models.section.SectionUser;
 import io.github.Romariok.orkestro.repository.OrganizationRepository;
+import io.github.Romariok.orkestro.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.repository.RoleRepository;
+import io.github.Romariok.orkestro.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.repository.SectionRepository;
 import io.github.Romariok.orkestro.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.repository.TaskRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -27,10 +37,12 @@ public class SectionService {
 
     private final SectionRepository sectionRepository;
     private final OrganizationRepository organizationRepository;
+    private final OrganizationUserRepository organizationUserRepository;
     private final SectionUserRepository sectionUserRepository;
     private final RoleRepository roleRepository;
     private final TaskRepository taskRepository;
     private final SectionMapper sectionMapper;
+    private final RolePermissionRepository rolePermissionRepository;
 
     /**
      * Создать секцию верхнего уровня внутри организации.
@@ -61,6 +73,7 @@ public class SectionService {
         section.setParentSectionId(null);
 
         Section saved = sectionRepository.save(section);
+        ensureSectionBaseRoles(saved.getId());
         return sectionMapper.toDto(saved);
     }
 
@@ -93,7 +106,79 @@ public class SectionService {
         section.setParentSectionId(parent.getId());
 
         Section saved = sectionRepository.save(section);
+        ensureSectionBaseRoles(saved.getId());
         return sectionMapper.toDto(saved);
+    }
+
+    private void ensureSectionBaseRoles(Long sectionId) {
+        List<Role> existing = roleRepository.findByScopeAndSectionId(
+                RoleScopeType.SECTION,
+                sectionId);
+
+        boolean hasLeader = existing.stream().anyMatch(r -> "Leader".equals(r.getName()));
+        boolean hasCoLeader = existing.stream().anyMatch(r -> "Co-leader".equals(r.getName()));
+
+        if (hasLeader && hasCoLeader) {
+            return;
+        }
+
+        List<Role> templates = roleRepository.findByScopeAndSystemTrue(RoleScopeType.SECTION);
+        Map<String, Role> templateByName = new HashMap<>();
+        for (Role template : templates) {
+            templateByName.put(template.getName(), template);
+        }
+
+        List<Role> toCreate = new ArrayList<>();
+
+        if (!hasLeader && templateByName.containsKey("Leader")) {
+            Role template = templateByName.get("Leader");
+            Role role = Role.builder()
+                    .scope(RoleScopeType.SECTION)
+                    .sectionId(sectionId)
+                    .name(template.getName())
+                    .system(true)
+                    .createdAt(Instant.now())
+                    .build();
+            toCreate.add(role);
+        }
+
+        if (!hasCoLeader && templateByName.containsKey("Co-leader")) {
+            Role template = templateByName.get("Co-leader");
+            Role role = Role.builder()
+                    .scope(RoleScopeType.SECTION)
+                    .sectionId(sectionId)
+                    .name(template.getName())
+                    .system(true)
+                    .createdAt(Instant.now())
+                    .build();
+            toCreate.add(role);
+        }
+
+        if (toCreate.isEmpty()) {
+            return;
+        }
+
+        List<Role> created = roleRepository.saveAll(toCreate);
+
+        // Копируем права с шаблонных ролей
+        List<RolePermission> permissionsToCreate = new ArrayList<>();
+        for (Role createdRole : created) {
+            Role template = templateByName.get(createdRole.getName());
+            if (template == null) {
+                continue;
+            }
+            List<Permission> templatePermissions = rolePermissionRepository.findPermissionsByRoleId(template.getId());
+            for (Permission permission : templatePermissions) {
+                RolePermission rp = new RolePermission();
+                rp.setRoleId(createdRole.getId());
+                rp.setPermissionCode(permission.getCode());
+                permissionsToCreate.add(rp);
+            }
+        }
+
+        if (!permissionsToCreate.isEmpty()) {
+            rolePermissionRepository.saveAll(permissionsToCreate);
+        }
     }
 
     /**
@@ -128,6 +213,60 @@ public class SectionService {
         // Удаляем секции начиная с листьев (порядок уже обеспечен
         // collectSubtreeSectionIds)
         sectionRepository.deleteAllById(idsToDelete);
+    }
+
+    /**
+     * Добавить пользователя в секцию.
+     * Пользователь должен быть доступен на уровне выше:
+     * - для корневой секции (без parent_section_id) — быть принятым участником
+     * организации;
+     * - для вложенной секции — быть участником родительской секции.
+     * Доступно только обладателям SECTION_MEMBER_ADD в контексте секции.
+     */
+    @Transactional
+    @PreAuthorize("hasAuthority('CTX_PERM_SECTION:' + #sectionId + ':SECTION_MEMBER_ADD')")
+    public void addUserToSection(Long sectionId, Long userId) {
+        Section section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new EntityNotFoundException("Section not found: " + sectionId));
+
+        if (sectionUserRepository.findBySectionIdAndUserId(sectionId, userId).isPresent()) {
+            return;
+        }
+
+        if (section.getParentSectionId() == null) {
+            OrganizationUser membership = organizationUserRepository
+                    .findByOrganizationIdAndUserId(section.getOrganizationId(), userId)
+                    .orElseThrow(() -> new BusinessException(
+                            "User " + userId + " is not a member of organization " + section.getOrganizationId()));
+
+            if (membership.getStatus() != OrganizationUserStatusType.ACCEPTED) {
+                throw new BusinessException(
+                        "User " + userId + " is not an accepted member of organization " + section.getOrganizationId());
+            }
+        } else {
+            Long parentSectionId = section.getParentSectionId();
+            sectionUserRepository.findBySectionIdAndUserId(parentSectionId, userId)
+                    .orElseThrow(() -> new BusinessException(
+                            "User " + userId + " is not a member of parent section " + parentSectionId));
+        }
+
+        SectionUser su = new SectionUser();
+        su.setSectionId(sectionId);
+        su.setUserId(userId);
+        su.setJoinedAt(Instant.now());
+
+        sectionUserRepository.save(su);
+    }
+
+    @Transactional
+    @PreAuthorize("hasAuthority('CTX_PERM_SECTION:' + #sectionId + ':SECTION_MEMBER_REMOVE')")
+    public void removeUserFromSection(Long sectionId, Long userId) {
+        if (!sectionRepository.existsById(sectionId)) {
+            throw new EntityNotFoundException("Section not found: " + sectionId);
+        }
+
+        sectionUserRepository.findBySectionIdAndUserId(sectionId, userId)
+                .ifPresent(sectionUserRepository::delete);
     }
 
     private void collectSubtreeSectionIds(Long rootId, List<Long> accumulator) {

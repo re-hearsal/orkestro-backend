@@ -10,12 +10,17 @@ import static org.mockito.Mockito.when;
 import io.github.Romariok.orkestro.dto.section.SectionCreateRequestDTO;
 import io.github.Romariok.orkestro.dto.section.SectionDTO;
 import io.github.Romariok.orkestro.mapper.SectionMapper;
+import io.github.Romariok.orkestro.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.models.organization.Organization;
+import io.github.Romariok.orkestro.models.organization.OrganizationUser;
 import io.github.Romariok.orkestro.models.role.Role;
 import io.github.Romariok.orkestro.models.section.Section;
+import io.github.Romariok.orkestro.models.section.SectionUser;
 import io.github.Romariok.orkestro.models.task.Task;
 import io.github.Romariok.orkestro.repository.OrganizationRepository;
+import io.github.Romariok.orkestro.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.repository.RoleRepository;
 import io.github.Romariok.orkestro.repository.SectionRepository;
 import io.github.Romariok.orkestro.repository.SectionUserRepository;
@@ -41,10 +46,16 @@ class SectionServiceTest {
         private OrganizationRepository organizationRepository;
 
         @Mock
+        private OrganizationUserRepository organizationUserRepository;
+
+        @Mock
         private SectionUserRepository sectionUserRepository;
 
         @Mock
         private RoleRepository roleRepository;
+
+        @Mock
+        private RolePermissionRepository rolePermissionRepository;
 
         @Mock
         private TaskRepository taskRepository;
@@ -70,6 +81,9 @@ class SectionServiceTest {
                 when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(organization));
                 when(sectionRepository.existsByOrganizationIdAndParentSectionIdIsNullAndName(organizationId, "Brass"))
                                 .thenReturn(false);
+                when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, 10L))
+                                .thenReturn(List.of());
+                when(roleRepository.findByScopeAndSystemTrue(RoleScopeType.SECTION)).thenReturn(List.of());
 
                 Section saved = new Section();
                 saved.setId(10L);
@@ -159,6 +173,9 @@ class SectionServiceTest {
                 when(sectionRepository.existsByOrganizationIdAndParentSectionIdAndName(organizationId, parentSectionId,
                                 "Trumpets"))
                                 .thenReturn(false);
+                when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, 20L))
+                                .thenReturn(List.of());
+                when(roleRepository.findByScopeAndSystemTrue(RoleScopeType.SECTION)).thenReturn(List.of());
 
                 Section saved = new Section();
                 saved.setId(20L);
@@ -314,5 +331,226 @@ class SectionServiceTest {
                 verify(roleRepository).findByScopeAndSectionId(RoleScopeType.SECTION, rootId);
                 verify(roleRepository).deleteAll(List.of(childRole));
                 verify(sectionRepository).deleteAllById(List.of(childId, rootId));
+        }
+
+        @Test
+        void addUserToSection_rootSection_success_addsMembership() {
+                Long sectionId = 10L;
+                Long organizationId = 1L;
+                Long userId = 100L;
+
+                Section section = new Section();
+                section.setId(sectionId);
+                section.setOrganizationId(organizationId);
+                section.setParentSectionId(null);
+
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId)).thenReturn(Optional.empty());
+
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+
+                sectionService.addUserToSection(sectionId, userId);
+
+                ArgumentCaptor<SectionUser> captor = ArgumentCaptor.forClass(SectionUser.class);
+                verify(sectionUserRepository).save(captor.capture());
+                SectionUser saved = captor.getValue();
+
+                assertEquals(sectionId, saved.getSectionId());
+                assertEquals(userId, saved.getUserId());
+        }
+
+        @Test
+        void addUserToSection_rootSection_userNotInOrganization_throwsBusinessException() {
+                Long sectionId = 10L;
+                Long organizationId = 1L;
+                Long userId = 100L;
+
+                Section section = new Section();
+                section.setId(sectionId);
+                section.setOrganizationId(organizationId);
+                section.setParentSectionId(null);
+
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId)).thenReturn(Optional.empty());
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.empty());
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> sectionService.addUserToSection(sectionId, userId));
+
+                verify(sectionUserRepository, never()).save(any());
+        }
+
+        @Test
+        void addUserToSection_rootSection_userNotAccepted_throwsBusinessException() {
+                Long sectionId = 10L;
+                Long organizationId = 1L;
+                Long userId = 100L;
+
+                Section section = new Section();
+                section.setId(sectionId);
+                section.setOrganizationId(organizationId);
+                section.setParentSectionId(null);
+
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId)).thenReturn(Optional.empty());
+
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.PENDING)
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> sectionService.addUserToSection(sectionId, userId));
+
+                verify(sectionUserRepository, never()).save(any());
+        }
+
+        @Test
+        void addUserToSection_childSection_success_addsMembership() {
+                Long rootId = 1L;
+                Long sectionId = 2L;
+                Long userId = 100L;
+
+                Section section = new Section();
+                section.setId(sectionId);
+                section.setOrganizationId(10L);
+                section.setParentSectionId(rootId);
+
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId)).thenReturn(Optional.empty());
+
+                SectionUser parentMembership = new SectionUser();
+                parentMembership.setSectionId(rootId);
+                parentMembership.setUserId(userId);
+                when(sectionUserRepository.findBySectionIdAndUserId(rootId, userId))
+                                .thenReturn(Optional.of(parentMembership));
+
+                sectionService.addUserToSection(sectionId, userId);
+
+                ArgumentCaptor<SectionUser> captor = ArgumentCaptor.forClass(SectionUser.class);
+                verify(sectionUserRepository).save(captor.capture());
+                SectionUser saved = captor.getValue();
+
+                assertEquals(sectionId, saved.getSectionId());
+                assertEquals(userId, saved.getUserId());
+        }
+
+        @Test
+        void addUserToSection_childSection_userNotInParent_throwsBusinessException() {
+                Long rootId = 1L;
+                Long sectionId = 2L;
+                Long userId = 100L;
+
+                Section section = new Section();
+                section.setId(sectionId);
+                section.setOrganizationId(10L);
+                section.setParentSectionId(rootId);
+
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId)).thenReturn(Optional.empty());
+                when(sectionUserRepository.findBySectionIdAndUserId(rootId, userId))
+                                .thenReturn(Optional.empty());
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> sectionService.addUserToSection(sectionId, userId));
+
+                verify(sectionUserRepository, never()).save(any());
+        }
+
+        @Test
+        void addUserToSection_sectionNotFound_throwsEntityNotFound() {
+                Long sectionId = 10L;
+                Long userId = 100L;
+
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.empty());
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> sectionService.addUserToSection(sectionId, userId));
+
+                verify(sectionUserRepository, never()).save(any());
+        }
+
+        @Test
+        void addUserToSection_alreadyMember_doesNothing() {
+                Long sectionId = 10L;
+                Long userId = 100L;
+
+                Section section = new Section();
+                section.setId(sectionId);
+                section.setOrganizationId(1L);
+
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+
+                SectionUser existing = new SectionUser();
+                existing.setSectionId(sectionId);
+                existing.setUserId(userId);
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId))
+                                .thenReturn(Optional.of(existing));
+
+                sectionService.addUserToSection(sectionId, userId);
+
+                verify(sectionUserRepository, never()).save(any());
+                verify(organizationUserRepository, never()).findByOrganizationIdAndUserId(any(), any());
+        }
+
+        @Test
+        void removeUserFromSection_sectionNotFound_throwsEntityNotFound() {
+                Long sectionId = 10L;
+                Long userId = 100L;
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(false);
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> sectionService.removeUserFromSection(sectionId, userId));
+
+                verify(sectionUserRepository, never()).findBySectionIdAndUserId(any(), any());
+        }
+
+        @Test
+        void removeUserFromSection_existingMembership_deletesIt() {
+                Long sectionId = 10L;
+                Long userId = 100L;
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+
+                SectionUser su = new SectionUser();
+                su.setSectionId(sectionId);
+                su.setUserId(userId);
+
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId))
+                                .thenReturn(Optional.of(su));
+
+                sectionService.removeUserFromSection(sectionId, userId);
+
+                verify(sectionUserRepository).delete(su);
+        }
+
+        @Test
+        void removeUserFromSection_noMembership_doesNothing() {
+                Long sectionId = 10L;
+                Long userId = 100L;
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId))
+                                .thenReturn(Optional.empty());
+
+                sectionService.removeUserFromSection(sectionId, userId);
+
+                verify(sectionUserRepository, never()).delete(any());
         }
 }
