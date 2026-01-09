@@ -301,9 +301,10 @@ class SectionServiceTest {
                 when(sectionRepository.findByParentSectionId(rootId)).thenReturn(List.of(child));
                 when(sectionRepository.findByParentSectionId(childId)).thenReturn(List.of());
 
-                Task childTask = new Task();
-                childTask.setId(50L);
-                childTask.setSectionId(childId);
+                Task childTask = Task.builder()
+                                .id(50L)
+                                .sectionId(childId)
+                                .build();
 
                 when(taskRepository.findBySectionId(childId)).thenReturn(List.of(childTask));
                 when(taskRepository.findBySectionId(rootId)).thenReturn(List.of());
