@@ -56,8 +56,8 @@ public class User implements UserDetails {
    @Column(name = "updated_at", nullable = false)
    private Instant updatedAt;
 
-   @Column(name = "telegram_chat_id", nullable = false)
-   private Long telegramChatId;
+   @Column(name = "telegram_user_id")
+   private Long telegramUserId;
 
    @Enumerated(EnumType.STRING)
    @Column(name = "notification_channel_id", nullable = false)

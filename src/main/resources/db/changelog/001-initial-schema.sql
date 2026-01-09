@@ -75,7 +75,7 @@ CREATE TABLE users (
     password TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    telegram_chat_id BIGINT NOT NULL,
+    telegram_user_id BIGINT,
     notification_channel_id notification_channel_type NOT NULL DEFAULT 'EMAIL',
     location TEXT,
     birth_date DATE,
