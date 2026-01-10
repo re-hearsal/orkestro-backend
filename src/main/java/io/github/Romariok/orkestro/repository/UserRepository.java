@@ -12,20 +12,22 @@ import io.github.Romariok.orkestro.models.user.User;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    Optional<User> findByUsername(String username);
+        Optional<User> findByUsername(String username);
 
-    boolean existsByUsername(String username);
+        boolean existsByUsername(String username);
 
-    List<User> findByNameContainingIgnoreCase(String name);
+        Optional<User> findByTelegramUserId(Long telegramUserId);
 
-    @Query("""
-            SELECT DISTINCT u
-            FROM User u
-            JOIN UserRole ur ON ur.userId = u.id
-            WHERE (:name IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :name, '%')))
-              AND ur.roleId IN :roleIds
-            """)
-    List<User> findByNameAndRoleIds(
-            @Param("name") String name,
-            @Param("roleIds") List<Long> roleIds);
+        List<User> findByNameContainingIgnoreCase(String name);
+
+        @Query("""
+                        SELECT DISTINCT u
+                        FROM User u
+                        JOIN UserRole ur ON ur.userId = u.id
+                        WHERE (:name IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :name, '%')))
+                          AND ur.roleId IN :roleIds
+                        """)
+        List<User> findByNameAndRoleIds(
+                        @Param("name") String name,
+                        @Param("roleIds") List<Long> roleIds);
 }

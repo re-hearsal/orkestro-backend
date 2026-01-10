@@ -2,6 +2,7 @@ package io.github.Romariok.orkestro.service;
 
 import io.github.Romariok.orkestro.dto.user.UserProfileUpdateRequestDTO;
 import io.github.Romariok.orkestro.models.StoredFile;
+import io.github.Romariok.orkestro.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.models.role.Permission;
 import io.github.Romariok.orkestro.models.role.Role;
@@ -111,7 +112,11 @@ public class UserService implements UserDetailsService {
          user.setBirthDate(request.getBirthDate());
       }
       if (request.getNotificationChannel() != null) {
-         user.setNotificationChannel(request.getNotificationChannel());
+         NotificationChannelType channel = request.getNotificationChannel();
+         user.setNotificationChannel(channel);
+         if (channel == NotificationChannelType.EMAIL) {
+            user.setTelegramUserId(null);
+         }
       }
 
       user.setUpdatedAt(Instant.now());
@@ -158,6 +163,26 @@ public class UserService implements UserDetailsService {
       }
 
       return userRepository.findByNameAndRoleIds(normalizedName, roleIds);
+   }
+
+   @Transactional
+   public User updateNotificationChannel(Long userId, NotificationChannelType channel) {
+      User user = userRepository.findById(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+
+      user.setNotificationChannel(channel);
+      if (channel == NotificationChannelType.EMAIL) {
+         user.setTelegramUserId(null);
+      }
+
+      user.setUpdatedAt(Instant.now());
+      return userRepository.save(user);
+   }
+
+   @Transactional
+   public User updateCurrentUserNotificationChannel(NotificationChannelType channel) {
+      Long currentUserId = securityUtils.getCurrentUserId();
+      return updateNotificationChannel(currentUserId, channel);
    }
 
    @Transactional
