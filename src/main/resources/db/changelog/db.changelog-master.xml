@@ -6,7 +6,16 @@
 
     <changeSet id="001-initial-schema" author="romariok">
         <sqlFile
-            path="db/changelog/001-initial-schema.sql"
+            path="001-initial-schema.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="002-telegram-linking" author="romariok">
+        <sqlFile
+            path="002-telegram-linking.sql"
             relativeToChangelogFile="true"
             stripComments="false"
             splitStatements="true"

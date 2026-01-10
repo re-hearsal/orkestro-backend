@@ -42,7 +42,10 @@ CREATE TABLE role (
         OR (
             scope = 'SECTION'
             AND organization_id IS NULL
-            AND section_id IS NOT NULL
+            AND (
+                section_id IS NOT NULL
+                OR is_system
+            )
         )
     ),
     UNIQUE (
