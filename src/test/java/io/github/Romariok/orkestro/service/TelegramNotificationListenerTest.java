@@ -11,11 +11,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.Romariok.orkestro.models.enums.NotificationChannelType;
-import io.github.Romariok.orkestro.models.user.User;
-import io.github.Romariok.orkestro.models.user.UserTelegramLinkToken;
-import io.github.Romariok.orkestro.repository.UserRepository;
-import io.github.Romariok.orkestro.repository.UserTelegramLinkTokenRepository;
+
+import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
+import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.UserTelegramLinkToken;
+import io.github.Romariok.orkestro.user.repository.UserRepository;
+import io.github.Romariok.orkestro.user.repository.UserTelegramLinkTokenRepository;
+import io.github.Romariok.orkestro.user.service.TelegramNotificationListener;
+
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.Optional;

@@ -2,11 +2,13 @@ package io.github.Romariok.orkestro.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.github.Romariok.orkestro.dto.song.SongCreateRequestDTO;
-import io.github.Romariok.orkestro.dto.song.SongUpdateRequestDTO;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
+
+import io.github.Romariok.orkestro.repertoire.dto.SongCreateRequestDTO;
+import io.github.Romariok.orkestro.repertoire.dto.SongUpdateRequestDTO;
+import io.github.Romariok.orkestro.repertoire.service.RepertoireService;
 
 class RepertoireServiceSecurityTest {
 

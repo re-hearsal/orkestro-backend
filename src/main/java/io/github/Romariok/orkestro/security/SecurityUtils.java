@@ -1,7 +1,7 @@
 package io.github.Romariok.orkestro.security;
 
-import io.github.Romariok.orkestro.models.user.User;
-import io.github.Romariok.orkestro.repository.UserRepository;
+import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;

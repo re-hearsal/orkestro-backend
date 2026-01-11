@@ -2,10 +2,12 @@ package io.github.Romariok.orkestro.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.github.Romariok.orkestro.dto.section.SectionCreateRequestDTO;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
+
+import io.github.Romariok.orkestro.section.dto.SectionCreateRequestDTO;
+import io.github.Romariok.orkestro.section.service.SectionService;
 
 class SectionServiceSecurityTest {
 

@@ -2,7 +2,9 @@ package io.github.Romariok.orkestro.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.github.Romariok.orkestro.dto.role.TechnicalRoleCreateRequestDTO;
+import io.github.Romariok.orkestro.user.dto.TechnicalRoleCreateRequestDTO;
+import io.github.Romariok.orkestro.user.service.TechnicalRoleService;
+
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;

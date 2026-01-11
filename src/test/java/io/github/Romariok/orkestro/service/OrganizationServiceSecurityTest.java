@@ -2,8 +2,10 @@ package io.github.Romariok.orkestro.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.github.Romariok.orkestro.dto.organization.OrganizationUpdateRequestDTO;
-import io.github.Romariok.orkestro.models.enums.VisibilityLevelType;
+import io.github.Romariok.orkestro.organization.dto.OrganizationUpdateRequestDTO;
+import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
+import io.github.Romariok.orkestro.organization.service.OrganizationService;
+
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;

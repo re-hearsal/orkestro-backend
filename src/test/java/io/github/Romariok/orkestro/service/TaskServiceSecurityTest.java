@@ -2,9 +2,11 @@ package io.github.Romariok.orkestro.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.github.Romariok.orkestro.dto.task.TaskCreateRequestDTO;
-import io.github.Romariok.orkestro.dto.task.TaskUpdateRequestDTO;
-import io.github.Romariok.orkestro.models.enums.TaskStatus;
+import io.github.Romariok.orkestro.task.dto.TaskCreateRequestDTO;
+import io.github.Romariok.orkestro.task.dto.TaskUpdateRequestDTO;
+import io.github.Romariok.orkestro.task.models.enums.TaskStatus;
+import io.github.Romariok.orkestro.task.service.TaskService;
+
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;

@@ -7,8 +7,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.github.Romariok.orkestro.models.user.User;
 import io.github.Romariok.orkestro.security.JWTUtil;
+import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.service.AuthService;
+import io.github.Romariok.orkestro.user.service.UserService;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.util.List;

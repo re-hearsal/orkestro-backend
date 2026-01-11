@@ -7,34 +7,37 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.github.Romariok.orkestro.dto.organization.OrganizationCreateRequestDTO;
-import io.github.Romariok.orkestro.dto.organization.OrganizationDTO;
-import io.github.Romariok.orkestro.dto.organization.OrganizationLinkDTO;
-import io.github.Romariok.orkestro.dto.organization.OrganizationUpdateRequestDTO;
-import io.github.Romariok.orkestro.mapper.OrganizationMapper;
-import io.github.Romariok.orkestro.models.StoredFile;
-import io.github.Romariok.orkestro.models.enums.LinkType;
-import io.github.Romariok.orkestro.models.enums.RoleScopeType;
-import io.github.Romariok.orkestro.models.enums.VisibilityLevelType;
-import io.github.Romariok.orkestro.models.organization.Organization;
-import io.github.Romariok.orkestro.models.organization.OrganizationInvite;
-import io.github.Romariok.orkestro.models.organization.OrganizationLink;
-import io.github.Romariok.orkestro.models.organization.OrganizationUser;
-import io.github.Romariok.orkestro.models.role.Role;
-import io.github.Romariok.orkestro.models.role.RolePermission;
-import io.github.Romariok.orkestro.models.song.Song;
-import io.github.Romariok.orkestro.repository.OrganizationInviteRepository;
-import io.github.Romariok.orkestro.repository.OrganizationLinkRepository;
-import io.github.Romariok.orkestro.repository.OrganizationRepository;
-import io.github.Romariok.orkestro.repository.OrganizationUserRepository;
-import io.github.Romariok.orkestro.repository.RolePermissionRepository;
-import io.github.Romariok.orkestro.repository.RoleRepository;
-import io.github.Romariok.orkestro.repository.SongRepository;
-import io.github.Romariok.orkestro.repository.StoredFileRepository;
-import io.github.Romariok.orkestro.repository.UserRoleRepository;
+import io.github.Romariok.orkestro.organization.dto.OrganizationCreateRequestDTO;
+import io.github.Romariok.orkestro.organization.dto.OrganizationDTO;
+import io.github.Romariok.orkestro.organization.dto.OrganizationLinkDTO;
+import io.github.Romariok.orkestro.organization.dto.OrganizationUpdateRequestDTO;
+import io.github.Romariok.orkestro.organization.mapper.OrganizationMapper;
+import io.github.Romariok.orkestro.organization.models.Organization;
+import io.github.Romariok.orkestro.organization.models.OrganizationInvite;
+import io.github.Romariok.orkestro.organization.models.OrganizationLink;
+import io.github.Romariok.orkestro.organization.models.OrganizationUser;
+import io.github.Romariok.orkestro.organization.models.enums.LinkType;
+import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
+import io.github.Romariok.orkestro.organization.repository.OrganizationInviteRepository;
+import io.github.Romariok.orkestro.organization.repository.OrganizationLinkRepository;
+import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
+import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.organization.service.OrganizationService;
+import io.github.Romariok.orkestro.repertoire.models.Song;
+import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
+import io.github.Romariok.orkestro.user.models.Role;
+import io.github.Romariok.orkestro.user.models.RolePermission;
+import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
+import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
+import io.github.Romariok.orkestro.user.repository.RoleRepository;
+import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
+import io.github.Romariok.orkestro.user.service.TechnicalRoleService;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.StoredFile;
+import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -153,7 +156,7 @@ class OrganizationServiceTest {
             rp.setRoleId(templateLeader.getId());
             rp.setPermissionCode("ORG_EDIT");
             when(rolePermissionRepository.findPermissionsByRoleId(templateLeader.getId()))
-                        .thenReturn(List.of(io.github.Romariok.orkestro.models.role.Permission.builder()
+                        .thenReturn(List.of(io.github.Romariok.orkestro.user.models.Permission.builder()
                                     .code("ORG_EDIT")
                                     .description("Edit organization")
                                     .build()));

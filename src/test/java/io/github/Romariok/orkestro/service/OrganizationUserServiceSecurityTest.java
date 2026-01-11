@@ -6,6 +6,8 @@ import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
 
+import io.github.Romariok.orkestro.organization.service.OrganizationUserService;
+
 class OrganizationUserServiceSecurityTest {
 
    @Test

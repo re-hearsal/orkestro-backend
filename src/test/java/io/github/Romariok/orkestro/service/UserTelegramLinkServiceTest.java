@@ -10,11 +10,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.github.Romariok.orkestro.models.user.User;
-import io.github.Romariok.orkestro.models.user.UserTelegramLinkToken;
-import io.github.Romariok.orkestro.repository.UserRepository;
-import io.github.Romariok.orkestro.repository.UserTelegramLinkTokenRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
+import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.UserTelegramLinkToken;
+import io.github.Romariok.orkestro.user.repository.UserRepository;
+import io.github.Romariok.orkestro.user.repository.UserTelegramLinkTokenRepository;
+import io.github.Romariok.orkestro.user.service.UserTelegramLinkService;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
 import java.util.Optional;
