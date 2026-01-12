@@ -1,5 +1,6 @@
 package io.github.Romariok.orkestro.event.service;
 
+import io.github.Romariok.orkestro.event.dto.EventAttendanceRowDTO;
 import io.github.Romariok.orkestro.event.dto.EventCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventDTO;
 import io.github.Romariok.orkestro.event.dto.EventUpdateRequestDTO;
@@ -258,6 +259,47 @@ public class EventService {
 
         participant.setAttendanceStatus(attendanceStatus);
         eventParticipantRepository.save(participant);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
+            + "or hasAuthority('CTX_PERM_ORG:' + "
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId + ':EVENT_MARK_ATTENDANCE')")
+    public List<EventAttendanceRowDTO> getEventAttendanceTable(Long eventId) {
+        Event event = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(event.getOrganizationId(), currentUserId);
+
+        List<EventParticipant> participants = eventParticipantRepository.findByEventId(eventId);
+        if (participants.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Long> userIds = participants.stream()
+                .map(EventParticipant::getUserId)
+                .collect(Collectors.toSet());
+
+        Map<Long, io.github.Romariok.orkestro.user.models.User> usersById = userRepository.findAllById(userIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        io.github.Romariok.orkestro.user.models.User::getId,
+                        u -> u));
+
+        return participants.stream()
+                .map(p -> {
+                    io.github.Romariok.orkestro.user.models.User user = usersById.get(p.getUserId());
+                    String name = user != null ? user.getName() : null;
+
+                    return EventAttendanceRowDTO.builder()
+                            .name(name)
+                            .rsvpStatus(p.getRsvpStatus())
+                            .attendanceStatus(p.getAttendanceStatus())
+                            .build();
+                })
+                .toList();
     }
 
     @Transactional(readOnly = true)

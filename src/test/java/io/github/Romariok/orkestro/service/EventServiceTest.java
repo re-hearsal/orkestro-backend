@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.github.Romariok.orkestro.event.dto.EventAttendanceRowDTO;
 import io.github.Romariok.orkestro.event.dto.EventCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventDTO;
 import io.github.Romariok.orkestro.event.mapper.EventMapper;
@@ -736,6 +737,147 @@ class EventServiceTest {
 
                 verify(eventParticipantRepository, never()).deleteByEventId(anyLong());
                 verify(eventRepository, never()).deleteById(anyLong());
+        }
+
+        @Test
+        void getEventAttendanceTable_success_returnsRows() {
+                Long eventId = 100L;
+                Long organizationId = 1L;
+                Long currentUserId = 99L;
+                Long userId1 = 10L;
+                Long userId2 = 20L;
+
+                Event event = Event.builder()
+                                .id(eventId)
+                                .organizationId(organizationId)
+                                .title("Event")
+                                .startTime(Instant.now())
+                                .endTime(Instant.now().plusSeconds(3600))
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(currentUserId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(membership));
+
+                EventParticipant p1 = EventParticipant.builder()
+                                .eventId(eventId)
+                                .userId(userId1)
+                                .source(EventParticipantSourceType.MANUAL)
+                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                .attendanceStatus(EventAttendanceStatus.ATTENDED)
+                                .build();
+
+                EventParticipant p2 = EventParticipant.builder()
+                                .eventId(eventId)
+                                .userId(userId2)
+                                .source(EventParticipantSourceType.MANUAL)
+                                .rsvpStatus(EventRsvpStatus.DECLINED)
+                                .attendanceStatus(EventAttendanceStatus.ABSENT)
+                                .build();
+
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of(p1, p2));
+
+                User user1 = User.builder()
+                                .id(userId1)
+                                .username("user1")
+                                .name("User One")
+                                .email("u1@example.com")
+                                .password("pwd")
+                                .profileImageFileId(1L)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .notificationChannel(null)
+                                .build();
+
+                User user2 = User.builder()
+                                .id(userId2)
+                                .username("user2")
+                                .name("User Two")
+                                .email("u2@example.com")
+                                .password("pwd")
+                                .profileImageFileId(1L)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .notificationChannel(null)
+                                .build();
+
+                when(userRepository.findAllById(anyCollection())).thenReturn(List.of(user1, user2));
+
+                List<EventAttendanceRowDTO> rows = eventService.getEventAttendanceTable(eventId);
+
+                assertEquals(2, rows.size());
+
+                EventAttendanceRowDTO row1 = rows.stream()
+                                .filter(r -> "User One".equals(r.getName()))
+                                .findFirst()
+                                .orElseThrow();
+                assertEquals("User One", row1.getName());
+                assertEquals(EventRsvpStatus.ACCEPTED, row1.getRsvpStatus());
+                assertEquals(EventAttendanceStatus.ATTENDED, row1.getAttendanceStatus());
+
+                EventAttendanceRowDTO row2 = rows.stream()
+                                .filter(r -> "User Two".equals(r.getName()))
+                                .findFirst()
+                                .orElseThrow();
+                assertEquals("User Two", row2.getName());
+                assertEquals(EventRsvpStatus.DECLINED, row2.getRsvpStatus());
+                assertEquals(EventAttendanceStatus.ABSENT, row2.getAttendanceStatus());
+        }
+
+        @Test
+        void getEventAttendanceTable_eventNotFound_throwsEntityNotFoundException() {
+                Long eventId = 100L;
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
+
+                assertThrows(EntityNotFoundException.class, () -> eventService.getEventAttendanceTable(eventId));
+
+                verify(eventParticipantRepository, never()).findByEventId(anyLong());
+                verify(userRepository, never()).findAllById(anyCollection());
+        }
+
+        @Test
+        void getEventAttendanceTable_noParticipants_returnsEmptyList() {
+                Long eventId = 100L;
+                Long organizationId = 1L;
+                Long currentUserId = 99L;
+
+                Event event = Event.builder()
+                                .id(eventId)
+                                .organizationId(organizationId)
+                                .title("Event")
+                                .startTime(Instant.now())
+                                .endTime(Instant.now().plusSeconds(3600))
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(currentUserId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(membership));
+
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of());
+
+                List<EventAttendanceRowDTO> rows = eventService.getEventAttendanceTable(eventId);
+
+                assertEquals(0, rows.size());
+                verify(userRepository, never()).findAllById(anyCollection());
         }
 
         @Test
