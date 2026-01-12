@@ -235,6 +235,31 @@ public class EventService {
         eventRepository.deleteById(eventId);
     }
 
+    @Transactional
+    @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
+            + "or hasAuthority('CTX_PERM_ORG:' + "
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId + ':EVENT_MARK_ATTENDANCE')")
+    public void markEventAttendance(Long eventId, Long participantUserId, EventAttendanceStatus attendanceStatus) {
+        if (attendanceStatus == null) {
+            throw new IllegalArgumentException("Attendance status must not be null");
+        }
+
+        Event event = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(event.getOrganizationId(), currentUserId);
+
+        EventParticipant participant = eventParticipantRepository
+                .findByEventIdAndUserId(eventId, participantUserId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Event participant not found for event " + eventId + " and user " + participantUserId));
+
+        participant.setAttendanceStatus(attendanceStatus);
+        eventParticipantRepository.save(participant);
+    }
+
     @Transactional(readOnly = true)
     public EventDTO getEventForCurrentUser(Long eventId) {
         Event event = eventRepository

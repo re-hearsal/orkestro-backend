@@ -737,4 +737,106 @@ class EventServiceTest {
                 verify(eventParticipantRepository, never()).deleteByEventId(anyLong());
                 verify(eventRepository, never()).deleteById(anyLong());
         }
+
+        @Test
+        void markEventAttendance_success_updatesAttendanceStatus() {
+                Long eventId = 100L;
+                Long organizationId = 1L;
+                Long currentUserId = 99L;
+                Long participantUserId = 10L;
+
+                Event event = Event.builder()
+                                .id(eventId)
+                                .organizationId(organizationId)
+                                .title("Event")
+                                .startTime(Instant.now())
+                                .endTime(Instant.now().plusSeconds(3600))
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(currentUserId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(membership));
+
+                EventParticipant participant = EventParticipant.builder()
+                                .eventId(eventId)
+                                .userId(participantUserId)
+                                .source(EventParticipantSourceType.MANUAL)
+                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                when(eventParticipantRepository.findByEventIdAndUserId(eventId, participantUserId))
+                                .thenReturn(Optional.of(participant));
+
+                eventService.markEventAttendance(eventId, participantUserId, EventAttendanceStatus.ATTENDED);
+
+                ArgumentCaptor<EventParticipant> participantCaptor = ArgumentCaptor.forClass(EventParticipant.class);
+                verify(eventParticipantRepository).save(participantCaptor.capture());
+                EventParticipant saved = participantCaptor.getValue();
+
+                assertEquals(EventAttendanceStatus.ATTENDED, saved.getAttendanceStatus());
+                assertEquals(eventId, saved.getEventId());
+                assertEquals(participantUserId, saved.getUserId());
+        }
+
+        @Test
+        void markEventAttendance_eventNotFound_throwsEntityNotFoundException() {
+                Long eventId = 100L;
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
+
+                assertThrows(EntityNotFoundException.class,
+                                () -> eventService.markEventAttendance(eventId, 10L, EventAttendanceStatus.ATTENDED));
+
+                verify(eventParticipantRepository, never()).findByEventIdAndUserId(anyLong(), anyLong());
+                verify(eventParticipantRepository, never()).save(any());
+        }
+
+        @Test
+        void markEventAttendance_participantNotFound_throwsEntityNotFoundException() {
+                Long eventId = 100L;
+                Long organizationId = 1L;
+                Long currentUserId = 99L;
+                Long participantUserId = 10L;
+
+                Event event = Event.builder()
+                                .id(eventId)
+                                .organizationId(organizationId)
+                                .title("Event")
+                                .startTime(Instant.now())
+                                .endTime(Instant.now().plusSeconds(3600))
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(currentUserId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(membership));
+
+                when(eventParticipantRepository.findByEventIdAndUserId(eventId, participantUserId))
+                                .thenReturn(Optional.empty());
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> eventService.markEventAttendance(
+                                                eventId, participantUserId, EventAttendanceStatus.ATTENDED));
+
+                verify(eventParticipantRepository, never()).save(any());
+        }
 }
