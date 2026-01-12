@@ -28,5 +28,3 @@ public class EventSong {
     @Column(name = "position")
     private Integer position;
 }
-
-

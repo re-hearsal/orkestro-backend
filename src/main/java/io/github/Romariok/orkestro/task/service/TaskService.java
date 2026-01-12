@@ -27,8 +27,8 @@ import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
-import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+import io.github.Romariok.orkestro.utils.helper.FileValidationHelper;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -82,7 +82,7 @@ public class TaskService {
             validateAssigneeInOrganization(organization.getId(), request.getAssigneeUserId());
         }
 
-        validateFiles(request.getFileIds());
+        FileValidationHelper.validateFiles(request.getFileIds(), storedFileRepository);
         validateVisibilityRolesForOrganization(organization.getId(), visibility, request.getVisibilityRoleIds());
 
         Instant now = Instant.now();
@@ -166,7 +166,7 @@ public class TaskService {
         task.setVisibility(newVisibility);
 
         if (request.getFileIds() != null) {
-            validateFiles(request.getFileIds());
+            FileValidationHelper.validateFiles(request.getFileIds(), storedFileRepository);
             taskFileRepository.deleteByTaskId(taskId);
             saveTaskFiles(taskId, request.getFileIds());
         }
@@ -311,18 +311,6 @@ public class TaskService {
                 .filter(ou -> ou.getStatus() == OrganizationUserStatusType.ACCEPTED)
                 .orElseThrow(() -> new BusinessException(
                         "User " + assigneeUserId + " is not an accepted member of organization " + organizationId));
-    }
-
-    private void validateFiles(List<Long> fileIds) {
-        if (fileIds == null || fileIds.isEmpty()) {
-            return;
-        }
-
-        Set<Long> uniqueIds = new HashSet<>(fileIds);
-        List<StoredFile> files = storedFileRepository.findAllById(uniqueIds);
-        if (files.size() != uniqueIds.size()) {
-            throw new EntityNotFoundException("One or more files not found for ids: " + uniqueIds);
-        }
     }
 
     private void validateVisibilityRolesForOrganization(

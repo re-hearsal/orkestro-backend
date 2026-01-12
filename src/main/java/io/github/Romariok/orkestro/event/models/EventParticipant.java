@@ -12,6 +12,8 @@ import java.time.Instant;
 import io.github.Romariok.orkestro.event.models.enums.EventAttendanceStatus;
 import io.github.Romariok.orkestro.event.models.enums.EventParticipantSourceType;
 import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -19,6 +21,8 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @Entity
 @Table(name = "event_participants")
 @IdClass(EventParticipantId.class)
@@ -47,5 +51,3 @@ public class EventParticipant {
     @Column(name = "rsvp_at")
     private Instant rsvpAt;
 }
-
-

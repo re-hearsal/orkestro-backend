@@ -280,6 +280,7 @@ CREATE TABLE permission (
 CREATE TABLE events (
     id BIGSERIAL PRIMARY KEY,
     organization_id BIGINT NOT NULL,
+    creator_user_id BIGINT NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
     event_type event_type_type NOT NULL,
@@ -291,7 +292,15 @@ CREATE TABLE events (
     remind_before_minutes INT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (organization_id) REFERENCES organization (id),
+    FOREIGN KEY (creator_user_id) REFERENCES users (id),
     CHECK (end_time > start_time)
+);
+
+CREATE TABLE event_tags (
+    event_id BIGINT NOT NULL,
+    tag TEXT NOT NULL,
+    PRIMARY KEY (event_id, tag),
+    FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE
 );
 
 CREATE TABLE event_participants (
@@ -498,6 +507,10 @@ VALUES (
         'EVENT_MARK_ATTENDANCE',
         'Mark attendance of event participants'
     ),
+    (
+        'EVENT_DELETION',
+        'Delete events'
+    ),
     ('TASK_MANAGE', 'Create tasks');
 
 -- Basic system roles at organization level (templates)
@@ -556,6 +569,7 @@ VALUES
         'REPERTOIRE_MANAGE_INSTRUMENTATION'
     ),
     (1, 'EVENT_MARK_ATTENDANCE'),
+    (1, 'EVENT_DELETION'),
     (1, 'TASK_MANAGE'),
     -- Co-leader: reduced permission set
     (2, 'ORG_EDIT'),
@@ -579,6 +593,7 @@ VALUES
         'REPERTOIRE_MANAGE_INSTRUMENTATION'
     ),
     (2, 'EVENT_MARK_ATTENDANCE'),
+    (2, 'EVENT_DELETION'),
     (2, 'TASK_MANAGE');
 
 -- Basic system roles at section level (templates)

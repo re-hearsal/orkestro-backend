@@ -19,4 +19,10 @@ public class RabbitMQConfig {
          @Value("${orkestro.telegram.bot-message-queue-name:telegram_bot_messages}") String queueName) {
       return new Queue(queueName, true);
    }
+
+   @Bean
+   public Queue telegramEventRsvpQueue(
+         @Value("${orkestro.telegram.event-rsvp-queue-name:telegram_event_rsvp}") String queueName) {
+      return new Queue(queueName, true);
+   }
 }

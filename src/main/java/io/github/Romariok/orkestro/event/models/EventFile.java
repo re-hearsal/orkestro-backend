@@ -25,5 +25,3 @@ public class EventFile {
     @Column(name = "file_id", nullable = false)
     private Long fileId;
 }
-
-
