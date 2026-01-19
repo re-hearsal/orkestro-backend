@@ -1,7 +1,9 @@
 package io.github.Romariok.orkestro.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -878,6 +880,126 @@ class EventServiceTest {
 
                 assertEquals(0, rows.size());
                 verify(userRepository, never()).findAllById(anyCollection());
+        }
+
+        @Test
+        void exportCurrentUserScheduleAsIcal_excludesDeclinedWhenFlagFalse() {
+                Long currentUserId = 42L;
+                Long eventId1 = 100L;
+                Long eventId2 = 200L;
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+                EventParticipant accepted = EventParticipant.builder()
+                                .eventId(eventId1)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                EventParticipant declined = EventParticipant.builder()
+                                .eventId(eventId2)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.DECLINED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                when(eventParticipantRepository.findByUserId(currentUserId))
+                                .thenReturn(List.of(accepted, declined));
+
+                Instant futureStart = Instant.now().plusSeconds(3600);
+                Instant futureEnd = Instant.now().plusSeconds(7200);
+
+                Event event1 = Event.builder()
+                                .id(eventId1)
+                                .organizationId(1L)
+                                .title("Accepted Event")
+                                .description("Desc 1")
+                                .location("Hall 1")
+                                .startTime(futureStart)
+                                .endTime(futureEnd)
+                                .createdAt(Instant.now())
+                                .build();
+
+                Event event2 = Event.builder()
+                                .id(eventId2)
+                                .organizationId(1L)
+                                .title("Declined Event")
+                                .description("Desc 2")
+                                .location("Hall 2")
+                                .startTime(futureStart)
+                                .endTime(futureEnd)
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findAllById(anyCollection()))
+                                .thenReturn(List.of(event1, event2));
+
+                String ics = eventService.exportCurrentUserScheduleAsIcal(false);
+
+                // Должно быть базовое тело календаря
+                assertTrue(ics.contains("BEGIN:VCALENDAR"));
+                assertTrue(ics.contains("END:VCALENDAR"));
+
+                // Включено событие с ACCEPTED
+                assertTrue(ics.contains("SUMMARY:Accepted Event"));
+                // Исключено событие с DECLINED
+                assertFalse(ics.contains("SUMMARY:Declined Event"));
+        }
+
+        @Test
+        void exportCurrentUserScheduleAsIcal_includesDeclinedWhenFlagTrue() {
+                Long currentUserId = 42L;
+                Long eventId1 = 100L;
+                Long eventId2 = 200L;
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+                EventParticipant accepted = EventParticipant.builder()
+                                .eventId(eventId1)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                EventParticipant declined = EventParticipant.builder()
+                                .eventId(eventId2)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.DECLINED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                when(eventParticipantRepository.findByUserId(currentUserId))
+                                .thenReturn(List.of(accepted, declined));
+
+                Instant futureStart = Instant.now().plusSeconds(3600);
+                Instant futureEnd = Instant.now().plusSeconds(7200);
+
+                Event event1 = Event.builder()
+                                .id(eventId1)
+                                .organizationId(1L)
+                                .title("Accepted Event")
+                                .startTime(futureStart)
+                                .endTime(futureEnd)
+                                .createdAt(Instant.now())
+                                .build();
+
+                Event event2 = Event.builder()
+                                .id(eventId2)
+                                .organizationId(1L)
+                                .title("Declined Event")
+                                .startTime(futureStart)
+                                .endTime(futureEnd)
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findAllById(anyCollection()))
+                                .thenReturn(List.of(event1, event2));
+
+                String ics = eventService.exportCurrentUserScheduleAsIcal(true);
+
+                assertTrue(ics.contains("SUMMARY:Accepted Event"));
+                assertTrue(ics.contains("SUMMARY:Declined Event"));
         }
 
         @Test

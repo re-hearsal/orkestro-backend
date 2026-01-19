@@ -18,4 +18,6 @@ public interface EventParticipantRepository extends JpaRepository<EventParticipa
     void deleteByEventId(Long eventId);
 
     Optional<EventParticipant> findByEventIdAndUserId(Long eventId, Long userId);
+
+    List<EventParticipant> findByUserId(Long userId);
 }

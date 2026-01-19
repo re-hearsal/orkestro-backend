@@ -33,6 +33,8 @@ import io.github.Romariok.orkestro.utils.helper.FileValidationHelper;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -381,6 +383,107 @@ public class EventService {
         return buildEventDtoList(filtered);
     }
 
+    /**
+     * Export the current user's schedule in iCalendar (ICS) format.
+     *
+     * Only upcoming events (based on their end time) in which the user
+     * is a participant are included. The {@code includeDeclined} flag
+     * controls whether events that the user has declined should be
+     * included in the export.
+     *
+     * @param includeDeclined if {@code true}, events with RSVP status
+     *                        DECLINED are also included; if {@code false},
+     *                        they are excluded.
+     * @return ICS file contents as a text string
+     */
+    @Transactional(readOnly = true)
+    public String exportCurrentUserScheduleAsIcal(boolean includeDeclined) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+
+        List<EventParticipant> participants = eventParticipantRepository.findByUserId(currentUserId);
+        if (participants.isEmpty()) {
+            return buildEmptyIcsCalendar();
+        }
+
+        // Собираем события, в которых пользователь участвует
+        Set<Long> eventIds = participants.stream()
+                .map(EventParticipant::getEventId)
+                .collect(Collectors.toSet());
+
+        List<Event> events = eventRepository.findAllById(eventIds);
+        if (events.isEmpty()) {
+            return buildEmptyIcsCalendar();
+        }
+
+        Map<Long, Event> eventsById = events.stream()
+                .filter(e -> e.getStartTime() != null && e.getEndTime() != null)
+                .collect(Collectors.toMap(Event::getId, e -> e));
+
+        Instant now = Instant.now();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("BEGIN:VCALENDAR\r\n");
+        sb.append("VERSION:2.0\r\n");
+        sb.append("PRODID:-//Orkestro//EN\r\n");
+        sb.append("CALSCALE:GREGORIAN\r\n");
+
+        for (EventParticipant participant : participants) {
+            Event event = eventsById.get(participant.getEventId());
+            if (event == null) {
+                continue;
+            }
+
+            // Только предстоящие/текущие события
+            if (event.getEndTime() != null && !event.getEndTime().isAfter(now)) {
+                continue;
+            }
+
+            // Исключаем отказавшиеся, если флаг не установлен
+            if (!includeDeclined && participant.getRsvpStatus() == EventRsvpStatus.DECLINED) {
+                continue;
+            }
+
+            sb.append("BEGIN:VEVENT\r\n");
+            sb.append("UID:")
+                    .append(event.getId())
+                    .append("-")
+                    .append(currentUserId)
+                    .append("@orkestro\r\n");
+            sb.append("DTSTAMP:")
+                    .append(formatInstantForIcs(now))
+                    .append("\r\n");
+            if (event.getStartTime() != null) {
+                sb.append("DTSTART:")
+                        .append(formatInstantForIcs(event.getStartTime()))
+                        .append("\r\n");
+            }
+            if (event.getEndTime() != null) {
+                sb.append("DTEND:")
+                        .append(formatInstantForIcs(event.getEndTime()))
+                        .append("\r\n");
+            }
+            if (event.getTitle() != null) {
+                sb.append("SUMMARY:")
+                        .append(escapeIcsText(event.getTitle()))
+                        .append("\r\n");
+            }
+            if (event.getDescription() != null) {
+                sb.append("DESCRIPTION:")
+                        .append(escapeIcsText(event.getDescription()))
+                        .append("\r\n");
+            }
+            if (event.getLocation() != null) {
+                sb.append("LOCATION:")
+                        .append(escapeIcsText(event.getLocation()))
+                        .append("\r\n");
+            }
+            sb.append("END:VEVENT\r\n");
+        }
+
+        sb.append("END:VCALENDAR\r\n");
+        return sb.toString();
+    }
+
     private void ensureUserInOrganization(Long organizationId, Long userId) {
         organizationUserRepository
                 .findByOrganizationIdAndUserId(organizationId, userId)
@@ -558,6 +661,36 @@ public class EventService {
         if (!entities.isEmpty()) {
             eventSongRepository.saveAll(entities);
         }
+    }
+
+    private String buildEmptyIcsCalendar() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("BEGIN:VCALENDAR\r\n");
+        sb.append("VERSION:2.0\r\n");
+        sb.append("PRODID:-//Orkestro//EN\r\n");
+        sb.append("CALSCALE:GREGORIAN\r\n");
+        sb.append("END:VCALENDAR\r\n");
+        return sb.toString();
+    }
+
+    private String formatInstantForIcs(Instant instant) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+                .withZone(ZoneOffset.UTC);
+        return formatter.format(instant);
+    }
+
+    private String escapeIcsText(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        String escaped = value
+                .replace("\\", "\\\\")
+                .replace(";", "\\;")
+                .replace(",", "\\,")
+                .replace("\r\n", "\\n")
+                .replace("\n", "\\n")
+                .replace("\r", "\\n");
+        return escaped;
     }
 
     private void mergeSource(
