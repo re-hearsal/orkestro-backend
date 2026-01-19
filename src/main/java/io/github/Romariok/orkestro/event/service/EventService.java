@@ -444,8 +444,9 @@ public class EventService {
             }
 
             sb.append("BEGIN:VEVENT\r\n");
+            String uidBase = event.getTitle() != null ? event.getTitle() : String.valueOf(event.getId());
             sb.append("UID:")
-                    .append(event.getId())
+                    .append(escapeIcsText(uidBase))
                     .append("-")
                     .append(currentUserId)
                     .append("@orkestro\r\n");
@@ -481,6 +482,83 @@ public class EventService {
         }
 
         sb.append("END:VCALENDAR\r\n");
+        return sb.toString();
+    }
+
+    /**
+     * Export the current user's schedule as CSV.
+     *
+     * Only upcoming events (based on their end time) in which the user
+     * is a participant are included. The {@code includeDeclined} flag
+     * controls whether events that the user has declined should be
+     * included in the export.
+     *
+     * Columns:
+     * title,organization_id,start_time_utc,end_time_utc,location,rsvp_status
+     *
+     * @param includeDeclined if {@code true}, events with RSVP status
+     *                        DECLINED are also included; if {@code false},
+     *                        they are excluded.
+     * @return CSV contents as a text string (including header row)
+     */
+    @Transactional(readOnly = true)
+    public String exportCurrentUserScheduleAsCsv(boolean includeDeclined) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+
+        List<EventParticipant> participants = eventParticipantRepository.findByUserId(currentUserId);
+        String header = "title,organization_id,start_time_utc,end_time_utc,location,rsvp_status\n";
+        if (participants.isEmpty()) {
+            return header;
+        }
+
+        Set<Long> eventIds = participants.stream()
+                .map(EventParticipant::getEventId)
+                .collect(Collectors.toSet());
+
+        List<Event> events = eventRepository.findAllById(eventIds);
+        if (events.isEmpty()) {
+            return header;
+        }
+
+        Map<Long, Event> eventsById = events.stream()
+                .filter(e -> e.getStartTime() != null && e.getEndTime() != null)
+                .collect(Collectors.toMap(Event::getId, e -> e));
+
+        Instant now = Instant.now();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(header);
+
+        for (EventParticipant participant : participants) {
+            Event event = eventsById.get(participant.getEventId());
+            if (event == null) {
+                continue;
+            }
+
+            // Only upcoming/current events
+            if (event.getEndTime() != null && !event.getEndTime().isAfter(now)) {
+                continue;
+            }
+
+            // Exclude declined if flag is false
+            if (!includeDeclined && participant.getRsvpStatus() == EventRsvpStatus.DECLINED) {
+                continue;
+            }
+
+            sb.append(escapeCsv(event.getTitle()))
+                    .append(',');
+            sb.append(event.getOrganizationId() != null ? event.getOrganizationId() : "")
+                    .append(',');
+            sb.append(event.getStartTime() != null ? event.getStartTime().toString() : "")
+                    .append(',');
+            sb.append(event.getEndTime() != null ? event.getEndTime().toString() : "")
+                    .append(',');
+            sb.append(escapeCsv(event.getLocation()))
+                    .append(',');
+            sb.append(participant.getRsvpStatus() != null ? participant.getRsvpStatus().name() : "")
+                    .append('\n');
+        }
+
         return sb.toString();
     }
 
@@ -691,6 +769,14 @@ public class EventService {
                 .replace("\n", "\\n")
                 .replace("\r", "\\n");
         return escaped;
+    }
+
+    private String escapeCsv(String value) {
+        if (value == null) {
+            return "";
+        }
+        String escaped = value.replace("\"", "\"\"");
+        return "\"" + escaped + "\"";
     }
 
     private void mergeSource(

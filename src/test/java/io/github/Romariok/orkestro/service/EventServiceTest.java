@@ -1003,6 +1003,125 @@ class EventServiceTest {
         }
 
         @Test
+        void exportCurrentUserScheduleAsCsv_excludesDeclinedWhenFlagFalse() {
+                Long currentUserId = 42L;
+                Long eventId1 = 100L;
+                Long eventId2 = 200L;
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+                EventParticipant accepted = EventParticipant.builder()
+                                .eventId(eventId1)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                EventParticipant declined = EventParticipant.builder()
+                                .eventId(eventId2)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.DECLINED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                when(eventParticipantRepository.findByUserId(currentUserId))
+                                .thenReturn(List.of(accepted, declined));
+
+                Instant futureStart = Instant.now().plusSeconds(3600);
+                Instant futureEnd = Instant.now().plusSeconds(7200);
+
+                Event event1 = Event.builder()
+                                .id(eventId1)
+                                .organizationId(1L)
+                                .title("Accepted Event")
+                                .description("Desc 1")
+                                .location("Hall 1")
+                                .startTime(futureStart)
+                                .endTime(futureEnd)
+                                .createdAt(Instant.now())
+                                .build();
+
+                Event event2 = Event.builder()
+                                .id(eventId2)
+                                .organizationId(1L)
+                                .title("Declined Event")
+                                .description("Desc 2")
+                                .location("Hall 2")
+                                .startTime(futureStart)
+                                .endTime(futureEnd)
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findAllById(anyCollection()))
+                                .thenReturn(List.of(event1, event2));
+
+                String csv = eventService.exportCurrentUserScheduleAsCsv(false);
+
+                // header
+                assertTrue(csv.startsWith(
+                                "title,organization_id,start_time_utc,end_time_utc,location,rsvp_status"));
+                // contains accepted event
+                assertTrue(csv.contains("Accepted Event"));
+                // does not contain declined event
+                assertFalse(csv.contains("Declined Event"));
+        }
+
+        @Test
+        void exportCurrentUserScheduleAsCsv_includesDeclinedWhenFlagTrue() {
+                Long currentUserId = 42L;
+                Long eventId1 = 100L;
+                Long eventId2 = 200L;
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+                EventParticipant accepted = EventParticipant.builder()
+                                .eventId(eventId1)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                EventParticipant declined = EventParticipant.builder()
+                                .eventId(eventId2)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.DECLINED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                when(eventParticipantRepository.findByUserId(currentUserId))
+                                .thenReturn(List.of(accepted, declined));
+
+                Instant futureStart = Instant.now().plusSeconds(3600);
+                Instant futureEnd = Instant.now().plusSeconds(7200);
+
+                Event event1 = Event.builder()
+                                .id(eventId1)
+                                .organizationId(1L)
+                                .title("Accepted Event")
+                                .startTime(futureStart)
+                                .endTime(futureEnd)
+                                .createdAt(Instant.now())
+                                .build();
+
+                Event event2 = Event.builder()
+                                .id(eventId2)
+                                .organizationId(1L)
+                                .title("Declined Event")
+                                .startTime(futureStart)
+                                .endTime(futureEnd)
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findAllById(anyCollection()))
+                                .thenReturn(List.of(event1, event2));
+
+                String csv = eventService.exportCurrentUserScheduleAsCsv(true);
+
+                assertTrue(csv.contains("Accepted Event"));
+                assertTrue(csv.contains("Declined Event"));
+        }
+
+        @Test
         void markEventAttendance_success_updatesAttendanceStatus() {
                 Long eventId = 100L;
                 Long organizationId = 1L;
