@@ -107,6 +107,9 @@ public class EventService {
 
         Set<String> tags = request.getTags() != null ? sanitizeTags(request.getTags()) : null;
 
+        boolean sendRsvp = Boolean.TRUE.equals(request.getSendRsvp());
+        Integer remindBeforeMinutes = request.getRemindBeforeMinutes();
+
         Event event = Event.builder()
                 .organizationId(organizationId)
                 .creatorUserId(currentUserId)
@@ -117,8 +120,8 @@ public class EventService {
                 .location(request.getLocation())
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
-                .sendRsvp(false)
-                .remindBeforeMinutes(null)
+                .sendRsvp(sendRsvp)
+                .remindBeforeMinutes(remindBeforeMinutes)
                 .createdAt(now)
                 .tags(tags)
                 .build();
@@ -129,7 +132,9 @@ public class EventService {
         saveEventFiles(saved.getId(), request.getFileIds());
         saveEventSongs(saved.getId(), request.getSongIds());
 
-        eventNotificationService.sendEventCreatedNotifications(saved, sources.keySet());
+        if (sendRsvp) {
+            eventNotificationService.sendEventCreatedNotifications(saved, sources.keySet());
+        }
 
         return buildEventDto(saved);
     }

@@ -242,6 +242,79 @@ class EventServiceTest {
         }
 
         @Test
+        void createEventInOrganization_withSendRsvpTrue_sendsNotifications() {
+                Long organizationId = 1L;
+                Long currentUserId = 99L;
+                Long userId1 = 10L;
+
+                Instant start = Instant.parse("2025-01-01T10:00:00Z");
+                Instant end = Instant.parse("2025-01-01T12:00:00Z");
+
+                EventCreateRequestDTO request = EventCreateRequestDTO.builder()
+                                .title("Event with RSVP")
+                                .eventType(EventType.CONCERT)
+                                .startTime(start)
+                                .endTime(end)
+                                .participantUserIds(List.of(userId1))
+                                .sendRsvp(true)
+                                .build();
+
+                Organization organization = Organization.builder()
+                                .id(organizationId)
+                                .name("Orchestra")
+                                .location("City")
+                                .profileImageFileId(100L)
+                                .build();
+
+                when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(organization));
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                OrganizationUser currentMembership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(currentUserId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(currentMembership));
+
+                User user1 = User.builder().id(userId1).username("u1").email("u1@example.com").password("p")
+                                .profileImageFileId(1L).build();
+                when(userRepository.findAllById(anyCollection())).thenReturn(List.of(user1));
+
+                OrganizationUser ou1 = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId1)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndStatus(organizationId,
+                                OrganizationUserStatusType.ACCEPTED))
+                                .thenReturn(List.of(ou1));
+
+                Event saved = Event.builder()
+                                .id(200L)
+                                .organizationId(organizationId)
+                                .title("Event with RSVP")
+                                .eventType(EventType.CONCERT)
+                                .startTime(start)
+                                .endTime(end)
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.save(any(Event.class))).thenReturn(saved);
+                when(eventParticipantRepository.findByEventId(200L)).thenReturn(List.of());
+                when(eventMapper.toDto(any(Event.class))).thenReturn(
+                                EventDTO.builder().id(200L).organizationId(organizationId).title("Event with RSVP")
+                                                .eventType(EventType.CONCERT).startTime(start).endTime(end)
+                                                .createdAt(Instant.now()).build());
+
+                eventService.createEventInOrganization(organizationId, request);
+
+                verify(eventNotificationService).sendEventCreatedNotifications(any(Event.class), anyCollection());
+        }
+
+        @Test
         void createEventInOrganization_withAllOrganizationMembers_includesAllAcceptedUsers() {
                 Long organizationId = 1L;
                 Long currentUserId = 99L;

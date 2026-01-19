@@ -45,4 +45,8 @@ public class EventCreateRequestDTO {
     private List<Long> songIds;
 
     private List<String> tags;
+
+    private Boolean sendRsvp;
+
+    private Integer remindBeforeMinutes;
 }
