@@ -12,4 +12,6 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     List<Event> findByOrganizationId(Long organizationId);
 
     List<Event> findByOrganizationIdAndStartTimeBetween(Long organizationId, Instant from, Instant to);
+
+    List<Event> findByRemindBeforeMinutesIsNotNull();
 }

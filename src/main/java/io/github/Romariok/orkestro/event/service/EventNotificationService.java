@@ -15,7 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * Отправка уведомлений участникам события о создании мероприятия.
+ * Отправка уведомлений участникам события:
+ * - о создании мероприятия;
+ * - о предстоящем мероприятии (напоминания).
  */
 @Slf4j
 @Service
@@ -44,7 +46,7 @@ public class EventNotificationService {
 
         for (User user : users) {
             try {
-                sendToUser(event, organizationName, user);
+                sendCreatedNotificationToUser(event, organizationName, user);
             } catch (Exception e) {
                 log.error(
                         "Failed to send event created notification for event {} to user {}",
@@ -55,8 +57,51 @@ public class EventNotificationService {
         }
     }
 
-    private void sendToUser(Event event, String organizationName, User user) {
+    public void sendEventReminderNotifications(Event event, Collection<Long> participantUserIds) {
+        if (participantUserIds == null || participantUserIds.isEmpty()) {
+            return;
+        }
+
+        Set<Long> uniqueIds = new HashSet<>(participantUserIds);
+        List<User> users = userRepository.findAllById(uniqueIds);
+        if (users.isEmpty()) {
+            return;
+        }
+
+        String organizationName = organizationRepository.findById(event.getOrganizationId())
+                .map(Organization::getName)
+                .orElse("организации");
+
+        for (User user : users) {
+            try {
+                sendReminderToUser(event, organizationName, user);
+            } catch (Exception e) {
+                log.error(
+                        "Failed to send event reminder for event {} to user {}",
+                        event.getId(),
+                        user.getId(),
+                        e);
+            }
+        }
+    }
+
+    private void sendCreatedNotificationToUser(Event event, String organizationName, User user) {
         String text = buildInviteText(event, organizationName);
+        NotificationChannelType channel = user.getNotificationChannel();
+
+        if (channel == NotificationChannelType.TELEGRAM && user.getTelegramUserId() != null) {
+            boolean telegramOk = telegramEventNotificationService.sendEventCreatedNotification(event, organizationName,
+                    user, text);
+            if (!telegramOk) {
+                emailEventNotificationService.sendEventCreatedNotification(event, organizationName, user, text);
+            }
+        } else {
+            emailEventNotificationService.sendEventCreatedNotification(event, organizationName, user, text);
+        }
+    }
+
+    private void sendReminderToUser(Event event, String organizationName, User user) {
+        String text = buildReminderText(event, organizationName);
         NotificationChannelType channel = user.getNotificationChannel();
 
         if (channel == NotificationChannelType.TELEGRAM && user.getTelegramUserId() != null) {
@@ -74,6 +119,13 @@ public class EventNotificationService {
         String title = event.getTitle() != null ? event.getTitle() : "без названия";
         return "Вас пригласили на мероприятие \"" + title + "\" в организации \"" + organizationName
                 + "\". Просим вас сообщить о вашем присутствии.";
+    }
+
+    private String buildReminderText(Event event, String organizationName) {
+        String title = event.getTitle() != null ? event.getTitle() : "без названия";
+        String startTime = event.getStartTime() != null ? event.getStartTime().toString() : "не указано";
+        return "Напоминаем о мероприятии \"" + title + "\" в организации \"" + organizationName
+                + "\". Начало: " + startTime + ".";
     }
 
 }
