@@ -22,54 +22,6 @@ CREATE TYPE task_visibility_type AS ENUM ('ALL_MEMBERS', 'ROLE_RESTRICTED');
 
 CREATE TYPE role_scope_type AS ENUM ('ORGANIZATION', 'SECTION');
 
-CREATE TABLE role (
-    id BIGSERIAL PRIMARY KEY,
-    scope role_scope_type NOT NULL,
-    organization_id BIGINT NULL,
-    section_id BIGINT NULL,
-    name TEXT NOT NULL,
-    is_system BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK (
-        (
-            scope = 'ORGANIZATION'
-            AND section_id IS NULL
-            AND (
-                organization_id IS NOT NULL
-                OR is_system
-            )
-        )
-        OR (
-            scope = 'SECTION'
-            AND organization_id IS NULL
-            AND (
-                section_id IS NOT NULL
-                OR is_system
-            )
-        )
-    ),
-    UNIQUE (
-        scope,
-        organization_id,
-        section_id,
-        name
-    )
-);
-
-CREATE TABLE role_permission (
-    role_id BIGINT NOT NULL,
-    permission_code TEXT NOT NULL,
-    PRIMARY KEY (role_id, permission_code),
-    FOREIGN KEY (role_id) REFERENCES role (id) ON DELETE CASCADE
-);
-
-CREATE TABLE user_role (
-    user_id BIGINT NOT NULL,
-    role_id BIGINT NOT NULL,
-    PRIMARY KEY (user_id, role_id),
-    FOREIGN KEY (role_id) REFERENCES role (id) ON DELETE CASCADE
-);
-
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
     username TEXT NOT NULL,
@@ -82,7 +34,7 @@ CREATE TABLE users (
     notification_channel_id notification_channel_type NOT NULL DEFAULT 'EMAIL',
     location TEXT,
     birth_date DATE,
-    profile_image_file_id BIGINT NOT NULL
+    profile_image_file_id BIGINT
 );
 
 CREATE TABLE file (
@@ -93,7 +45,7 @@ CREATE TABLE file (
     object_name TEXT NOT NULL,
     size BIGINT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    uploaded_by BIGINT NOT NULL REFERENCES users (id),
+    uploaded_by BIGINT REFERENCES users (id),
     UNIQUE (bucket_name, object_name)
 );
 
@@ -277,6 +229,56 @@ CREATE TABLE permission (
     description TEXT NOT NULL
 );
 
+CREATE TABLE role (
+    id BIGSERIAL PRIMARY KEY,
+    scope role_scope_type NOT NULL,
+    organization_id BIGINT NULL REFERENCES organization (id),
+    section_id BIGINT NULL REFERENCES sections (id),
+    name TEXT NOT NULL,
+    is_system BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (
+        (
+            scope = 'ORGANIZATION'
+            AND section_id IS NULL
+            AND (
+                organization_id IS NOT NULL
+                OR is_system
+            )
+        )
+        OR (
+            scope = 'SECTION'
+            AND organization_id IS NULL
+            AND (
+                section_id IS NOT NULL
+                OR is_system
+            )
+        )
+    ),
+    UNIQUE (
+        scope,
+        organization_id,
+        section_id,
+        name
+    )
+);
+
+CREATE TABLE role_permission (
+    role_id BIGINT NOT NULL,
+    permission_code TEXT NOT NULL,
+    PRIMARY KEY (role_id, permission_code),
+    FOREIGN KEY (role_id) REFERENCES role (id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_code) REFERENCES permission (code) ON DELETE CASCADE
+);
+
+CREATE TABLE user_role (
+    user_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    PRIMARY KEY (user_id, role_id),
+    FOREIGN KEY (role_id) REFERENCES role (id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
 CREATE TABLE events (
     id BIGSERIAL PRIMARY KEY,
     organization_id BIGINT NOT NULL,
@@ -400,15 +402,17 @@ CREATE TABLE task_visibility_role (
     FOREIGN KEY (role_id) REFERENCES role (id) ON DELETE CASCADE
 );
 
-ALTER TABLE role
-ADD CONSTRAINT fk_role_organization FOREIGN KEY (organization_id) REFERENCES organization (id),
-ADD CONSTRAINT fk_role_section FOREIGN KEY (section_id) REFERENCES sections (id);
 
-ALTER TABLE role_permission
-ADD CONSTRAINT fk_role_permission_permission FOREIGN KEY (permission_code) REFERENCES permission (code) ON DELETE CASCADE;
+CREATE TABLE user_telegram_link_token (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+    used_at TIMESTAMP
+);
 
-ALTER TABLE user_role
-ADD CONSTRAINT fk_user_role_user FOREIGN KEY (user_id) REFERENCES users (id);
+CREATE UNIQUE INDEX ux_users_telegram_user_id ON users (telegram_user_id);
 
 ALTER TABLE users
 ADD CONSTRAINT fk_users_profile_image_file FOREIGN KEY (profile_image_file_id) REFERENCES file (id);

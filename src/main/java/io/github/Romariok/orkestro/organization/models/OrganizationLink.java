@@ -9,6 +9,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -32,6 +34,7 @@ public class OrganizationLink {
    private Long organizationId;
 
    @Enumerated(EnumType.STRING)
+   @JdbcTypeCode(SqlTypes.NAMED_ENUM)
    @Column(name = "link_type", nullable = false)
    private LinkType linkType;
 

@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.hibernate.annotations.CreationTimestamp;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -26,6 +27,7 @@ public class SectionUser {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @CreationTimestamp
     @Column(name = "joined_at", nullable = false)
     private Instant joinedAt;
 }

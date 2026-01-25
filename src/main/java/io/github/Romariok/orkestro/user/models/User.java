@@ -18,6 +18,11 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -51,9 +56,11 @@ public class User implements UserDetails {
    @Column(name = "password", nullable = false)
    private String password;
 
+   @CreationTimestamp
    @Column(name = "created_at", nullable = false)
    private Instant createdAt;
 
+   @UpdateTimestamp
    @Column(name = "updated_at", nullable = false)
    private Instant updatedAt;
 
@@ -61,6 +68,8 @@ public class User implements UserDetails {
    private Long telegramUserId;
 
    @Enumerated(EnumType.STRING)
+   @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+   @ColumnDefault("'EMAIL'")
    @Column(name = "notification_channel_id", nullable = false)
    private NotificationChannelType notificationChannel;
 
@@ -70,7 +79,7 @@ public class User implements UserDetails {
    @Column(name = "birth_date")
    private LocalDate birthDate;
 
-   @Column(name = "profile_image_file_id", nullable = false)
+   @Column(name = "profile_image_file_id")
    private Long profileImageFileId;
 
    @Override

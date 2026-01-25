@@ -15,6 +15,9 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Getter
 @Setter
@@ -33,6 +36,7 @@ public class StoredFile {
     private String name;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "file_type", nullable = false)
     private FileType fileType;
 
@@ -45,9 +49,10 @@ public class StoredFile {
     @Column(name = "size", nullable = false)
     private Long size;
 
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @Column(name = "uploaded_by", nullable = false)
+    @Column(name = "uploaded_by")
     private Long uploadedByUserId;
 }

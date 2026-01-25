@@ -14,6 +14,9 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import io.github.Romariok.orkestro.event.models.enums.EventType;
 import lombok.AllArgsConstructor;
@@ -48,6 +51,7 @@ public class Event {
     private String description;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "event_type", nullable = false)
     private EventType eventType;
 
@@ -75,6 +79,7 @@ public class Event {
     @Column(name = "remind_before_minutes")
     private Integer remindBeforeMinutes;
 
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 }

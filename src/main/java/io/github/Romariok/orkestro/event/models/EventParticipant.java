@@ -8,6 +8,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import io.github.Romariok.orkestro.event.models.enums.EventAttendanceStatus;
 import io.github.Romariok.orkestro.event.models.enums.EventParticipantSourceType;
@@ -37,14 +40,19 @@ public class EventParticipant {
     private Long userId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "source", nullable = false)
     private EventParticipantSourceType source;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @ColumnDefault("'PENDING'")
     @Column(name = "rsvp_status", nullable = false)
     private EventRsvpStatus rsvpStatus;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @ColumnDefault("'UNKNOWN'")
     @Column(name = "attendance_status", nullable = false)
     private EventAttendanceStatus attendanceStatus;
 

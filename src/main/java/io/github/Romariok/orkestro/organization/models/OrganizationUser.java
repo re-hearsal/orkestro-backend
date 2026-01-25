@@ -8,6 +8,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import lombok.AllArgsConstructor;
@@ -35,9 +38,11 @@ public class OrganizationUser {
    private Long userId;
 
    @Enumerated(EnumType.STRING)
+   @JdbcTypeCode(SqlTypes.NAMED_ENUM)
    @Column(name = "status", nullable = false)
    private OrganizationUserStatusType status;
 
+   @CreationTimestamp
    @Column(name = "joined_at", nullable = false)
    private Instant joinedAt;
 }
