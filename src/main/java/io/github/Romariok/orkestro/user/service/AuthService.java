@@ -1,13 +1,18 @@
 package io.github.Romariok.orkestro.user.service;
 
+import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.security.JWTUtil;
 import io.github.Romariok.orkestro.user.dto.AuthResponseDTO;
 import io.github.Romariok.orkestro.user.dto.LoginRequestDTO;
 import io.github.Romariok.orkestro.user.dto.RegisterRequestDTO;
 import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileType;
+import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.exception.InternalServiceException;
+import java.time.Instant;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +37,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JWTUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
+    private final FileStorageService fileStorageService;
 
     @Transactional
     public AuthResponseDTO register(RegisterRequestDTO request) {
@@ -43,11 +49,28 @@ public class AuthService {
         }
 
         try {
+            Instant now = Instant.now();
             User user = User.builder()
                     .username(request.getUsername())
+                    .name(request.getName())
+                    .email(request.getEmail())
                     .password(passwordEncoder.encode(request.getPassword()))
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .notificationChannel(NotificationChannelType.EMAIL)
                     .build();
             userService.saveUser(user);
+
+            if (request.getAvatar() != null && !request.getAvatar().isEmpty()) {
+                StoredFile avatar = fileStorageService.upload(
+                        request.getAvatar(),
+                        FileType.PHOTO,
+                        user.getId());
+                user.setProfileImageFileId(avatar.getId());
+                user.setUpdatedAt(Instant.now());
+                userService.saveUser(user);
+            }
+
             log.info("User saved successfully: {}", user.getUsername());
             String token = generateTokenForUser(request.getUsername());
             log.info("Token generated for new user: {}", user.getUsername());

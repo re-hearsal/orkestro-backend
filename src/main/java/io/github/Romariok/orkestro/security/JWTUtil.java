@@ -81,6 +81,9 @@ public class JWTUtil {
                 .parseClaimsJws(token)
                 .getBody();
         String authorities = claims.get("authorities", String.class);
+        if (authorities == null || authorities.isBlank()) {
+            return Set.of();
+        }
         return Set.of(authorities.split(","));
     }
 

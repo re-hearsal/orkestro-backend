@@ -19,6 +19,7 @@ import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.user.service.UserService;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -47,6 +48,9 @@ class UserServiceTest {
 
         @Mock
         private UserInstrumentRepository userInstrumentRepository;
+
+        @Mock
+        private StoredFileRepository storedFileRepository;
 
         @InjectMocks
         private UserService userService;
@@ -227,6 +231,7 @@ class UserServiceTest {
 
                 userService.deleteUserAccount(userId);
 
+                verify(storedFileRepository).clearUploadedByUserId(userId);
                 verify(userInstrumentRepository).deleteByUserId(userId);
                 verify(userRoleRepository).deleteByUserId(userId);
                 verify(userRepository).deleteById(userId);
@@ -241,6 +246,7 @@ class UserServiceTest {
                                 EntityNotFoundException.class,
                                 () -> userService.deleteUserAccount(userId));
 
+                verify(storedFileRepository, never()).clearUploadedByUserId(org.mockito.Mockito.any());
                 verify(userInstrumentRepository, never()).deleteByUserId(org.mockito.Mockito.any());
                 verify(userRoleRepository, never()).deleteByUserId(org.mockito.Mockito.any());
                 verify(userRepository, never()).deleteById(org.mockito.Mockito.any());

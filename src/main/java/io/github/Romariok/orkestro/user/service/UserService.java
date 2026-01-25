@@ -136,6 +136,8 @@ public class UserService implements UserDetailsService {
          throw new EntityNotFoundException("User not found: " + userId);
       }
 
+      storedFileRepository.clearUploadedByUserId(userId);
+ 
       userInstrumentRepository.deleteByUserId(userId);
       userRoleRepository.deleteByUserId(userId);
 

@@ -25,12 +25,14 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class FileStorageService {
 
    private final MinioClient minioClient;
@@ -80,6 +82,10 @@ public class FileStorageService {
                | NoSuchAlgorithmException
                | ServerException
                | XmlParserException e) {
+         log.error("Failed to upload file {} for user {}",
+               originalName,
+               uploadedByUserId,
+               e);
          throw new InternalServiceException(
                "Error uploading file: " + originalName, e);
       }
@@ -131,7 +137,8 @@ public class FileStorageService {
                | NoSuchAlgorithmException
                | ServerException
                | XmlParserException e) {
-         throw new InternalServiceException("Error deleting file from storage: " + fileId, e);
+                  log.error("Failed to delete file {}", fileId, e);
+                  throw new InternalServiceException("Error deleting file from storage: " + fileId, e);
       }
 
       storedFileRepository.delete(storedFile);
@@ -166,6 +173,7 @@ public class FileStorageService {
                | NoSuchAlgorithmException
                | ServerException
                | XmlParserException e) {
+         log.error("Failed to generate download URL for file {}", fileId, e);
          throw new InternalServiceException(
                "Error generating download URL for file: " + fileId, e);
       }
