@@ -132,7 +132,7 @@ CREATE TABLE organization (
     name TEXT NOT NULL,
     location TEXT NOT NULL,
     description TEXT,
-    profile_image_file_id BIGINT NOT NULL REFERENCES file (id),
+    profile_image_file_id BIGINT REFERENCES file (id),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     visibility_level visibility_level_type NOT NULL DEFAULT 'PUBLIC',
     UNIQUE (name)
