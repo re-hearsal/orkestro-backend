@@ -28,10 +28,13 @@ import io.github.Romariok.orkestro.user.service.TechnicalRoleService;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileType;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -55,19 +58,22 @@ public class OrganizationService {
    private final RolePermissionRepository rolePermissionRepository;
    private final SecurityUtils securityUtils;
    private final TechnicalRoleService technicalRoleService;
+   private final FileStorageService fileStorageService;
 
    @Transactional
    public OrganizationDTO createOrganization(OrganizationCreateRequestDTO request) {
-      // Проверяем, что файл профиля существует
-      StoredFile file = storedFileRepository.findById(request.getProfileImageFileId())
-            .orElseThrow(() -> new EntityNotFoundException(
-                  "File not found: " + request.getProfileImageFileId()));
+      StoredFile file = null;
+      if (request.getProfileImage() != null && !request.getProfileImage().isEmpty()) {
+         file = fileStorageService.uploadForCurrentUser(
+               request.getProfileImage(),
+               FileType.PHOTO);
+      }
 
       Organization organization = Organization.builder()
             .name(request.getName())
             .location(request.getLocation())
             .description(request.getDescription())
-            .profileImageFileId(file.getId())
+            .profileImageFileId(file != null ? file.getId() : null)
             .createdAt(Instant.now())
             .visibilityLevel(request.getVisibilityLevel())
             .build();
@@ -96,7 +102,10 @@ public class OrganizationService {
             .orElseThrow(() -> new EntityNotFoundException(
                   "Role not found for organization " + saved.getId() + " and name Leader"));
 
-      technicalRoleService.assignOrganizationRoleToUser(saved.getId(), creatorId, leaderRole.getId());
+      technicalRoleService.assignOrganizationRoleToUserInternal(
+            saved.getId(),
+            creatorId,
+            leaderRole.getId());
 
       // если организация создаётся сразу приватной — генерируем пригласительную
       // ссылку
@@ -260,6 +269,25 @@ public class OrganizationService {
             .collect(Collectors.toList());
    }
 
+
+   @Transactional(readOnly = true)
+   public Page<OrganizationDTO> searchPublicOrganizationsByName(
+         String nameQuery, Pageable pageable) {
+      String normalized = nameQuery == null ? null : nameQuery.trim();
+
+      Page<Organization> organizations;
+      if (normalized == null || normalized.isBlank()) {
+         organizations = organizationRepository.findByVisibilityLevel(VisibilityLevelType.PUBLIC, pageable);
+      } else {
+         organizations = organizationRepository.findByVisibilityLevelAndNameContainingIgnoreCase(
+               VisibilityLevelType.PUBLIC,
+               normalized,
+               pageable);
+      }
+
+      return organizations.map(this::buildOrganizationDto);
+   }
+
    private OrganizationDTO buildOrganizationDto(Organization organization) {
       OrganizationDTO dto = organizationMapper.toDto(organization);
 
@@ -277,11 +305,20 @@ public class OrganizationService {
          return;
       }
 
-      List<OrganizationLink> entities = links.stream()
+      Map<String, OrganizationLinkDTO> uniqueLinks = new LinkedHashMap<>();
+      for (OrganizationLinkDTO dto : links) {
+         if (dto == null || dto.getLinkType() == null || dto.getUrl() == null) {
+            continue;
+         }
+         String key = dto.getLinkType().name() + "|" + dto.getUrl().trim().toLowerCase();
+         uniqueLinks.putIfAbsent(key, dto);
+      }
+
+      List<OrganizationLink> entities = uniqueLinks.values().stream()
             .map(dto -> OrganizationLink.builder()
                   .organizationId(organizationId)
                   .linkType(dto.getLinkType())
-                  .url(dto.getUrl())
+                  .url(dto.getUrl().trim())
                   .build())
             .toList();
 

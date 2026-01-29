@@ -176,6 +176,15 @@ public class TechnicalRoleService {
     @Transactional
     @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_ASSIGN_TECH_ROLE')")
     public void assignOrganizationRoleToUser(Long organizationId, Long userId, Long roleId) {
+        assignOrganizationRoleToUserInternal(organizationId, userId, roleId);
+    }
+
+    /**
+     * Внутреннее назначение роли без проверки прав.
+     * Используется при создании организации.
+     */
+    @Transactional
+    public void assignOrganizationRoleToUserInternal(Long organizationId, Long userId, Long roleId) {
         if (!userRepository.existsById(userId)) {
             throw new EntityNotFoundException("User not found: " + userId);
         }
