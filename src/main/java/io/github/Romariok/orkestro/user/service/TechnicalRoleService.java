@@ -66,7 +66,7 @@ public class TechnicalRoleService {
      * Доступно только обладателям ORG_TECH_ROLE_MANAGE в контексте организации.
      */
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_TECH_ROLE_MANAGE')")
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_TECH_ROLE_MANAGE')")
     public TechnicalRoleDTO createOrganizationRole(Long organizationId, TechnicalRoleCreateRequestDTO request) {
         if (request == null || request.getName() == null || request.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Role name must not be blank");
@@ -122,7 +122,7 @@ public class TechnicalRoleService {
      * Доступно только обладателям SECTION_TECH_ROLE_MANAGE в контексте секции.
      */
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_SECTION:' + #sectionId + ':SECTION_TECH_ROLE_MANAGE')")
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_TECH_ROLE_MANAGE')")
     public TechnicalRoleDTO createSectionRole(Long sectionId, TechnicalRoleCreateRequestDTO request) {
         if (request == null || request.getName() == null || request.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Role name must not be blank");
@@ -174,7 +174,7 @@ public class TechnicalRoleService {
     }
 
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_ASSIGN_TECH_ROLE')")
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_ASSIGN_TECH_ROLE')")
     public void assignOrganizationRoleToUser(Long organizationId, Long userId, Long roleId) {
         assignOrganizationRoleToUserInternal(organizationId, userId, roleId);
     }
@@ -220,7 +220,7 @@ public class TechnicalRoleService {
     }
 
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_ASSIGN_TECH_ROLE')")
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_ASSIGN_TECH_ROLE')")
     public void removeOrganizationRoleFromUser(Long organizationId, Long userId, Long roleId) {
         Role role = roleRepository
                 .findById(roleId)
@@ -239,7 +239,7 @@ public class TechnicalRoleService {
     }
 
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_SECTION:' + #sectionId + ':SECTION_ASSIGN_TECH_ROLE')")
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_ASSIGN_TECH_ROLE')")
     public void assignSectionRoleToUser(Long sectionId, Long userId, Long roleId) {
         if (!userRepository.existsById(userId)) {
             throw new EntityNotFoundException("User not found: " + userId);
@@ -275,7 +275,7 @@ public class TechnicalRoleService {
     }
 
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_SECTION:' + #sectionId + ':SECTION_ASSIGN_TECH_ROLE')")
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_ASSIGN_TECH_ROLE')")
     public void removeSectionRoleFromUser(Long sectionId, Long userId, Long roleId) {
         Role role = roleRepository
                 .findById(roleId)

@@ -49,7 +49,7 @@ public class SectionService {
      * Доступно только обладателям SECTION_CREATE в контексте организации.
      */
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':SECTION_CREATE')")
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'SECTION_CREATE')")
     public SectionDTO createSectionInOrganization(Long organizationId, SectionCreateRequestDTO request) {
         if (request == null || request.getName() == null || request.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Section name must not be blank");
@@ -82,7 +82,7 @@ public class SectionService {
      * Доступно только обладателям SECTION_CREATE в контексте родительской секции.
      */
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_SECTION:' + #parentSectionId + ':SECTION_CREATE')")
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#parentSectionId, 'SECTION_CREATE')")
     public SectionDTO createSectionInSection(Long parentSectionId, SectionCreateRequestDTO request) {
         if (request == null || request.getName() == null || request.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Section name must not be blank");
@@ -186,7 +186,7 @@ public class SectionService {
      * Доступно только обладателям SECTION_DELETE в контексте удаляемой секции.
      */
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_SECTION:' + #sectionId + ':SECTION_DELETE')")
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_DELETE')")
     public void deleteSection(Long sectionId) {
         if (!sectionRepository.existsById(sectionId)) {
             throw new EntityNotFoundException("Section not found: " + sectionId);
@@ -224,7 +224,7 @@ public class SectionService {
      * Доступно только обладателям SECTION_MEMBER_ADD в контексте секции.
      */
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_SECTION:' + #sectionId + ':SECTION_MEMBER_ADD')")
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_MEMBER_ADD')")
     public void addUserToSection(Long sectionId, Long userId) {
         Section section = sectionRepository.findById(sectionId)
                 .orElseThrow(() -> new EntityNotFoundException("Section not found: " + sectionId));
@@ -259,7 +259,7 @@ public class SectionService {
     }
 
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_SECTION:' + #sectionId + ':SECTION_MEMBER_REMOVE')")
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_MEMBER_REMOVE')")
     public void removeUserFromSection(Long sectionId, Long userId) {
         if (!sectionRepository.existsById(sectionId)) {
             throw new EntityNotFoundException("Section not found: " + sectionId);

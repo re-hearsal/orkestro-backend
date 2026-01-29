@@ -28,7 +28,7 @@ public class OrganizationUserService {
       private final SecurityUtils securityUtils;
 
       @Transactional(readOnly = true)
-      @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_JOIN_REQUEST_VIEW')")
+      @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_JOIN_REQUEST_VIEW')")
       public List<OrganizationUser> getPendingJoinRequests(Long organizationId) {
             return organizationUserRepository.findByOrganizationIdAndStatus(
                         organizationId,
@@ -36,7 +36,7 @@ public class OrganizationUserService {
       }
 
       @Transactional
-      @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_JOIN_REQUEST_MANAGE')")
+      @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_JOIN_REQUEST_MANAGE')")
       public void approveJoinRequest(Long organizationId, Long userId) {
             var organizationUser = organizationUserRepository
                         .findByOrganizationIdAndUserId(organizationId, userId)
@@ -127,7 +127,7 @@ public class OrganizationUserService {
       }
 
       @Transactional
-      @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_JOIN_REQUEST_MANAGE')")
+      @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_JOIN_REQUEST_MANAGE')")
       public void rejectJoinRequest(Long organizationId, Long userId) {
             var organizationUser = organizationUserRepository
                         .findByOrganizationIdAndUserId(organizationId, userId)

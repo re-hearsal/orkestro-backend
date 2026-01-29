@@ -65,7 +65,7 @@ public class TaskService {
      * Доступно только обладателям TASK_MANAGE в контексте организации.
      */
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':TASK_MANAGE')")
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'TASK_MANAGE')")
     public TaskDTO createTaskInOrganization(Long organizationId, TaskCreateRequestDTO request) {
         if (request == null || request.getTitle() == null || request.getTitle().trim().isEmpty()) {
             throw new IllegalArgumentException("Task title must not be blank");
@@ -115,8 +115,8 @@ public class TaskService {
      * Доступно только обладателям TASK_MANAGE в контексте организации задачи.
      */
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + "
-            + "@taskRepository.findById(#taskId).orElse(null)?.organizationId + ':TASK_MANAGE')")
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission("
+            + "@taskRepository.findById(#taskId).orElse(null)?.organizationId, 'TASK_MANAGE')")
     public TaskDTO updateTask(Long taskId, TaskUpdateRequestDTO request) {
         if (request == null) {
             throw new IllegalArgumentException("Request must not be null");
@@ -182,8 +182,8 @@ public class TaskService {
      * Доступно только обладателям TASK_MANAGE в контексте организации задачи.
      */
     @Transactional
-    @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + "
-            + "@taskRepository.findById(#taskId).orElse(null)?.organizationId + ':TASK_MANAGE')")
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission("
+            + "@taskRepository.findById(#taskId).orElse(null)?.organizationId, 'TASK_MANAGE')")
     public TaskDTO updateTaskStatus(Long taskId, TaskStatus newStatus) {
         if (newStatus == null) {
             throw new IllegalArgumentException("New status must not be null");

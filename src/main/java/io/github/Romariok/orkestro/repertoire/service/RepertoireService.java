@@ -44,7 +44,7 @@ public class RepertoireService {
    private final SongMapper songMapper;
 
    @Transactional
-   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':REPERTOIRE_CREATE_SONG')")
+   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'REPERTOIRE_CREATE_SONG')")
    public SongDTO createSong(Long organizationId, SongCreateRequestDTO request) {
       validateInstruments(request.getInstrumentation());
       validateFiles(request.getFileIds());
@@ -68,8 +68,8 @@ public class RepertoireService {
    }
 
    @Transactional
-   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + "
-         + "@songRepository.findById(#songId).orElse(null)?.organizationId + ':REPERTOIRE_EDIT_SONG')")
+   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission("
+         + "@songRepository.findById(#songId).orElse(null)?.organizationId, 'REPERTOIRE_EDIT_SONG')")
    public SongDTO updateSong(Long songId, SongUpdateRequestDTO request) {
       Song song = songRepository
             .findById(songId)
@@ -109,8 +109,8 @@ public class RepertoireService {
    }
 
    @Transactional
-   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + "
-         + "@songRepository.findById(#songId).orElse(null)?.organizationId + ':REPERTOIRE_DELETE_SONG')")
+   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission("
+         + "@songRepository.findById(#songId).orElse(null)?.organizationId, 'REPERTOIRE_DELETE_SONG')")
    public void deleteSong(Long songId) {
       if (!songRepository.existsById(songId)) {
          throw new EntityNotFoundException("Song not found: " + songId);

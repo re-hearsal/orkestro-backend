@@ -229,8 +229,8 @@ public class EventService {
 
     @Transactional
     @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
-            + "or hasAuthority('CTX_PERM_ORG:' + "
-            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId + ':EVENT_DELETION')")
+            + "or @organizationPermissionChecker.hasOrganizationPermission("
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_DELETION')")
     public void deleteEvent(Long eventId) {
         Event event = eventRepository
                 .findById(eventId)
@@ -245,8 +245,8 @@ public class EventService {
 
     @Transactional
     @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
-            + "or hasAuthority('CTX_PERM_ORG:' + "
-            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId + ':EVENT_MARK_ATTENDANCE')")
+            + "or @organizationPermissionChecker.hasOrganizationPermission("
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MARK_ATTENDANCE')")
     public void markEventAttendance(Long eventId, Long participantUserId, EventAttendanceStatus attendanceStatus) {
         if (attendanceStatus == null) {
             throw new IllegalArgumentException("Attendance status must not be null");
@@ -270,8 +270,8 @@ public class EventService {
 
     @Transactional(readOnly = true)
     @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
-            + "or hasAuthority('CTX_PERM_ORG:' + "
-            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId + ':EVENT_MARK_ATTENDANCE')")
+            + "or @organizationPermissionChecker.hasOrganizationPermission("
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MARK_ATTENDANCE')")
     public List<EventAttendanceRowDTO> getEventAttendanceTable(Long eventId) {
         Event event = eventRepository
                 .findById(eventId)

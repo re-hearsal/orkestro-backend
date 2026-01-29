@@ -122,7 +122,7 @@ public class OrganizationService {
     * Обновить параметры организации (кроме уровня видимости).
     */
    @Transactional
-   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_EDIT')")
+   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_EDIT')")
    public OrganizationDTO updateOrganization(Long organizationId, OrganizationUpdateRequestDTO request) {
       Organization organization = organizationRepository.findById(organizationId)
             .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
@@ -173,7 +173,7 @@ public class OrganizationService {
     * - роли с областью ORGANIZATION для этой организации.
     */
    @Transactional
-   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_DELETE')")
+   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_DELETE')")
    public void deleteOrganization(Long organizationId) {
       if (!organizationRepository.existsById(organizationId)) {
          throw new EntityNotFoundException("Organization not found: " + organizationId);
@@ -208,7 +208,7 @@ public class OrganizationService {
     * Установить уровень видимости организации.
     */
    @Transactional
-   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_SET_VISIBILITY')")
+   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_SET_VISIBILITY')")
    public OrganizationDTO setVisibility(Long organizationId, VisibilityLevelType visibilityLevel) {
       Organization organization = organizationRepository.findById(organizationId)
             .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
@@ -234,7 +234,7 @@ public class OrganizationService {
     * Доступно только обладателям права ORG_MEMBER_INVITE в контексте организации.
     */
    @Transactional
-   @PreAuthorize("hasAuthority('CTX_PERM_ORG:' + #organizationId + ':ORG_MEMBER_INVITE')")
+   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_MEMBER_INVITE')")
    public String regenerateInviteLink(Long organizationId) {
       Organization organization = organizationRepository.findById(organizationId)
             .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
