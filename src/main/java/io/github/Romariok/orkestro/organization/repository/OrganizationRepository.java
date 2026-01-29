@@ -4,6 +4,8 @@ import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
 
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -15,4 +17,11 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
    List<Organization> findByVisibilityLevelAndNameContainingIgnoreCase(
          VisibilityLevelType visibilityLevel,
          String name);
+
+   Page<Organization> findByVisibilityLevel(VisibilityLevelType visibilityLevel, Pageable pageable);
+
+   Page<Organization> findByVisibilityLevelAndNameContainingIgnoreCase(
+         VisibilityLevelType visibilityLevel,
+         String name,
+         Pageable pageable);
 }
