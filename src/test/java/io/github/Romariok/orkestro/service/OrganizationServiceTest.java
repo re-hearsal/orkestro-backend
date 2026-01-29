@@ -35,6 +35,8 @@ import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.user.service.TechnicalRoleService;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
 
@@ -50,6 +52,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class OrganizationServiceTest {
@@ -90,16 +93,24 @@ class OrganizationServiceTest {
       @Mock
       private OrganizationInviteRepository organizationInviteRepository;
 
+      @Mock
+      private FileStorageService fileStorageService;
+
       @InjectMocks
       private OrganizationService organizationService;
 
       @Test
       void createOrganization_success_savesOrganizationAndLinks() {
+            MockMultipartFile profileImage = new MockMultipartFile(
+                        "profileImage",
+                        "profile.png",
+                        "image/png",
+                        "image-bytes".getBytes());
             OrganizationCreateRequestDTO request = new OrganizationCreateRequestDTO(
                         "Orkestro",
                         "Moscow",
                         "Wind orchestra",
-                        10L,
+                        profileImage,
                         VisibilityLevelType.PUBLIC,
                         List.of(
                                     new OrganizationLinkDTO(LinkType.WEBSITE, "https://orkestro.example"),
@@ -109,7 +120,8 @@ class OrganizationServiceTest {
                         .id(10L)
                         .name("profile.png")
                         .build();
-            when(storedFileRepository.findById(10L)).thenReturn(Optional.of(file));
+            when(fileStorageService.uploadForCurrentUser(profileImage, FileType.PHOTO))
+                        .thenReturn(file);
 
             Organization saved = Organization.builder()
                         .id(1L)
@@ -187,7 +199,8 @@ class OrganizationServiceTest {
             verify(organizationUserRepository).save(any(OrganizationUser.class));
 
             // и для него вызван сервис назначения роли Leader
-            verify(technicalRoleService).assignOrganizationRoleToUser(1L, 100L, orgLeaderRole.getId());
+            verify(technicalRoleService)
+                        .assignOrganizationRoleToUserInternal(1L, 100L, orgLeaderRole.getId());
 
             // для публичной организации пригласительная ссылка не создаётся автоматически
             verify(organizationInviteRepository, never()).save(any());
@@ -199,23 +212,123 @@ class OrganizationServiceTest {
       }
 
       @Test
-      void createOrganization_profileImageFileNotFound_throwsEntityNotFound() {
+      void createOrganization_withDuplicateLinks_deduplicatesBeforeSave() {
+            MockMultipartFile profileImage = new MockMultipartFile(
+                        "profileImage",
+                        "profile.png",
+                        "image/png",
+                        "image-bytes".getBytes());
+            OrganizationCreateRequestDTO request = new OrganizationCreateRequestDTO(
+                        "Orkestro",
+                        "Moscow",
+                        "Wind orchestra",
+                        profileImage,
+                        VisibilityLevelType.PUBLIC,
+                        List.of(
+                                    new OrganizationLinkDTO(LinkType.WEBSITE, "https://example.org"),
+                                    new OrganizationLinkDTO(LinkType.WEBSITE, "https://example.org")));
+
+            StoredFile file = StoredFile.builder()
+                        .id(10L)
+                        .name("profile.png")
+                        .build();
+            when(fileStorageService.uploadForCurrentUser(profileImage, FileType.PHOTO))
+                        .thenReturn(file);
+
+            Organization saved = Organization.builder()
+                        .id(1L)
+                        .name("Orkestro")
+                        .location("Moscow")
+                        .profileImageFileId(10L)
+                        .createdAt(Instant.now())
+                        .visibilityLevel(VisibilityLevelType.PUBLIC)
+                        .build();
+
+            when(organizationRepository.save(any(Organization.class))).thenReturn(saved);
+            when(securityUtils.getCurrentUserId()).thenReturn(100L);
+
+            Role templateLeader = Role.builder()
+                        .id(10L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .name("Leader")
+                        .system(true)
+                        .build();
+            when(roleRepository.findByScopeAndSystemTrue(RoleScopeType.ORGANIZATION))
+                        .thenReturn(List.of(templateLeader));
+            when(roleRepository.findByScopeAndOrganizationId(RoleScopeType.ORGANIZATION, 1L))
+                        .thenReturn(List.of());
+            Role orgLeaderRole = Role.builder()
+                        .id(20L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .organizationId(1L)
+                        .name("Leader")
+                        .build();
+            when(roleRepository.saveAll(any())).thenReturn(List.of(orgLeaderRole));
+            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Leader"))
+                        .thenReturn(Optional.of(orgLeaderRole));
+
+            OrganizationDTO baseDto = new OrganizationDTO();
+            baseDto.setId(1L);
+            baseDto.setName("Orkestro");
+            when(organizationMapper.toDto(saved)).thenReturn(baseDto);
+            when(organizationLinkRepository.findByOrganizationId(1L)).thenReturn(List.of());
+
+            organizationService.createOrganization(request);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<OrganizationLink>> linksCaptor = ArgumentCaptor.forClass(List.class);
+            verify(organizationLinkRepository).saveAll(linksCaptor.capture());
+            assertEquals(1, linksCaptor.getValue().size());
+      }
+
+      @Test
+      void createOrganization_withoutProfileImage_savesOrganization() {
             OrganizationCreateRequestDTO request = new OrganizationCreateRequestDTO(
                         "Orkestro",
                         "Moscow",
                         null,
-                        999L,
+                        null,
                         VisibilityLevelType.PUBLIC,
                         null);
 
-            when(storedFileRepository.findById(999L)).thenReturn(Optional.empty());
+            Organization saved = Organization.builder()
+                        .id(1L)
+                        .name("Orkestro")
+                        .location("Moscow")
+                        .profileImageFileId(null)
+                        .createdAt(Instant.now())
+                        .visibilityLevel(VisibilityLevelType.PUBLIC)
+                        .build();
 
-            assertThrows(
-                        EntityNotFoundException.class,
-                        () -> organizationService.createOrganization(request));
+            when(organizationRepository.save(any(Organization.class))).thenReturn(saved);
+            when(securityUtils.getCurrentUserId()).thenReturn(100L);
+            Role templateLeader = Role.builder()
+                        .id(10L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .name("Leader")
+                        .system(true)
+                        .build();
+            when(roleRepository.findByScopeAndSystemTrue(RoleScopeType.ORGANIZATION))
+                        .thenReturn(List.of(templateLeader));
+            when(roleRepository.findByScopeAndOrganizationId(RoleScopeType.ORGANIZATION, 1L))
+                        .thenReturn(List.of());
+            Role orgLeaderRole = Role.builder()
+                        .id(20L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .organizationId(1L)
+                        .name("Leader")
+                        .build();
+            when(roleRepository.saveAll(any())).thenReturn(List.of(orgLeaderRole));
+            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Leader"))
+                        .thenReturn(Optional.of(orgLeaderRole));
+            OrganizationDTO baseDto = new OrganizationDTO();
+            baseDto.setId(1L);
+            when(organizationMapper.toDto(saved)).thenReturn(baseDto);
+            when(organizationLinkRepository.findByOrganizationId(1L)).thenReturn(List.of());
 
-            verify(organizationRepository, never()).save(any());
-            verify(organizationLinkRepository, never()).saveAll(any());
+            organizationService.createOrganization(request);
+
+            verify(fileStorageService, never()).uploadForCurrentUser(any(), any());
       }
 
       @Test
@@ -318,6 +431,38 @@ class OrganizationServiceTest {
             verify(organizationLinkRepository).deleteByOrganizationId(1L);
             verify(organizationLinkRepository).saveAll(any());
       }
+
+      @Test
+      void updateOrganization_withDuplicateLinks_deduplicatesBeforeSave() {
+            Organization existing = Organization.builder()
+                        .id(1L)
+                        .name("Orkestro")
+                        .location("Moscow")
+                        .visibilityLevel(VisibilityLevelType.PUBLIC)
+                        .build();
+
+            when(organizationRepository.findById(1L)).thenReturn(Optional.of(existing));
+            when(organizationRepository.save(any(Organization.class))).thenReturn(existing);
+
+            OrganizationDTO baseDto = new OrganizationDTO();
+            baseDto.setId(1L);
+            when(organizationMapper.toDto(existing)).thenReturn(baseDto);
+            when(organizationLinkRepository.findByOrganizationId(1L)).thenReturn(List.of());
+
+            OrganizationUpdateRequestDTO request = new OrganizationUpdateRequestDTO();
+            request.setLinks(List.of(
+                        new OrganizationLinkDTO(LinkType.WEBSITE, "https://example.org"),
+                        new OrganizationLinkDTO(LinkType.WEBSITE, "https://example.org")));
+
+            organizationService.updateOrganization(1L, request);
+
+            verify(organizationLinkRepository).deleteByOrganizationId(1L);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<OrganizationLink>> linksCaptor = ArgumentCaptor.forClass(List.class);
+            verify(organizationLinkRepository).saveAll(linksCaptor.capture());
+            assertEquals(1, linksCaptor.getValue().size());
+      }
+
 
       @Test
       void getOrganization_notFound_throwsEntityNotFound() {
@@ -455,11 +600,16 @@ class OrganizationServiceTest {
 
       @Test
       void createOrganization_private_generatesInvite() {
+            MockMultipartFile profileImage = new MockMultipartFile(
+                        "profileImage",
+                        "profile.png",
+                        "image/png",
+                        "image-bytes".getBytes());
             OrganizationCreateRequestDTO request = new OrganizationCreateRequestDTO(
                         "Private Orkestro",
                         "Moscow",
                         "Wind orchestra",
-                        10L,
+                        profileImage,
                         VisibilityLevelType.PRIVATE,
                         null);
 
@@ -467,7 +617,8 @@ class OrganizationServiceTest {
                         .id(10L)
                         .name("profile.png")
                         .build();
-            when(storedFileRepository.findById(10L)).thenReturn(Optional.of(file));
+            when(fileStorageService.uploadForCurrentUser(profileImage, FileType.PHOTO))
+                        .thenReturn(file);
 
             Organization saved = Organization.builder()
                         .id(1L)
