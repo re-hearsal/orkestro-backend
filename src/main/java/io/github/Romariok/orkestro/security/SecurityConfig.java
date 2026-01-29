@@ -45,7 +45,8 @@ public class SecurityConfig {
                                     "/api/v1/auth/register",
                                     "/api/v1/auth/login",
                                     "/api/v1/auth/password/reset",
-                                    "/api/v1/files/upload")
+                                    "/api/v1/organizations/public",
+                                    "/api/v1/organizations/public/page")
                             .permitAll()
                             .anyRequest().authenticated())
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

@@ -43,7 +43,7 @@ public class Organization {
     @Column(name = "description")
     private String description;
 
-    @Column(name = "profile_image_file_id", nullable = false)
+    @Column(name = "profile_image_file_id")
     private Long profileImageFileId;
 
     @CreationTimestamp

@@ -50,10 +50,8 @@ public class JWTUtil {
     }
 
     public String generateToken(String username, Set<String> authorities) {
-        String authoritiesString = String.join(",", authorities);
         return Jwts.builder()
                 .setSubject(username)
-                .claim("authorities", authoritiesString)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
                 .signWith(secretKey, SignatureAlgorithm.HS256)
