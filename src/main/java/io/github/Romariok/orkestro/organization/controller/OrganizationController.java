@@ -3,6 +3,7 @@ package io.github.Romariok.orkestro.organization.controller;
 import io.github.Romariok.orkestro.organization.dto.OrganizationCreateRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberAddRequestDTO;
+import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationJoinRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationUpdateRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationVisibilityUpdateRequestDTO;
@@ -104,6 +105,22 @@ public class OrganizationController {
          @PathVariable @Positive Long userId) {
       organizationUserService.removeUserFromOrganization(organizationId, userId);
       return ResponseEntity.noContent().build();
+   }
+
+   @GetMapping("/{organizationId}/members/page")
+   public ResponseEntity<Page<OrganizationMemberDTO>> searchMembersPage(
+         @PathVariable @Positive Long organizationId,
+         @RequestParam(required = false) String query,
+         @RequestParam(required = false) List<@Positive Long> roleIds,
+         @RequestParam(required = false) List<@Positive Long> instrumentIds,
+         @PageableDefault(size = 20) Pageable pageable) {
+      return ResponseEntity.ok(
+            organizationUserService.searchMembers(
+                  organizationId,
+                  query,
+                  roleIds,
+                  instrumentIds,
+                  pageable));
    }
 
    @GetMapping("/{organizationId}/join-requests/pending")

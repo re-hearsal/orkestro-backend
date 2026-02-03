@@ -54,6 +54,8 @@ public class AuthService {
                     .username(request.getUsername())
                     .name(request.getName())
                     .email(request.getEmail())
+                    .location(request.getLocation())
+                    .birthDate(request.getBirthDate())
                     .password(passwordEncoder.encode(request.getPassword()))
                     .createdAt(now)
                     .updatedAt(now)

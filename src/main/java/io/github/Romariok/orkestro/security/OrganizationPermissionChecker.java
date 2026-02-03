@@ -1,5 +1,7 @@
 package io.github.Romariok.orkestro.security;
 
+import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
@@ -16,9 +18,26 @@ public class OrganizationPermissionChecker {
    private final SecurityUtils securityUtils;
    private final UserRoleRepository userRoleRepository;
    private final RolePermissionRepository rolePermissionRepository;
+   private final OrganizationUserRepository organizationUserRepository;
 
    public boolean hasOrganizationPermission(Long organizationId, String permissionCode) {
       return hasPermission(RoleScopeType.ORGANIZATION, organizationId, permissionCode);
+   }
+
+   public boolean isAcceptedOrganizationMember(Long organizationId) {
+      if (organizationId == null || organizationId <= 0) {
+         return false;
+      }
+      Long userId;
+      try {
+         userId = securityUtils.getCurrentUserId();
+      } catch (SecurityException ex) {
+         return false;
+      }
+      return organizationUserRepository
+            .findByOrganizationIdAndUserId(organizationId, userId)
+            .filter(ou -> ou.getStatus() == OrganizationUserStatusType.ACCEPTED)
+            .isPresent();
    }
 
    public boolean hasSectionPermission(Long sectionId, String permissionCode) {

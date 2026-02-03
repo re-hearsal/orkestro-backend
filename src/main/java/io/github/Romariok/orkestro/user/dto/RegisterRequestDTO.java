@@ -3,8 +3,10 @@ package io.github.Romariok.orkestro.user.dto;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -32,6 +34,12 @@ public class RegisterRequestDTO {
    @NotBlank
    @Size(max = 255)
    private String email;
+
+   @Size(max = 255)
+   private String location;
+
+   @PastOrPresent(message = "Birth date must not be in the future")
+   private LocalDate birthDate;
 
    private MultipartFile avatar;
 

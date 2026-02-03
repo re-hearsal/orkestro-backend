@@ -14,8 +14,10 @@ import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.service.OrganizationUserService;
+import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Role;
+import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
@@ -26,6 +28,9 @@ import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -345,5 +350,44 @@ class OrganizationUserServiceTest {
             assertEquals(OrganizationUserStatusType.ACCEPTED, ouCaptor.getValue().getStatus());
 
             verify(userRoleRepository).save(any(UserRole.class));
+      }
+
+      @Test
+      void searchMembers_normalizesQueryAndMapsToDto() {
+            Long orgId = 1L;
+            when(organizationRepository.existsById(orgId)).thenReturn(true);
+
+            User user = User.builder()
+                        .id(10L)
+                        .username("u")
+                        .name("User")
+                        .profileImageFileId(123L)
+                        .build();
+
+            Page<User> page = new PageImpl<>(List.of(user), PageRequest.of(0, 20), 1);
+            when(userRepository.searchOrganizationMembers(
+                        org.mockito.Mockito.eq(orgId),
+                        org.mockito.Mockito.eq("abc"),
+                        org.mockito.Mockito.eq(false),
+                        org.mockito.Mockito.anyList(),
+                        org.mockito.Mockito.eq(false),
+                        org.mockito.Mockito.anyList(),
+                        org.mockito.Mockito.eq(OrganizationUserStatusType.ACCEPTED),
+                        org.mockito.Mockito.eq(RoleScopeType.ORGANIZATION),
+                        org.mockito.Mockito.any()))
+                        .thenReturn(page);
+
+            Page<OrganizationMemberDTO> result = organizationUserService.searchMembers(
+                        orgId,
+                        "  abc ",
+                        List.of(),
+                        List.of(),
+                        PageRequest.of(0, 20));
+
+            assertEquals(1, result.getTotalElements());
+            assertEquals(10L, result.getContent().getFirst().getId());
+            assertEquals("u", result.getContent().getFirst().getUsername());
+            assertEquals("User", result.getContent().getFirst().getName());
+            assertEquals(123L, result.getContent().getFirst().getProfileImageFileId());
       }
 }

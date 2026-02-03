@@ -5,8 +5,10 @@ import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserSta
 import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
+import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Role;
+import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.UserRoleId;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
@@ -17,6 +19,8 @@ import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -111,6 +115,47 @@ public class OrganizationUserService {
             return organizationUserRepository.findByOrganizationIdAndStatus(
                         organizationId,
                         OrganizationUserStatusType.PENDING);
+      }
+
+      @Transactional(readOnly = true)
+      @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMember(#organizationId)")
+      public Page<OrganizationMemberDTO> searchMembers(
+                  Long organizationId,
+                  String query,
+                  List<Long> roleIds,
+                  List<Long> instrumentIds,
+                  Pageable pageable) {
+            if (!organizationRepository.existsById(organizationId)) {
+                  throw new EntityNotFoundException("Organization not found: " + organizationId);
+            }
+
+            String normalized = query == null ? null : query.trim();
+            if (normalized != null && normalized.isBlank()) {
+                  normalized = null;
+            }
+
+            boolean applyRoleFilter = roleIds != null && !roleIds.isEmpty();
+            List<Long> roleIdsParam = applyRoleFilter ? roleIds : List.of(-1L);
+
+            boolean applyInstrumentFilter = instrumentIds != null && !instrumentIds.isEmpty();
+            List<Long> instrumentIdsParam = applyInstrumentFilter ? instrumentIds : List.of(-1L);
+
+            Page<User> users = userRepository.searchOrganizationMembers(
+                        organizationId,
+                        normalized,
+                        applyRoleFilter,
+                        roleIdsParam,
+                        applyInstrumentFilter,
+                        instrumentIdsParam,
+                        OrganizationUserStatusType.ACCEPTED,
+                        RoleScopeType.ORGANIZATION,
+                        pageable);
+
+            return users.map(u -> new OrganizationMemberDTO(
+                        u.getId(),
+                        u.getUsername(),
+                        u.getName(),
+                        u.getProfileImageFileId()));
       }
 
       @Transactional
