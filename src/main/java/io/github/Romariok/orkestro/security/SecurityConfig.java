@@ -29,8 +29,6 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
-
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) {
         log.info("Configuring security filter chain");
@@ -45,6 +43,7 @@ public class SecurityConfig {
                                     "/api/v1/auth/register",
                                     "/api/v1/auth/login",
                                     "/api/v1/auth/password/reset",
+                                    "/api/v1/instruments",
                                     "/api/v1/organizations/public",
                                     "/api/v1/organizations/public/page")
                             .permitAll()
@@ -68,7 +67,6 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/api/**", configuration);
         return source;
     }
-
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) {

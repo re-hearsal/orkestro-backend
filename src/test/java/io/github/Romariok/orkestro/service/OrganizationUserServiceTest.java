@@ -9,12 +9,16 @@ import static org.mockito.Mockito.when;
 
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.organization.models.Organization;
+import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
+import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.service.OrganizationUserService;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
+import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
@@ -36,10 +40,16 @@ class OrganizationUserServiceTest {
       private OrganizationUserRepository organizationUserRepository;
 
       @Mock
+      private OrganizationRepository organizationRepository;
+
+      @Mock
       private RoleRepository roleRepository;
 
       @Mock
       private UserRoleRepository userRoleRepository;
+
+      @Mock
+      private UserRepository userRepository;
 
       @Mock
       private SecurityUtils securityUtils;
@@ -234,5 +244,106 @@ class OrganizationUserServiceTest {
             org.junit.jupiter.api.Assertions.assertEquals(200L, capturedRoleIds.getFirst());
 
             verify(organizationUserRepository).deleteByOrganizationIdAndUserId(orgId, userId);
+      }
+
+      @Test
+      void requestToJoinPublicOrganization_notFound_throwsEntityNotFound() {
+            when(organizationRepository.findById(1L)).thenReturn(Optional.empty());
+
+            assertThrows(EntityNotFoundException.class,
+                        () -> organizationUserService.requestToJoinPublicOrganization(1L));
+      }
+
+      @Test
+      void requestToJoinPublicOrganization_privateOrg_throwsBusinessException() {
+            Organization org = Organization.builder()
+                        .id(1L)
+                        .visibilityLevel(VisibilityLevelType.PRIVATE)
+                        .build();
+            when(organizationRepository.findById(1L)).thenReturn(Optional.of(org));
+
+            assertThrows(BusinessException.class,
+                        () -> organizationUserService.requestToJoinPublicOrganization(1L));
+      }
+
+      @Test
+      void requestToJoinPublicOrganization_newRequest_savesPending() {
+            Long orgId = 1L;
+            Long currentUserId = 10L;
+
+            Organization org = Organization.builder()
+                        .id(orgId)
+                        .visibilityLevel(VisibilityLevelType.PUBLIC)
+                        .build();
+            when(organizationRepository.findById(orgId)).thenReturn(Optional.of(org));
+            when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+            when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, currentUserId))
+                        .thenReturn(Optional.empty());
+
+            organizationUserService.requestToJoinPublicOrganization(orgId);
+
+            ArgumentCaptor<OrganizationUser> captor = ArgumentCaptor.forClass(OrganizationUser.class);
+            verify(organizationUserRepository).save(captor.capture());
+            OrganizationUser saved = captor.getValue();
+            assertEquals(orgId, saved.getOrganizationId());
+            assertEquals(currentUserId, saved.getUserId());
+            assertEquals(OrganizationUserStatusType.PENDING, saved.getStatus());
+      }
+
+      @Test
+      void requestToJoinPublicOrganization_alreadyPending_isIdempotent() {
+            Long orgId = 1L;
+            Long currentUserId = 10L;
+
+            Organization org = Organization.builder()
+                        .id(orgId)
+                        .visibilityLevel(VisibilityLevelType.PUBLIC)
+                        .build();
+            when(organizationRepository.findById(orgId)).thenReturn(Optional.of(org));
+            when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+            OrganizationUser existing = OrganizationUser.builder()
+                        .organizationId(orgId)
+                        .userId(currentUserId)
+                        .status(OrganizationUserStatusType.PENDING)
+                        .build();
+            when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, currentUserId))
+                        .thenReturn(Optional.of(existing));
+
+            organizationUserService.requestToJoinPublicOrganization(orgId);
+
+            verify(organizationUserRepository, never()).save(any());
+      }
+
+      @Test
+      void addUserToOrganization_newMember_savesAcceptedAndAssignsCoLeaderIfSecondAccepted() {
+            Long orgId = 1L;
+            Long userId = 10L;
+
+            when(organizationRepository.existsById(orgId)).thenReturn(true);
+            when(userRepository.existsById(userId)).thenReturn(true);
+            when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId))
+                        .thenReturn(Optional.empty());
+            when(organizationUserRepository.countByOrganizationIdAndStatus(orgId, OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(2L);
+
+            Role coLeaderRole = Role.builder()
+                        .id(200L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .organizationId(orgId)
+                        .name("Co-leader")
+                        .build();
+            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, orgId, "Co-leader"))
+                        .thenReturn(Optional.of(coLeaderRole));
+
+            when(userRoleRepository.existsById(any())).thenReturn(false);
+
+            organizationUserService.addUserToOrganization(orgId, userId);
+
+            ArgumentCaptor<OrganizationUser> ouCaptor = ArgumentCaptor.forClass(OrganizationUser.class);
+            verify(organizationUserRepository).save(ouCaptor.capture());
+            assertEquals(OrganizationUserStatusType.ACCEPTED, ouCaptor.getValue().getStatus());
+
+            verify(userRoleRepository).save(any(UserRole.class));
       }
 }

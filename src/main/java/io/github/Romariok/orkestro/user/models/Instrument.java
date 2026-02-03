@@ -28,6 +28,6 @@ public class Instrument {
    @Column(name = "name", nullable = false)
    private String name;
 
-   @Column(name = "picture_file_id")
-   private Long pictureFileId;
+   @Column(name = "icon_key", nullable = false)
+   private String iconKey;
 }

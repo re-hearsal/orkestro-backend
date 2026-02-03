@@ -1,6 +1,7 @@
 package io.github.Romariok.orkestro.utils.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -62,6 +63,32 @@ public class GlobalExceptionHandler {
             "One or more fields are invalid",
             request.getRequestURI(),
             details);
+   }
+
+   @ExceptionHandler(ConstraintViolationException.class)
+   public ResponseEntity<ApiErrorResponse> handleConstraintViolation(
+         ConstraintViolationException ex, HttpServletRequest request) {
+      List<String> details = ex.getConstraintViolations().stream()
+            .map(v -> v.getPropertyPath() + ": " + v.getMessage())
+            .toList();
+
+      return buildResponse(
+            HttpStatus.BAD_REQUEST,
+            "Validation failed",
+            "One or more fields are invalid",
+            request.getRequestURI(),
+            details);
+   }
+
+   @ExceptionHandler(IllegalArgumentException.class)
+   public ResponseEntity<ApiErrorResponse> handleIllegalArgument(
+         IllegalArgumentException ex, HttpServletRequest request) {
+      return buildResponse(
+            HttpStatus.BAD_REQUEST,
+            "Validation failed",
+            ex.getMessage(),
+            request.getRequestURI(),
+            Collections.emptyList());
    }
 
    @ExceptionHandler(BadCredentialsException.class)

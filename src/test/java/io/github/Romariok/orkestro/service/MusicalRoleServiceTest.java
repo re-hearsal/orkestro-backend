@@ -29,181 +29,181 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class MusicalRoleServiceTest {
 
-   @Mock
-   private MusicalRoleDao musicalRoleDao;
+      @Mock
+      private MusicalRoleDao musicalRoleDao;
 
-   @Mock
-   private MusicalRoleMapper musicalRoleMapper;
+      @Mock
+      private MusicalRoleMapper musicalRoleMapper;
 
-   @Mock
-   private UserInstrumentRepository userInstrumentRepository;
+      @Mock
+      private UserInstrumentRepository userInstrumentRepository;
 
-   @Mock
-   private InstrumentRepository instrumentRepository;
+      @Mock
+      private InstrumentRepository instrumentRepository;
 
-   @Mock
-   private UserRepository userRepository;
+      @Mock
+      private UserRepository userRepository;
 
-   @InjectMocks
-   private MusicalRoleService musicalRoleService;
+      @InjectMocks
+      private MusicalRoleService musicalRoleService;
 
-   @Test
-   void getUserMusicalRoles_returnsMappedDtos() {
-      Long userId = 1L;
-      Instrument instrument = Instrument.builder()
-            .id(5L)
-            .name("Violin")
-            .build();
+      @Test
+      void getUserMusicalRoles_returnsMappedDtos() {
+            Long userId = 1L;
+            Instrument instrument = Instrument.builder()
+                        .id(5L)
+                        .name("Violin")
+                        .build();
 
-      MusicalRoleDTO dto = new MusicalRoleDTO(5L, "Violin");
+            MusicalRoleDTO dto = new MusicalRoleDTO(5L, "Violin");
 
-      when(musicalRoleDao.findUserInstruments(userId)).thenReturn(List.of(instrument));
-      when(musicalRoleMapper.toDtoList(List.of(instrument))).thenReturn(List.of(dto));
+            when(musicalRoleDao.findUserInstruments(userId)).thenReturn(List.of(instrument));
+            when(musicalRoleMapper.toDtoList(List.of(instrument))).thenReturn(List.of(dto));
 
-      List<MusicalRoleDTO> result = musicalRoleService.getUserMusicalRoles(userId);
+            List<MusicalRoleDTO> result = musicalRoleService.getUserMusicalRoles(userId);
 
-      assertEquals(1, result.size());
-      assertEquals(5L, result.getFirst().getInstrumentId());
-      assertEquals("Violin", result.getFirst().getInstrumentName());
-   }
+            assertEquals(1, result.size());
+            assertEquals(5L, result.getFirst().getInstrumentId());
+            assertEquals("Violin", result.getFirst().getInstrumentName());
+      }
 
-   @Test
-   void addInstrumentToUser_userNotFound_throwsEntityNotFound() {
-      Long userId = 1L;
-      Long instrumentId = 5L;
+      @Test
+      void addInstrumentToUser_userNotFound_throwsEntityNotFound() {
+            Long userId = 1L;
+            Long instrumentId = 5L;
 
-      when(userRepository.existsById(userId)).thenReturn(false);
+            when(userRepository.existsById(userId)).thenReturn(false);
 
-      assertThrows(
-            EntityNotFoundException.class,
-            () -> musicalRoleService.addInstrumentToUser(userId, instrumentId));
-   }
+            assertThrows(
+                        EntityNotFoundException.class,
+                        () -> musicalRoleService.addInstrumentToUser(userId, instrumentId));
+      }
 
-   @Test
-   void addInstrumentToUser_instrumentNotFound_throwsEntityNotFound() {
-      Long userId = 1L;
-      Long instrumentId = 5L;
+      @Test
+      void addInstrumentToUser_instrumentNotFound_throwsEntityNotFound() {
+            Long userId = 1L;
+            Long instrumentId = 5L;
 
-      when(userRepository.existsById(userId)).thenReturn(true);
-      when(instrumentRepository.existsById(instrumentId)).thenReturn(false);
+            when(userRepository.existsById(userId)).thenReturn(true);
+            when(instrumentRepository.existsById(instrumentId)).thenReturn(false);
 
-      assertThrows(
-            EntityNotFoundException.class,
-            () -> musicalRoleService.addInstrumentToUser(userId, instrumentId));
-   }
+            assertThrows(
+                        EntityNotFoundException.class,
+                        () -> musicalRoleService.addInstrumentToUser(userId, instrumentId));
+      }
 
-   @Test
-   void addInstrumentToUser_alreadyExists_doesNotSave() {
-      Long userId = 1L;
-      Long instrumentId = 5L;
+      @Test
+      void addInstrumentToUser_alreadyExists_doesNotSave() {
+            Long userId = 1L;
+            Long instrumentId = 5L;
 
-      when(userRepository.existsById(userId)).thenReturn(true);
-      when(instrumentRepository.existsById(instrumentId)).thenReturn(true);
-      when(userInstrumentRepository.existsById(any(UserInstrumentId.class))).thenReturn(true);
+            when(userRepository.existsById(userId)).thenReturn(true);
+            when(instrumentRepository.existsById(instrumentId)).thenReturn(true);
+            when(userInstrumentRepository.existsById(any(UserInstrumentId.class))).thenReturn(true);
 
-      musicalRoleService.addInstrumentToUser(userId, instrumentId);
+            musicalRoleService.addInstrumentToUser(userId, instrumentId);
 
-      verify(userInstrumentRepository, never()).save(any(UserInstrument.class));
-   }
+            verify(userInstrumentRepository, never()).save(any(UserInstrument.class));
+      }
 
-   @Test
-   void addInstrumentToUser_success_savesRelation() {
-      Long userId = 1L;
-      Long instrumentId = 5L;
+      @Test
+      void addInstrumentToUser_success_savesRelation() {
+            Long userId = 1L;
+            Long instrumentId = 5L;
 
-      when(userRepository.existsById(userId)).thenReturn(true);
-      when(instrumentRepository.existsById(instrumentId)).thenReturn(true);
-      when(userInstrumentRepository.existsById(any(UserInstrumentId.class))).thenReturn(false);
+            when(userRepository.existsById(userId)).thenReturn(true);
+            when(instrumentRepository.existsById(instrumentId)).thenReturn(true);
+            when(userInstrumentRepository.existsById(any(UserInstrumentId.class))).thenReturn(false);
 
-      musicalRoleService.addInstrumentToUser(userId, instrumentId);
+            musicalRoleService.addInstrumentToUser(userId, instrumentId);
 
-      ArgumentCaptor<UserInstrument> captor = ArgumentCaptor.forClass(UserInstrument.class);
-      verify(userInstrumentRepository).save(captor.capture());
-      UserInstrument saved = captor.getValue();
+            ArgumentCaptor<UserInstrument> captor = ArgumentCaptor.forClass(UserInstrument.class);
+            verify(userInstrumentRepository).save(captor.capture());
+            UserInstrument saved = captor.getValue();
 
-      assertEquals(userId, saved.getUserId());
-      assertEquals(instrumentId, saved.getInstrumentId());
-   }
+            assertEquals(userId, saved.getUserId());
+            assertEquals(instrumentId, saved.getInstrumentId());
+      }
 
-   @Test
-   void removeInstrumentFromUser_deletesRelation() {
-      Long userId = 1L;
-      Long instrumentId = 5L;
+      @Test
+      void removeInstrumentFromUser_deletesRelation() {
+            Long userId = 1L;
+            Long instrumentId = 5L;
 
-      musicalRoleService.removeInstrumentFromUser(userId, instrumentId);
+            musicalRoleService.removeInstrumentFromUser(userId, instrumentId);
 
-      ArgumentCaptor<UserInstrumentId> captor = ArgumentCaptor.forClass(UserInstrumentId.class);
-      verify(userInstrumentRepository).deleteById(captor.capture());
-      UserInstrumentId id = captor.getValue();
+            ArgumentCaptor<UserInstrumentId> captor = ArgumentCaptor.forClass(UserInstrumentId.class);
+            verify(userInstrumentRepository).deleteById(captor.capture());
+            UserInstrumentId id = captor.getValue();
 
-      assertEquals(userId, id.getUserId());
-      assertEquals(instrumentId, id.getInstrumentId());
-   }
+            assertEquals(userId, id.getUserId());
+            assertEquals(instrumentId, id.getInstrumentId());
+      }
 
-   @Test
-   void setUserInstruments_userNotFound_throwsEntityNotFound() {
-      Long userId = 1L;
-      when(userRepository.existsById(userId)).thenReturn(false);
+      @Test
+      void setUserInstruments_userNotFound_throwsEntityNotFound() {
+            Long userId = 1L;
+            when(userRepository.existsById(userId)).thenReturn(false);
 
-      assertThrows(
-            EntityNotFoundException.class,
-            () -> musicalRoleService.setUserInstruments(userId, List.of(1L, 2L)));
-   }
+            assertThrows(
+                        EntityNotFoundException.class,
+                        () -> musicalRoleService.setUserInstruments(userId, List.of(1L, 2L)));
+      }
 
-   @Test
-   void setUserInstruments_instrumentMissing_throwsEntityNotFound() {
-      Long userId = 1L;
-      when(userRepository.existsById(userId)).thenReturn(true);
+      @Test
+      void setUserInstruments_instrumentMissing_throwsEntityNotFound() {
+            Long userId = 1L;
+            when(userRepository.existsById(userId)).thenReturn(true);
 
-      Instrument instrument = Instrument.builder()
-            .id(1L)
-            .build();
+            Instrument instrument = Instrument.builder()
+                        .id(1L)
+                        .build();
 
-      when(instrumentRepository.findAllById(any()))
-            .thenReturn(List.of(instrument));
+            when(instrumentRepository.findAllById(any()))
+                        .thenReturn(List.of(instrument));
 
-      assertThrows(
-            EntityNotFoundException.class,
-            () -> musicalRoleService.setUserInstruments(userId, List.of(1L, 2L)));
-   }
+            assertThrows(
+                        EntityNotFoundException.class,
+                        () -> musicalRoleService.setUserInstruments(userId, List.of(1L, 2L)));
+      }
 
-   @Test
-   void setUserInstruments_replacesExistingRelations() {
-      Long userId = 1L;
+      @Test
+      void setUserInstruments_replacesExistingRelations() {
+            Long userId = 1L;
 
-      when(userRepository.existsById(userId)).thenReturn(true);
+            when(userRepository.existsById(userId)).thenReturn(true);
 
-      Instrument instrument1 = Instrument.builder()
-            .id(1L)
-            .build();
-      Instrument instrument3 = Instrument.builder()
-            .id(3L)
-            .build();
+            Instrument instrument1 = Instrument.builder()
+                        .id(1L)
+                        .build();
+            Instrument instrument3 = Instrument.builder()
+                        .id(3L)
+                        .build();
 
-      when(instrumentRepository.findAllById(any()))
-            .thenReturn(List.of(instrument1, instrument3));
+            when(instrumentRepository.findAllById(any()))
+                        .thenReturn(List.of(instrument1, instrument3));
 
-      UserInstrument ui1 = UserInstrument.builder()
-            .userId(userId)
-            .instrumentId(1L)
-            .build();
+            UserInstrument ui1 = UserInstrument.builder()
+                        .userId(userId)
+                        .instrumentId(1L)
+                        .build();
 
-      UserInstrument ui2 = UserInstrument.builder()
-            .userId(userId)
-            .instrumentId(2L)
-            .build();
+            UserInstrument ui2 = UserInstrument.builder()
+                        .userId(userId)
+                        .instrumentId(2L)
+                        .build();
 
-      when(userInstrumentRepository.findByUserId(userId)).thenReturn(List.of(ui1, ui2));
+            when(userInstrumentRepository.findByUserId(userId)).thenReturn(List.of(ui1, ui2));
 
-      musicalRoleService.setUserInstruments(userId, List.of(1L, 3L));
+            musicalRoleService.setUserInstruments(userId, List.of(1L, 3L));
 
-      verify(userInstrumentRepository).delete(ui2);
+            verify(userInstrumentRepository).delete(ui2);
 
-      ArgumentCaptor<UserInstrument> captor = ArgumentCaptor.forClass(UserInstrument.class);
-      verify(userInstrumentRepository).save(captor.capture());
-      UserInstrument saved = captor.getValue();
+            ArgumentCaptor<UserInstrument> captor = ArgumentCaptor.forClass(UserInstrument.class);
+            verify(userInstrumentRepository).save(captor.capture());
+            UserInstrument saved = captor.getValue();
 
-      assertEquals(userId, saved.getUserId());
-      assertEquals(3L, saved.getInstrumentId());
-   }
+            assertEquals(userId, saved.getUserId());
+            assertEquals(3L, saved.getInstrumentId());
+      }
 }
