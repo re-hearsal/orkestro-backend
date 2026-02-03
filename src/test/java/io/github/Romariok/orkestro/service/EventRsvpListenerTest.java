@@ -7,20 +7,25 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.Romariok.orkestro.event.models.EventParticipant;
 import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
 import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
 import io.github.Romariok.orkestro.event.service.EventRsvpListener;
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
+import java.lang.reflect.Field;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class EventRsvpListenerTest {
@@ -31,20 +36,50 @@ class EventRsvpListenerTest {
         @Mock
         private EventParticipantRepository eventParticipantRepository;
 
-        @InjectMocks
+        @Mock
+        private RabbitTemplate rabbitTemplate;
+
         private EventRsvpListener listener;
 
+        private final ObjectMapper objectMapper = new ObjectMapper();
+
+        private Message buildMessage(Long telegramUserId, Long eventId, String decision) throws Exception {
+                String json = objectMapper.writeValueAsString(Map.of(
+                                "request_id", "req",
+                                "type", "event.rsvp",
+                                "telegram_user_id", telegramUserId,
+                                "event_id", eventId,
+                                "decision", decision));
+                MessageProperties props = new MessageProperties();
+                props.setContentType("application/json");
+                return new Message(json.getBytes(java.nio.charset.StandardCharsets.UTF_8), props);
+        }
+
+        private void initListener() throws Exception {
+                listener = new EventRsvpListener(
+                                userRepository,
+                                eventParticipantRepository,
+                                rabbitTemplate,
+                                objectMapper);
+                Field field = EventRsvpListener.class.getDeclaredField("telegramBotMessageQueueName");
+                field.setAccessible(true);
+                field.set(listener, "telegram_bot_messages");
+        }
+
         @Test
-        void handleEventRsvp_nullMessage_doesNothing() {
+        void handleEventRsvp_nullMessage_doesNothing() throws Exception {
+                initListener();
                 listener.handleEventRsvp(null);
 
                 verifyNoInteractions(userRepository);
                 verifyNoInteractions(eventParticipantRepository);
+                verifyNoInteractions(rabbitTemplate);
         }
 
         @Test
-        void handleEventRsvp_unknownDecision_doesNotUpdateParticipant() {
-                EventRsvpListener.EventRsvpMessage message = new EventRsvpListener.EventRsvpMessage(123L, 10L, "MAYBE");
+        void handleEventRsvp_unknownDecision_doesNotUpdateParticipant() throws Exception {
+                initListener();
+                Message message = buildMessage(123L, 10L, "MAYBE");
 
                 listener.handleEventRsvp(message);
 
@@ -53,11 +88,11 @@ class EventRsvpListenerTest {
         }
 
         @Test
-        void handleEventRsvp_userNotFound_doesNotUpdateParticipant() {
+        void handleEventRsvp_userNotFound_doesNotUpdateParticipant() throws Exception {
+                initListener();
                 Long telegramUserId = 123L;
                 Long eventId = 10L;
-                EventRsvpListener.EventRsvpMessage message = new EventRsvpListener.EventRsvpMessage(telegramUserId,
-                                eventId, "ACCEPT");
+                Message message = buildMessage(telegramUserId, eventId, "ACCEPT");
 
                 when(userRepository.findByTelegramUserId(telegramUserId)).thenReturn(Optional.empty());
 
@@ -68,12 +103,12 @@ class EventRsvpListenerTest {
         }
 
         @Test
-        void handleEventRsvp_participantNotFound_doesNotSave() {
+        void handleEventRsvp_participantNotFound_doesNotSave() throws Exception {
+                initListener();
                 Long telegramUserId = 123L;
                 Long eventId = 10L;
                 Long userId = 5L;
-                EventRsvpListener.EventRsvpMessage message = new EventRsvpListener.EventRsvpMessage(telegramUserId,
-                                eventId, "ACCEPT");
+                Message message = buildMessage(telegramUserId, eventId, "ACCEPT");
 
                 User user = User.builder().id(userId).username("u").email("e").password("p").profileImageFileId(1L)
                                 .build();
@@ -88,12 +123,12 @@ class EventRsvpListenerTest {
         }
 
         @Test
-        void handleEventRsvp_accept_updatesRsvpStatusAndTimestamp() {
+        void handleEventRsvp_accept_updatesRsvpStatusAndTimestamp() throws Exception {
+                initListener();
                 Long telegramUserId = 123L;
                 Long eventId = 10L;
                 Long userId = 5L;
-                EventRsvpListener.EventRsvpMessage message = new EventRsvpListener.EventRsvpMessage(telegramUserId,
-                                eventId, "ACCEPT");
+                Message message = buildMessage(telegramUserId, eventId, "ACCEPT");
 
                 User user = User.builder().id(userId).username("u").email("e").password("p").profileImageFileId(1L)
                                 .build();
@@ -122,12 +157,12 @@ class EventRsvpListenerTest {
         }
 
         @Test
-        void handleEventRsvp_decline_updatesRsvpStatus() {
+        void handleEventRsvp_decline_updatesRsvpStatus() throws Exception {
+                initListener();
                 Long telegramUserId = 123L;
                 Long eventId = 10L;
                 Long userId = 5L;
-                EventRsvpListener.EventRsvpMessage message = new EventRsvpListener.EventRsvpMessage(telegramUserId,
-                                eventId, "DECLINE");
+                Message message = buildMessage(telegramUserId, eventId, "DECLINE");
 
                 User user = User.builder().id(userId).username("u").email("e").password("p").profileImageFileId(1L)
                                 .build();

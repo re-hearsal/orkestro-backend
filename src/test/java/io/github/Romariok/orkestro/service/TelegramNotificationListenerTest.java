@@ -29,6 +29,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,6 +59,12 @@ class TelegramNotificationListenerTest {
             field.set(listener, "telegram_bot_messages");
       }
 
+      private Message amqpMessageFor(TelegramNotificationListener.TelegramRegistrationMessage msg) throws Exception {
+            MessageProperties props = new MessageProperties();
+            props.setContentType("application/json");
+            return new Message("{\"x\":1}".getBytes(java.nio.charset.StandardCharsets.UTF_8), props);
+      }
+
       @Test
       void handleTelegramRegistration_nullMessage_doesNotCallRepositoriesOrBroker() {
             listener.handleTelegramRegistration(null);
@@ -69,12 +77,15 @@ class TelegramNotificationListenerTest {
       @Test
       void handleTelegramRegistration_invalidPayload_sendsErrorToTelegram() throws Exception {
             Long telegramUserId = 123L;
-            TelegramNotificationListener.TelegramRegistrationMessage message = new TelegramNotificationListener.TelegramRegistrationMessage(
-                        null, telegramUserId);
+            TelegramNotificationListener.TelegramRegistrationMessage parsed = new TelegramNotificationListener.TelegramRegistrationMessage(
+                        "req", "telegram.link", null, telegramUserId);
+            Message amqp = amqpMessageFor(parsed);
 
+            when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
+                        .thenReturn(parsed);
             when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":false}");
 
-            listener.handleTelegramRegistration(message);
+            listener.handleTelegramRegistration(amqp);
 
             verifyNoInteractions(tokenRepository);
             verifyNoInteractions(userRepository);
@@ -85,13 +96,16 @@ class TelegramNotificationListenerTest {
       void handleTelegramRegistration_tokenNotFound_sendsErrorToTelegram() throws Exception {
             Long telegramUserId = 123L;
             String token = "missing-token";
-            TelegramNotificationListener.TelegramRegistrationMessage message = new TelegramNotificationListener.TelegramRegistrationMessage(
-                        token, telegramUserId);
+            TelegramNotificationListener.TelegramRegistrationMessage parsed = new TelegramNotificationListener.TelegramRegistrationMessage(
+                        "req", "telegram.link", token, telegramUserId);
+            Message amqp = amqpMessageFor(parsed);
 
             when(tokenRepository.findByToken(token)).thenReturn(Optional.empty());
+            when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
+                        .thenReturn(parsed);
             when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":false}");
 
-            listener.handleTelegramRegistration(message);
+            listener.handleTelegramRegistration(amqp);
 
             verify(tokenRepository).findByToken(token);
             verifyNoInteractions(userRepository);
@@ -102,8 +116,9 @@ class TelegramNotificationListenerTest {
       void handleTelegramRegistration_tokenAlreadyUsed_sendsErrorToTelegram() throws Exception {
             Long telegramUserId = 123L;
             String token = "used-token";
-            TelegramNotificationListener.TelegramRegistrationMessage message = new TelegramNotificationListener.TelegramRegistrationMessage(
-                        token, telegramUserId);
+            TelegramNotificationListener.TelegramRegistrationMessage parsed = new TelegramNotificationListener.TelegramRegistrationMessage(
+                        "req", "telegram.link", token, telegramUserId);
+            Message amqp = amqpMessageFor(parsed);
 
             UserTelegramLinkToken linkToken = UserTelegramLinkToken.builder()
                         .userId(1L)
@@ -112,9 +127,11 @@ class TelegramNotificationListenerTest {
                         .build();
 
             when(tokenRepository.findByToken(token)).thenReturn(Optional.of(linkToken));
+            when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
+                        .thenReturn(parsed);
             when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":false}");
 
-            listener.handleTelegramRegistration(message);
+            listener.handleTelegramRegistration(amqp);
 
             verify(tokenRepository).findByToken(token);
             verifyNoInteractions(userRepository);
@@ -125,8 +142,9 @@ class TelegramNotificationListenerTest {
       void handleTelegramRegistration_tokenExpired_sendsErrorToTelegram() throws Exception {
             Long telegramUserId = 123L;
             String token = "expired-token";
-            TelegramNotificationListener.TelegramRegistrationMessage message = new TelegramNotificationListener.TelegramRegistrationMessage(
-                        token, telegramUserId);
+            TelegramNotificationListener.TelegramRegistrationMessage parsed = new TelegramNotificationListener.TelegramRegistrationMessage(
+                        "req", "telegram.link", token, telegramUserId);
+            Message amqp = amqpMessageFor(parsed);
 
             UserTelegramLinkToken linkToken = UserTelegramLinkToken.builder()
                         .userId(1L)
@@ -135,9 +153,11 @@ class TelegramNotificationListenerTest {
                         .build();
 
             when(tokenRepository.findByToken(token)).thenReturn(Optional.of(linkToken));
+            when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
+                        .thenReturn(parsed);
             when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":false}");
 
-            listener.handleTelegramRegistration(message);
+            listener.handleTelegramRegistration(amqp);
 
             verify(tokenRepository).findByToken(token);
             verifyNoInteractions(userRepository);
@@ -148,8 +168,9 @@ class TelegramNotificationListenerTest {
       void handleTelegramRegistration_telegramAlreadyLinkedToAnotherUser_sendsErrorToTelegram() throws Exception {
             Long telegramUserId = 123L;
             String token = "token";
-            TelegramNotificationListener.TelegramRegistrationMessage message = new TelegramNotificationListener.TelegramRegistrationMessage(
-                        token, telegramUserId);
+            TelegramNotificationListener.TelegramRegistrationMessage parsed = new TelegramNotificationListener.TelegramRegistrationMessage(
+                        "req", "telegram.link", token, telegramUserId);
+            Message amqp = amqpMessageFor(parsed);
 
             UserTelegramLinkToken linkToken = UserTelegramLinkToken.builder()
                         .userId(1L)
@@ -163,9 +184,11 @@ class TelegramNotificationListenerTest {
 
             when(tokenRepository.findByToken(token)).thenReturn(Optional.of(linkToken));
             when(userRepository.findByTelegramUserId(telegramUserId)).thenReturn(Optional.of(otherUser));
+            when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
+                        .thenReturn(parsed);
             when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":false}");
 
-            listener.handleTelegramRegistration(message);
+            listener.handleTelegramRegistration(amqp);
 
             verify(tokenRepository).findByToken(token);
             verify(userRepository).findByTelegramUserId(telegramUserId);
@@ -179,8 +202,9 @@ class TelegramNotificationListenerTest {
             String token = "valid-token";
             Long userId = 1L;
 
-            TelegramNotificationListener.TelegramRegistrationMessage message = new TelegramNotificationListener.TelegramRegistrationMessage(
-                        token, telegramUserId);
+            TelegramNotificationListener.TelegramRegistrationMessage parsed = new TelegramNotificationListener.TelegramRegistrationMessage(
+                        "req", "telegram.link", token, telegramUserId);
+            Message amqp = amqpMessageFor(parsed);
 
             UserTelegramLinkToken linkToken = UserTelegramLinkToken.builder()
                         .userId(userId)
@@ -195,9 +219,11 @@ class TelegramNotificationListenerTest {
             when(tokenRepository.findByToken(token)).thenReturn(Optional.of(linkToken));
             when(userRepository.findByTelegramUserId(telegramUserId)).thenReturn(Optional.empty());
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
+                        .thenReturn(parsed);
             when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
 
-            listener.handleTelegramRegistration(message);
+            listener.handleTelegramRegistration(amqp);
 
             // Проверяем, что пользователь обновлён и сохранён
             ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
@@ -221,8 +247,9 @@ class TelegramNotificationListenerTest {
             String token = "valid-token";
             Long userId = 1L;
 
-            TelegramNotificationListener.TelegramRegistrationMessage message = new TelegramNotificationListener.TelegramRegistrationMessage(
-                        token, telegramUserId);
+            TelegramNotificationListener.TelegramRegistrationMessage parsed = new TelegramNotificationListener.TelegramRegistrationMessage(
+                        "req", "telegram.link", token, telegramUserId);
+            Message amqp = amqpMessageFor(parsed);
 
             UserTelegramLinkToken linkToken = UserTelegramLinkToken.builder()
                         .userId(userId)
@@ -237,11 +264,13 @@ class TelegramNotificationListenerTest {
             when(tokenRepository.findByToken(token)).thenReturn(Optional.of(linkToken));
             when(userRepository.findByTelegramUserId(telegramUserId)).thenReturn(Optional.empty());
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
+                        .thenReturn(parsed);
             when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
             org.mockito.Mockito.doThrow(new RuntimeException("Broker down"))
                         .when(rabbitTemplate).convertAndSend(anyString(), anyString());
 
-            assertDoesNotThrow(() -> listener.handleTelegramRegistration(message));
+            assertDoesNotThrow(() -> listener.handleTelegramRegistration(amqp));
 
             // Несмотря на падение брокера, данные пользователя и токена должны быть
             // сохранены
