@@ -3,6 +3,7 @@ package io.github.Romariok.orkestro.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,8 +13,10 @@ import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.section.dto.SectionCreateRequestDTO;
 import io.github.Romariok.orkestro.section.dto.SectionDTO;
+import io.github.Romariok.orkestro.section.mapper.SectionMemberMapper;
 import io.github.Romariok.orkestro.section.mapper.SectionMapper;
 import io.github.Romariok.orkestro.section.models.Section;
 import io.github.Romariok.orkestro.section.models.SectionUser;
@@ -23,13 +26,22 @@ import io.github.Romariok.orkestro.section.service.SectionService;
 import io.github.Romariok.orkestro.task.models.Task;
 import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.user.models.Role;
+import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
+import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -64,6 +76,15 @@ class SectionServiceTest {
         @Mock
         private SectionMapper sectionMapper;
 
+        @Mock
+        private SectionMemberMapper sectionMemberMapper;
+
+        @Mock
+        private UserRoleRepository userRoleRepository;
+
+        @Mock
+        private SecurityUtils securityUtils;
+
         @InjectMocks
         private SectionService sectionService;
 
@@ -71,6 +92,7 @@ class SectionServiceTest {
         void createSectionInOrganization_success_savesSection() {
                 Long organizationId = 1L;
                 SectionCreateRequestDTO request = new SectionCreateRequestDTO("Brass", "Brass section");
+                Long currentUserId = 100L;
 
                 Organization organization = Organization.builder()
                                 .id(organizationId)
@@ -85,6 +107,18 @@ class SectionServiceTest {
                 when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, 10L))
                                 .thenReturn(List.of());
                 when(roleRepository.findByScopeAndSystemTrue(RoleScopeType.SECTION)).thenReturn(List.of());
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(sectionUserRepository.findBySectionIdAndUserId(10L, currentUserId)).thenReturn(Optional.empty());
+                when(sectionRepository.existsById(10L)).thenReturn(true);
+                SectionUser creatorMembership = new SectionUser();
+                creatorMembership.setSectionId(10L);
+                creatorMembership.setUserId(currentUserId);
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(10L))
+                                .thenReturn(List.of(creatorMembership));
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, 10L, "Leader"))
+                                .thenReturn(Optional.empty());
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, 10L, "Co-leader"))
+                                .thenReturn(Optional.empty());
 
                 Section saved = new Section();
                 saved.setId(10L);
@@ -164,6 +198,7 @@ class SectionServiceTest {
         void createSectionInSection_success_savesSection() {
                 Long parentSectionId = 5L;
                 Long organizationId = 1L;
+                Long currentUserId = 100L;
 
                 Section parent = new Section();
                 parent.setId(parentSectionId);
@@ -177,6 +212,18 @@ class SectionServiceTest {
                 when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, 20L))
                                 .thenReturn(List.of());
                 when(roleRepository.findByScopeAndSystemTrue(RoleScopeType.SECTION)).thenReturn(List.of());
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(sectionUserRepository.findBySectionIdAndUserId(20L, currentUserId)).thenReturn(Optional.empty());
+                when(sectionRepository.existsById(20L)).thenReturn(true);
+                SectionUser creatorMembership = new SectionUser();
+                creatorMembership.setSectionId(20L);
+                creatorMembership.setUserId(currentUserId);
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(20L))
+                                .thenReturn(List.of(creatorMembership));
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, 20L, "Leader"))
+                                .thenReturn(Optional.empty());
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, 20L, "Co-leader"))
+                                .thenReturn(Optional.empty());
 
                 Section saved = new Section();
                 saved.setId(20L);
@@ -524,11 +571,28 @@ class SectionServiceTest {
         }
 
         @Test
-        void removeUserFromSection_existingMembership_deletesIt() {
+        void removeUserFromSection_cannotRemoveSelf_throwsIllegalArgumentException() {
                 Long sectionId = 10L;
                 Long userId = 100L;
 
                 when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+                assertThrows(
+                                IllegalArgumentException.class,
+                                () -> sectionService.removeUserFromSection(sectionId, userId));
+
+                verify(sectionUserRepository, never()).findBySectionIdAndUserId(any(), any());
+                verify(sectionUserRepository, never()).deleteBySectionIdInAndUserId(any(), any());
+        }
+
+        @Test
+        void removeUserFromSection_existingMembership_lastMember_deletesSection() {
+                Long sectionId = 10L;
+                Long userId = 100L;
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(sectionRepository.findByParentSectionId(sectionId)).thenReturn(List.of());
 
                 SectionUser su = new SectionUser();
                 su.setSectionId(sectionId);
@@ -536,10 +600,16 @@ class SectionServiceTest {
 
                 when(sectionUserRepository.findBySectionIdAndUserId(sectionId, userId))
                                 .thenReturn(Optional.of(su));
+                when(roleRepository.findByScopeAndSectionIdIn(eq(RoleScopeType.SECTION), any()))
+                                .thenReturn(List.of());
+                when(sectionUserRepository.countBySectionId(sectionId)).thenReturn(0L);
+                when(taskRepository.findBySectionId(sectionId)).thenReturn(List.of());
+                when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId)).thenReturn(List.of());
 
                 sectionService.removeUserFromSection(sectionId, userId);
 
-                verify(sectionUserRepository).delete(su);
+                verify(sectionUserRepository).deleteBySectionIdInAndUserId(eq(List.of(sectionId)), eq(userId));
+                verify(sectionRepository).deleteAllById(List.of(sectionId));
         }
 
         @Test
@@ -553,6 +623,275 @@ class SectionServiceTest {
 
                 sectionService.removeUserFromSection(sectionId, userId);
 
-                verify(sectionUserRepository, never()).delete(any());
+                verify(sectionUserRepository, never()).deleteBySectionIdInAndUserId(any(), any());
+        }
+
+        @Test
+        void leaveCurrentSection_sectionNotFound_throwsEntityNotFound() {
+                Long sectionId = 10L;
+                when(sectionRepository.existsById(sectionId)).thenReturn(false);
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> sectionService.leaveCurrentSection(sectionId));
+
+                verify(sectionUserRepository, never()).deleteBySectionIdInAndUserId(any(), any());
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void leaveCurrentSection_deletesMembershipInSubtree() {
+                Long rootId = 1L;
+                Long childId = 2L;
+                Long currentUserId = 100L;
+
+                when(sectionRepository.existsById(rootId)).thenReturn(true);
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+                SectionUser member = new SectionUser();
+                member.setSectionId(rootId);
+                member.setUserId(currentUserId);
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(rootId)).thenReturn(List.of(member));
+
+                Section child = new Section();
+                child.setId(childId);
+                child.setParentSectionId(rootId);
+                when(sectionRepository.findByParentSectionId(rootId)).thenReturn(List.of(child));
+                when(sectionRepository.findByParentSectionId(childId)).thenReturn(List.of());
+                when(roleRepository.findByScopeAndSectionIdIn(eq(RoleScopeType.SECTION), any()))
+                                .thenReturn(List.of());
+                when(sectionUserRepository.countBySectionId(rootId)).thenReturn(1L);
+
+                sectionService.leaveCurrentSection(rootId);
+
+                ArgumentCaptor<Collection<Long>> sectionIdsCaptor = ArgumentCaptor.forClass(Collection.class);
+                verify(sectionUserRepository).deleteBySectionIdInAndUserId(sectionIdsCaptor.capture(),
+                                eq(currentUserId));
+
+                Set<Long> ids = new HashSet<>(sectionIdsCaptor.getValue());
+                assertEquals(Set.of(childId, rootId), ids);
+        }
+
+        @Test
+        void leaveCurrentSection_lastMember_deletesSection() {
+                Long sectionId = 10L;
+                Long currentUserId = 100L;
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                SectionUser member = new SectionUser();
+                member.setSectionId(sectionId);
+                member.setUserId(currentUserId);
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(sectionId)).thenReturn(List.of(member));
+                when(sectionRepository.findByParentSectionId(sectionId)).thenReturn(List.of());
+                when(roleRepository.findByScopeAndSectionIdIn(eq(RoleScopeType.SECTION), any()))
+                                .thenReturn(List.of());
+                when(sectionUserRepository.countBySectionId(sectionId)).thenReturn(0L);
+                when(taskRepository.findBySectionId(sectionId)).thenReturn(List.of());
+                when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId)).thenReturn(List.of());
+
+                sectionService.leaveCurrentSection(sectionId);
+
+                verify(sectionRepository).deleteAllById(List.of(sectionId));
+        }
+
+        @Test
+        void leaveCurrentSection_leaderWithOtherMembers_throwsBusinessException() {
+                Long sectionId = 10L;
+                Long leaderUserId = 100L;
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(securityUtils.getCurrentUserId()).thenReturn(leaderUserId);
+
+                SectionUser leader = new SectionUser();
+                leader.setSectionId(sectionId);
+                leader.setUserId(leaderUserId);
+                SectionUser other = new SectionUser();
+                other.setSectionId(sectionId);
+                other.setUserId(101L);
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(sectionId))
+                                .thenReturn(List.of(leader, other));
+
+                Role leaderRole = Role.builder()
+                                .id(501L)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .name("Leader")
+                                .build();
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, sectionId, "Leader"))
+                                .thenReturn(Optional.of(leaderRole));
+                when(userRoleRepository.existsById(
+                                io.github.Romariok.orkestro.user.models.UserRoleId.builder()
+                                                .userId(leaderUserId)
+                                                .roleId(leaderRole.getId())
+                                                .build()))
+                                .thenReturn(true);
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> sectionService.leaveCurrentSection(sectionId));
+
+                verify(sectionUserRepository, never()).deleteBySectionIdInAndUserId(any(), any());
+        }
+
+        @Test
+        void leaveCurrentSection_coLeaderWithOtherMembersBeyondLeader_throwsBusinessException() {
+                Long sectionId = 10L;
+                Long coLeaderUserId = 101L;
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(securityUtils.getCurrentUserId()).thenReturn(coLeaderUserId);
+
+                SectionUser leader = new SectionUser();
+                leader.setSectionId(sectionId);
+                leader.setUserId(100L);
+                SectionUser coLeader = new SectionUser();
+                coLeader.setSectionId(sectionId);
+                coLeader.setUserId(coLeaderUserId);
+                SectionUser other = new SectionUser();
+                other.setSectionId(sectionId);
+                other.setUserId(102L);
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(sectionId))
+                                .thenReturn(List.of(leader, coLeader, other));
+
+                Role coLeaderRole = Role.builder()
+                                .id(502L)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .name("Co-leader")
+                                .build();
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, sectionId, "Leader"))
+                                .thenReturn(Optional.empty());
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, sectionId, "Co-leader"))
+                                .thenReturn(Optional.of(coLeaderRole));
+                when(userRoleRepository.existsById(
+                                io.github.Romariok.orkestro.user.models.UserRoleId.builder()
+                                                .userId(coLeaderUserId)
+                                                .roleId(coLeaderRole.getId())
+                                                .build()))
+                                .thenReturn(true);
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> sectionService.leaveCurrentSection(sectionId));
+
+                verify(sectionUserRepository, never()).deleteBySectionIdInAndUserId(any(), any());
+        }
+
+        @Test
+        void addUserToSection_secondMember_becomesCoLeader() {
+                Long sectionId = 10L;
+                Long organizationId = 1L;
+                Long firstUserId = 100L;
+                Long secondUserId = 101L;
+
+                Section section = new Section();
+                section.setId(sectionId);
+                section.setOrganizationId(organizationId);
+                section.setParentSectionId(null);
+
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+                when(sectionUserRepository.findBySectionIdAndUserId(sectionId, secondUserId))
+                                .thenReturn(Optional.empty());
+
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(secondUserId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, secondUserId))
+                                .thenReturn(Optional.of(membership));
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+
+                SectionUser first = new SectionUser();
+                first.setSectionId(sectionId);
+                first.setUserId(firstUserId);
+                SectionUser second = new SectionUser();
+                second.setSectionId(sectionId);
+                second.setUserId(secondUserId);
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(sectionId))
+                                .thenReturn(List.of(first, second));
+
+                Role leaderRole = Role.builder().id(501L).scope(RoleScopeType.SECTION).sectionId(sectionId)
+                                .name("Leader").build();
+                Role coLeaderRole = Role.builder().id(502L).scope(RoleScopeType.SECTION).sectionId(sectionId)
+                                .name("Co-leader")
+                                .build();
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, sectionId, "Leader"))
+                                .thenReturn(Optional.of(leaderRole));
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, sectionId, "Co-leader"))
+                                .thenReturn(Optional.of(coLeaderRole));
+
+                sectionService.addUserToSection(sectionId, secondUserId);
+
+                verify(userRoleRepository).deleteByRoleId(leaderRole.getId());
+                verify(userRoleRepository).deleteByRoleId(coLeaderRole.getId());
+
+                ArgumentCaptor<UserRole> roleCaptor = ArgumentCaptor.forClass(UserRole.class);
+                verify(userRoleRepository, org.mockito.Mockito.times(2)).save(roleCaptor.capture());
+                List<UserRole> saved = roleCaptor.getAllValues();
+
+                // leader -> first user, co-leader -> second user
+                boolean hasLeader = saved.stream()
+                                .anyMatch(ur -> ur.getUserId().equals(firstUserId)
+                                                && ur.getRoleId().equals(leaderRole.getId()));
+                boolean hasCoLeader = saved.stream()
+                                .anyMatch(ur -> ur.getUserId().equals(secondUserId)
+                                                && ur.getRoleId().equals(coLeaderRole.getId()));
+                assertEquals(true, hasLeader);
+                assertEquals(true, hasCoLeader);
+        }
+
+        @Test
+        void searchMembers_blankQuery_returnsAll() {
+                Long sectionId = 10L;
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+
+                SectionUser membership = new SectionUser();
+                membership.setSectionId(sectionId);
+                membership.setUserId(100L);
+
+                Page<SectionUser> page = new PageImpl<>(List.of(membership), PageRequest.of(0, 20), 1);
+                when(sectionUserRepository.findAll(
+                                org.mockito.Mockito.<org.springframework.data.jpa.domain.Specification<SectionUser>>any(),
+                                any(org.springframework.data.domain.Pageable.class)))
+                                .thenReturn(page);
+                when(sectionMemberMapper.toDto(any(SectionUser.class)))
+                                .thenReturn(new io.github.Romariok.orkestro.section.dto.SectionMemberDTO(
+                                                100L, "u", "User", 1L, java.time.Instant.parse("2026-01-01T00:00:00Z")));
+
+                Page<io.github.Romariok.orkestro.section.dto.SectionMemberDTO> result = sectionService.searchMembers(
+                                sectionId, "   ", List.of(), List.of(), PageRequest.of(0, 20));
+
+                assertEquals(1, result.getTotalElements());
+        }
+
+        @Test
+        void searchMembers_sortByJoinedAt_mapsSortToMembership() {
+                Long sectionId = 10L;
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+
+                when(sectionUserRepository.findAll(
+                                org.mockito.Mockito.<org.springframework.data.jpa.domain.Specification<SectionUser>>any(),
+                                any(org.springframework.data.domain.Pageable.class)))
+                                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+                sectionService.searchMembers(
+                                sectionId,
+                                null,
+                                List.of(),
+                                List.of(),
+                                PageRequest.of(0, 20, Sort.by(Sort.Order.desc("joinedAt"))));
+
+                ArgumentCaptor<org.springframework.data.domain.Pageable> captor = ArgumentCaptor
+                                .forClass(org.springframework.data.domain.Pageable.class);
+                verify(sectionUserRepository).findAll(
+                                org.mockito.Mockito.<org.springframework.data.jpa.domain.Specification<SectionUser>>any(),
+                                captor.capture());
+
+                Sort.Order order = captor.getValue().getSort().getOrderFor("joinedAt");
+                org.junit.jupiter.api.Assertions.assertNotNull(order);
+                org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC, order.getDirection());
         }
 }

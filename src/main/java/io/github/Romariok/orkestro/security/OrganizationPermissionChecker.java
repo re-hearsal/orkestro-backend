@@ -2,6 +2,7 @@ package io.github.Romariok.orkestro.security;
 
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
@@ -19,6 +20,7 @@ public class OrganizationPermissionChecker {
    private final UserRoleRepository userRoleRepository;
    private final RolePermissionRepository rolePermissionRepository;
    private final OrganizationUserRepository organizationUserRepository;
+   private final SectionUserRepository sectionUserRepository;
 
    public boolean hasOrganizationPermission(Long organizationId, String permissionCode) {
       return hasPermission(RoleScopeType.ORGANIZATION, organizationId, permissionCode);
@@ -40,6 +42,19 @@ public class OrganizationPermissionChecker {
             .isPresent();
    }
 
+   public boolean isSectionMember(Long sectionId) {
+      if (sectionId == null || sectionId <= 0) {
+         return false;
+      }
+      Long userId;
+      try {
+         userId = securityUtils.getCurrentUserId();
+      } catch (SecurityException ex) {
+         return false;
+      }
+      return sectionUserRepository.findBySectionIdAndUserId(sectionId, userId).isPresent();
+   }
+
    public boolean hasSectionPermission(Long sectionId, String permissionCode) {
       return hasPermission(RoleScopeType.SECTION, sectionId, permissionCode);
    }
@@ -53,6 +68,13 @@ public class OrganizationPermissionChecker {
          userId = securityUtils.getCurrentUserId();
       } catch (SecurityException ex) {
          return false;
+      }
+
+      // For section-scoped permissions, user must be a section member.
+      if (scope == RoleScopeType.SECTION) {
+         if (sectionUserRepository.findBySectionIdAndUserId(contextId, userId).isEmpty()) {
+            return false;
+         }
       }
 
       List<Role> roles = userRoleRepository.findRolesByUserId(userId);
