@@ -41,20 +41,25 @@ public class AuthService {
 
     @Transactional
     public AuthResponseDTO register(RegisterRequestDTO request) {
-        log.info("Registering new user: {}", request.getUsername());
+        String username = request.getUsername() == null ? null : request.getUsername().trim();
+        String name = request.getName() == null ? null : request.getName().trim();
+        String email = request.getEmail() == null ? null : request.getEmail().trim();
+        String location = request.getLocation() == null ? null : request.getLocation().trim();
 
-        if (userService.existsByUsername(request.getUsername())) {
-            log.warn("Username already taken: {}", request.getUsername());
+        log.info("Registering new user: {}", username);
+
+        if (userService.existsByUsername(username)) {
+            log.warn("Username already taken: {}", username);
             throw new BusinessException("Username is already taken");
         }
 
         try {
             Instant now = Instant.now();
             User user = User.builder()
-                    .username(request.getUsername())
-                    .name(request.getName())
-                    .email(request.getEmail())
-                    .location(request.getLocation())
+                    .username(username)
+                    .name(name)
+                    .email(email)
+                    .location(location)
                     .birthDate(request.getBirthDate())
                     .password(passwordEncoder.encode(request.getPassword()))
                     .createdAt(now)
@@ -74,7 +79,7 @@ public class AuthService {
             }
 
             log.info("User saved successfully: {}", user.getUsername());
-            String token = generateTokenForUser(request.getUsername());
+            String token = generateTokenForUser(username);
             log.info("Token generated for new user: {}", user.getUsername());
             return new AuthResponseDTO(token, user.getUsername());
         } catch (Exception e) {

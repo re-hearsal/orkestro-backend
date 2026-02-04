@@ -64,6 +64,10 @@ public class OrganizationService {
 
    @Transactional
    public OrganizationDTO createOrganization(OrganizationCreateRequestDTO request) {
+      String normalizedName = request.getName() == null ? null : request.getName().trim();
+      String normalizedLocation = request.getLocation() == null ? null : request.getLocation().trim();
+      String normalizedDescription = request.getDescription() == null ? null : request.getDescription().trim();
+
       StoredFile file = null;
       if (request.getProfileImage() != null && !request.getProfileImage().isEmpty()) {
          file = fileStorageService.uploadForCurrentUser(
@@ -72,9 +76,9 @@ public class OrganizationService {
       }
 
       Organization organization = Organization.builder()
-            .name(request.getName())
-            .location(request.getLocation())
-            .description(request.getDescription())
+            .name(normalizedName)
+            .location(normalizedLocation)
+            .description(normalizedDescription)
             .profileImageFileId(file != null ? file.getId() : null)
             .createdAt(Instant.now())
             .visibilityLevel(request.getVisibilityLevel())
@@ -128,13 +132,25 @@ public class OrganizationService {
             .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
 
       if (request.getName() != null) {
-         organization.setName(request.getName());
+         String normalized = request.getName().trim();
+         if (normalized.isBlank()) {
+            throw new IllegalArgumentException("Organization name must not be blank");
+         }
+         organization.setName(normalized);
       }
       if (request.getLocation() != null) {
-         organization.setLocation(request.getLocation());
+         String normalized = request.getLocation().trim();
+         if (normalized.isBlank()) {
+            throw new IllegalArgumentException("Organization location must not be blank");
+         }
+         organization.setLocation(normalized);
       }
       if (request.getDescription() != null) {
-         organization.setDescription(request.getDescription());
+         String normalized = request.getDescription().trim();
+         if (normalized.isBlank()) {
+            throw new IllegalArgumentException("Organization description must not be blank");
+         }
+         organization.setDescription(normalized);
       }
       if (request.getProfileImageFileId() != null) {
          StoredFile file = storedFileRepository.findById(request.getProfileImageFileId())
@@ -270,7 +286,6 @@ public class OrganizationService {
             .map(this::buildOrganizationDto)
             .collect(Collectors.toList());
    }
-
 
    @Transactional(readOnly = true)
    public Page<OrganizationDTO> searchPublicOrganizationsByName(

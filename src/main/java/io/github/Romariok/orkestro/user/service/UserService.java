@@ -101,13 +101,13 @@ public class UserService implements UserDetailsService {
             .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
 
       if (request.getName() != null) {
-         user.setName(request.getName());
+         user.setName(request.getName().trim());
       }
       if (request.getEmail() != null) {
-         user.setEmail(request.getEmail());
+         user.setEmail(request.getEmail().trim());
       }
       if (request.getLocation() != null) {
-         user.setLocation(request.getLocation());
+         user.setLocation(request.getLocation().trim());
       }
       if (request.getBirthDate() != null) {
          user.setBirthDate(request.getBirthDate());
@@ -137,7 +137,7 @@ public class UserService implements UserDetailsService {
       }
 
       storedFileRepository.clearUploadedByUserId(userId);
- 
+
       userInstrumentRepository.deleteByUserId(userId);
       userRoleRepository.deleteByUserId(userId);
 
