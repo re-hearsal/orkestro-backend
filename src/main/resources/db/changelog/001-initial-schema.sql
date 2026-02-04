@@ -563,7 +563,6 @@ VALUES
     -- Co-leader: reduced permission set
     (2, 'ORG_EDIT'),
     (2, 'ORG_MEMBER_INVITE'),
-    (2, 'ORG_MEMBER_REMOVE'),
     (2, 'ORG_JOIN_REQUEST_VIEW'),
     (2, 'ORG_JOIN_REQUEST_MANAGE'),
     (2, 'ORG_ASSIGN_TECH_ROLE'),
@@ -619,5 +618,4 @@ VALUES
     -- Section Co-leader: reduced section permission set
     (4, 'SECTION_EDIT'),
     (4, 'SECTION_MEMBER_ADD'),
-    (4, 'SECTION_MEMBER_REMOVE'),
     (4, 'SECTION_ASSIGN_TECH_ROLE');
