@@ -186,6 +186,11 @@ public class OrganizationUserService {
       @Transactional
       @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_MEMBER_REMOVE')")
       public void removeUserFromOrganization(Long organizationId, Long userId) {
+            Long currentUserId = securityUtils.getCurrentUserId();
+            if (currentUserId != null && currentUserId.equals(userId)) {
+                  throw new IllegalArgumentException(
+                              "Cannot remove yourself from organization using this endpoint. Use leave endpoint instead.");
+            }
             removeUserFromOrganizationInternal(organizationId, userId);
       }
 
