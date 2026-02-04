@@ -452,10 +452,6 @@ VALUES (
         'Create/update/delete technical roles and their permissions in organization'
     ),
     (
-        'SECTION_CREATE',
-        'Create sections and nested sections'
-    ),
-    (
         'SECTION_EDIT',
         'Edit section parameters'
     ),
@@ -552,13 +548,6 @@ VALUES
     (1, 'ORG_JOIN_REQUEST_MANAGE'),
     (1, 'ORG_ASSIGN_TECH_ROLE'),
     (1, 'ORG_TECH_ROLE_MANAGE'),
-    (1, 'SECTION_CREATE'),
-    (1, 'SECTION_EDIT'),
-    (1, 'SECTION_DELETE'),
-    (1, 'SECTION_MEMBER_ADD'),
-    (1, 'SECTION_MEMBER_REMOVE'),
-    (1, 'SECTION_ASSIGN_TECH_ROLE'),
-    (1, 'SECTION_TECH_ROLE_MANAGE'),
     (1, 'REPERTOIRE_CREATE_SONG'),
     (1, 'REPERTOIRE_EDIT_SONG'),
     (1, 'REPERTOIRE_DELETE_SONG'),
@@ -578,11 +567,6 @@ VALUES
     (2, 'ORG_JOIN_REQUEST_VIEW'),
     (2, 'ORG_JOIN_REQUEST_MANAGE'),
     (2, 'ORG_ASSIGN_TECH_ROLE'),
-    (2, 'SECTION_CREATE'),
-    (2, 'SECTION_EDIT'),
-    (2, 'SECTION_MEMBER_ADD'),
-    (2, 'SECTION_MEMBER_REMOVE'),
-    (2, 'SECTION_ASSIGN_TECH_ROLE'),
     (2, 'REPERTOIRE_CREATE_SONG'),
     (2, 'REPERTOIRE_EDIT_SONG'),
     (2, 'REPERTOIRE_DELETE_SONG'),
@@ -626,7 +610,6 @@ INSERT INTO
     role_permission (role_id, permission_code)
 VALUES
     -- Section Leader: full section permission set
-    (3, 'SECTION_CREATE'),
     (3, 'SECTION_EDIT'),
     (3, 'SECTION_DELETE'),
     (3, 'SECTION_MEMBER_ADD'),
@@ -634,7 +617,6 @@ VALUES
     (3, 'SECTION_ASSIGN_TECH_ROLE'),
     (3, 'SECTION_TECH_ROLE_MANAGE'),
     -- Section Co-leader: reduced section permission set
-    (4, 'SECTION_CREATE'),
     (4, 'SECTION_EDIT'),
     (4, 'SECTION_MEMBER_ADD'),
     (4, 'SECTION_MEMBER_REMOVE'),
