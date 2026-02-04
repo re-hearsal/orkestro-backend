@@ -15,6 +15,7 @@ import io.github.Romariok.orkestro.organization.repository.OrganizationRepositor
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.service.OrganizationUserService;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
+import io.github.Romariok.orkestro.organization.mapper.OrganizationMemberMapper;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.User;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -58,6 +60,9 @@ class OrganizationUserServiceTest {
 
       @Mock
       private SecurityUtils securityUtils;
+
+      @Mock
+      private OrganizationMemberMapper organizationMemberMapper;
 
       @InjectMocks
       private OrganizationUserService organizationUserService;
@@ -206,7 +211,9 @@ class OrganizationUserServiceTest {
                         BusinessException.class,
                         () -> organizationUserService.leaveCurrentOrganization(orgId));
 
-            verify(organizationUserRepository, never()).delete(any());
+            verify(organizationUserRepository, never()).deleteByOrganizationIdAndUserId(
+                        org.mockito.Mockito.anyLong(),
+                        org.mockito.Mockito.anyLong());
       }
 
       @Test
@@ -249,6 +256,21 @@ class OrganizationUserServiceTest {
             org.junit.jupiter.api.Assertions.assertEquals(200L, capturedRoleIds.getFirst());
 
             verify(organizationUserRepository).deleteByOrganizationIdAndUserId(orgId, userId);
+      }
+
+      @Test
+      void removeUserFromOrganization_cannotRemoveSelf_throwsIllegalArgumentException() {
+            Long orgId = 1L;
+            Long userId = 10L;
+
+            when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+            assertThrows(
+                        IllegalArgumentException.class,
+                        () -> organizationUserService.removeUserFromOrganization(orgId, userId));
+
+            verify(organizationUserRepository, never()).findByOrganizationIdAndUserId(any(), any());
+            verify(organizationUserRepository, never()).deleteByOrganizationIdAndUserId(any(), any());
       }
 
       @Test
@@ -364,18 +386,32 @@ class OrganizationUserServiceTest {
                         .profileImageFileId(123L)
                         .build();
 
-            Page<User> page = new PageImpl<>(List.of(user), PageRequest.of(0, 20), 1);
-            when(userRepository.searchOrganizationMembers(
-                        org.mockito.Mockito.eq(orgId),
-                        org.mockito.Mockito.eq("abc"),
-                        org.mockito.Mockito.eq(false),
-                        org.mockito.Mockito.anyList(),
-                        org.mockito.Mockito.eq(false),
-                        org.mockito.Mockito.anyList(),
-                        org.mockito.Mockito.eq(OrganizationUserStatusType.ACCEPTED),
-                        org.mockito.Mockito.eq(RoleScopeType.ORGANIZATION),
-                        org.mockito.Mockito.any()))
+            OrganizationUser ou = OrganizationUser.builder()
+                        .organizationId(orgId)
+                        .userId(10L)
+                        .status(OrganizationUserStatusType.ACCEPTED)
+                        .joinedAt(Instant.parse("2026-01-01T00:00:00Z"))
+                        .build();
+            ou.setUser(user);
+
+            Page<OrganizationUser> page = new PageImpl<>(List.of(ou), PageRequest.of(0, 20), 1);
+            when(organizationUserRepository.findAll(
+                        org.mockito.Mockito.<org.springframework.data.jpa.domain.Specification<OrganizationUser>>any(),
+                        org.mockito.Mockito.any(org.springframework.data.domain.Pageable.class)))
                         .thenReturn(page);
+            when(organizationMemberMapper.toDto(
+                        org.mockito.Mockito.any(User.class),
+                        org.mockito.Mockito.any(Instant.class)))
+                        .thenAnswer(inv -> {
+                              User u = inv.getArgument(0);
+                              Instant joinedAt = inv.getArgument(1);
+                              return new OrganizationMemberDTO(
+                                          u.getId(),
+                                          u.getUsername(),
+                                          u.getName(),
+                                          u.getProfileImageFileId(),
+                                          joinedAt);
+                        });
 
             Page<OrganizationMemberDTO> result = organizationUserService.searchMembers(
                         orgId,
@@ -389,5 +425,83 @@ class OrganizationUserServiceTest {
             assertEquals("u", result.getContent().getFirst().getUsername());
             assertEquals("User", result.getContent().getFirst().getName());
             assertEquals(123L, result.getContent().getFirst().getProfileImageFileId());
+            assertEquals(Instant.parse("2026-01-01T00:00:00Z"), result.getContent().getFirst().getJoinedAt());
+      }
+
+      @Test
+      void searchMembers_blankQuery_returnsAllAndKeepsOtherFilters() {
+            Long orgId = 1L;
+            when(organizationRepository.existsById(orgId)).thenReturn(true);
+
+            User user = User.builder()
+                        .id(10L)
+                        .username("u")
+                        .name("User")
+                        .profileImageFileId(123L)
+                        .build();
+
+            OrganizationUser ou = OrganizationUser.builder()
+                        .organizationId(orgId)
+                        .userId(10L)
+                        .status(OrganizationUserStatusType.ACCEPTED)
+                        .joinedAt(Instant.parse("2026-01-01T00:00:00Z"))
+                        .build();
+            ou.setUser(user);
+
+            Page<OrganizationUser> page = new PageImpl<>(List.of(ou), PageRequest.of(0, 20), 1);
+            when(organizationUserRepository.findAll(
+                        org.mockito.Mockito.<org.springframework.data.jpa.domain.Specification<OrganizationUser>>any(),
+                        org.mockito.Mockito.any(org.springframework.data.domain.Pageable.class)))
+                        .thenReturn(page);
+            when(organizationMemberMapper.toDto(
+                        org.mockito.Mockito.any(User.class),
+                        org.mockito.Mockito.any(Instant.class)))
+                        .thenAnswer(inv -> {
+                              User u = inv.getArgument(0);
+                              Instant joinedAt = inv.getArgument(1);
+                              return new OrganizationMemberDTO(
+                                          u.getId(),
+                                          u.getUsername(),
+                                          u.getName(),
+                                          u.getProfileImageFileId(),
+                                          joinedAt);
+                        });
+
+            Page<OrganizationMemberDTO> result = organizationUserService.searchMembers(
+                        orgId,
+                        "   ",
+                        List.of(1L),
+                        List.of(),
+                        PageRequest.of(0, 20));
+
+            assertEquals(1, result.getTotalElements());
+      }
+
+      @Test
+      void searchMembers_sortByJoinedAt_mapsSortToMembership() {
+            Long orgId = 1L;
+            when(organizationRepository.existsById(orgId)).thenReturn(true);
+
+            when(organizationUserRepository.findAll(
+                        org.mockito.Mockito.<org.springframework.data.jpa.domain.Specification<OrganizationUser>>any(),
+                        org.mockito.Mockito.any(org.springframework.data.domain.Pageable.class)))
+                        .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+            organizationUserService.searchMembers(
+                        orgId,
+                        null,
+                        List.of(),
+                        List.of(),
+                        PageRequest.of(0, 20, Sort.by(Sort.Order.desc("joinedAt"))));
+
+            ArgumentCaptor<org.springframework.data.domain.Pageable> captor = ArgumentCaptor
+                        .forClass(org.springframework.data.domain.Pageable.class);
+            verify(organizationUserRepository).findAll(
+                        org.mockito.Mockito.<org.springframework.data.jpa.domain.Specification<OrganizationUser>>any(),
+                        captor.capture());
+
+            Sort.Order order = captor.getValue().getSort().getOrderFor("joinedAt");
+            org.junit.jupiter.api.Assertions.assertNotNull(order);
+            org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC, order.getDirection());
       }
 }

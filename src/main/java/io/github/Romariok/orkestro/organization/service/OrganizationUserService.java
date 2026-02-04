@@ -3,12 +3,13 @@ package io.github.Romariok.orkestro.organization.service;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
+import io.github.Romariok.orkestro.organization.mapper.OrganizationMemberMapper;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
+import io.github.Romariok.orkestro.organization.specification.OrganizationUserSpecifications;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Role;
-import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.UserRoleId;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
@@ -18,9 +19,13 @@ import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -37,6 +42,7 @@ public class OrganizationUserService {
       private final UserRoleRepository userRoleRepository;
       private final UserRepository userRepository;
       private final SecurityUtils securityUtils;
+      private final OrganizationMemberMapper organizationMemberMapper;
 
       @Transactional
       public void requestToJoinPublicOrganization(Long organizationId) {
@@ -129,33 +135,48 @@ public class OrganizationUserService {
                   throw new EntityNotFoundException("Organization not found: " + organizationId);
             }
 
-            String normalized = query == null ? null : query.trim();
-            if (normalized != null && normalized.isBlank()) {
-                  normalized = null;
+            Pageable mappedPageable = mapOrganizationMemberSort(pageable);
+
+            Specification<OrganizationUser> spec = Specification.where(
+                        OrganizationUserSpecifications.isOrganizationMember(organizationId, OrganizationUserStatusType.ACCEPTED))
+                        .and(OrganizationUserSpecifications.userNameOrUsernameContainsIgnoreCase(query))
+                        .and(OrganizationUserSpecifications.userHasAnyOrganizationRole(organizationId, roleIds))
+                        .and(OrganizationUserSpecifications.userHasAnyInstrument(instrumentIds));
+
+            Page<OrganizationUser> memberships = organizationUserRepository.findAll(spec, mappedPageable);
+            return memberships.map(ou -> {
+                  return organizationMemberMapper.toDto(ou.getUser(), ou.getJoinedAt());
+            });
+      }
+
+      private Pageable mapOrganizationMemberSort(Pageable pageable) {
+            if (pageable == null) {
+                  return PageRequest.of(0, 20);
+            }
+            Sort sort = pageable.getSort();
+            if (sort == null || sort.isUnsorted()) {
+                  return pageable;
             }
 
-            boolean applyRoleFilter = roleIds != null && !roleIds.isEmpty();
-            List<Long> roleIdsParam = applyRoleFilter ? roleIds : List.of(-1L);
+            List<Sort.Order> mapped = new ArrayList<>();
+            for (Sort.Order order : sort) {
+                  String prop = order.getProperty();
+                  String mappedProp = switch (prop) {
+                        case "joinedAt" -> "joinedAt";
+                        case "id" -> "user.id";
+                        case "username" -> "user.username";
+                        case "name" -> "user.name";
+                        default -> throw new IllegalArgumentException("Unsupported sort property: " + prop);
+                  };
+                  Sort.Order mappedOrder = new Sort.Order(order.getDirection(), mappedProp)
+                              .with(order.getNullHandling());
+                  if (order.isIgnoreCase()) {
+                        mappedOrder = mappedOrder.ignoreCase();
+                  }
+                  mapped.add(mappedOrder);
+            }
 
-            boolean applyInstrumentFilter = instrumentIds != null && !instrumentIds.isEmpty();
-            List<Long> instrumentIdsParam = applyInstrumentFilter ? instrumentIds : List.of(-1L);
-
-            Page<User> users = userRepository.searchOrganizationMembers(
-                        organizationId,
-                        normalized,
-                        applyRoleFilter,
-                        roleIdsParam,
-                        applyInstrumentFilter,
-                        instrumentIdsParam,
-                        OrganizationUserStatusType.ACCEPTED,
-                        RoleScopeType.ORGANIZATION,
-                        pageable);
-
-            return users.map(u -> new OrganizationMemberDTO(
-                        u.getId(),
-                        u.getUsername(),
-                        u.getName(),
-                        u.getProfileImageFileId()));
+            return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(mapped));
       }
 
       @Transactional
