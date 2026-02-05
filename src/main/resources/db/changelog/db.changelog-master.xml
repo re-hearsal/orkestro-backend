@@ -13,4 +13,13 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="002-song-tags" author="romariok">
+        <sqlFile
+            path="002-song-tags.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

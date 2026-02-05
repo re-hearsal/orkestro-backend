@@ -2,11 +2,14 @@ package io.github.Romariok.orkestro.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.repertoire.dto.SongCreateRequestDTO;
 import io.github.Romariok.orkestro.repertoire.dto.SongDTO;
 import io.github.Romariok.orkestro.repertoire.dto.SongInstrumentDTO;
@@ -22,12 +25,17 @@ import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
 import io.github.Romariok.orkestro.repertoire.service.RepertoireService;
 import io.github.Romariok.orkestro.user.models.Instrument;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileType;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
 
-import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -37,9 +45,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class RepertoireServiceTest {
+
+   @Mock
+   private OrganizationRepository organizationRepository;
 
    @Mock
    private SongRepository songRepository;
@@ -57,14 +70,33 @@ class RepertoireServiceTest {
    private StoredFileRepository storedFileRepository;
 
    @Mock
+   private FileStorageService fileStorageService;
+
+   @Mock
    private SongMapper songMapper;
 
    @InjectMocks
    private RepertoireService repertoireService;
 
+   @BeforeEach
+   void setup() {
+      when(organizationRepository.existsById(anyLong())).thenReturn(true);
+   }
+
    @Test
    void createSong_success_savesSongInstrumentationAndFiles() {
       Long orgId = 1L;
+
+      MultipartFile sheet = new MockMultipartFile(
+            "sheetFiles",
+            "sheet.jpg",
+            "image/jpeg",
+            "x".getBytes());
+      MultipartFile audio = new MockMultipartFile(
+            "audioFiles",
+            "audio.mp3",
+            "audio/mpeg",
+            "x".getBytes());
 
       SongCreateRequestDTO request = new SongCreateRequestDTO(
             "Title",
@@ -73,7 +105,9 @@ class RepertoireServiceTest {
             "Desc",
             "videoUrl",
             List.of(new SongInstrumentDTO(10L, 2)),
-            List.of(100L, 101L));
+            List.of("tagB", "tagA"),
+            List.of(sheet),
+            List.of(audio));
 
       Instrument instrument = Instrument.builder()
             .id(10L)
@@ -81,27 +115,62 @@ class RepertoireServiceTest {
             .build();
       when(instrumentRepository.findAllById(any())).thenReturn(List.of(instrument));
 
-      StoredFile f1 = StoredFile.builder().id(100L).build();
-      StoredFile f2 = StoredFile.builder().id(101L).build();
-      when(storedFileRepository.findAllById(any())).thenReturn(List.of(f1, f2));
+      Map<Long, StoredFile> fileMap = new HashMap<>();
+      fileMap.put(100L, StoredFile.builder().id(100L).fileType(FileType.PHOTO).build());
+      fileMap.put(101L, StoredFile.builder().id(101L).fileType(FileType.AUDIO).build());
 
-      Song savedSong = Song.builder()
-            .id(5L)
-            .organizationId(orgId)
-            .title("Title")
-            .createdAt(Instant.now())
-            .build();
-      when(songRepository.save(any(Song.class))).thenReturn(savedSong);
+      when(fileStorageService.uploadForCurrentUser(sheet, FileType.PHOTO)).thenReturn(fileMap.get(100L));
+      when(fileStorageService.uploadForCurrentUser(audio, FileType.AUDIO)).thenReturn(fileMap.get(101L));
 
-      SongDTO mapped = new SongDTO();
-      mapped.setId(5L);
-      mapped.setOrganizationId(orgId);
-      when(songMapper.toDto(savedSong)).thenReturn(mapped);
+      when(storedFileRepository.findAllById(any())).thenAnswer(invocation -> {
+         Iterable<Long> ids = invocation.getArgument(0);
+         List<StoredFile> out = new ArrayList<>();
+         for (Long id : ids) {
+            StoredFile f = fileMap.get(id);
+            if (f != null) {
+               out.add(f);
+            }
+         }
+         return out;
+      });
+
+      when(songRepository.save(any(Song.class))).thenAnswer(invocation -> {
+         Song s = invocation.getArgument(0);
+         s.setId(5L);
+         return s;
+      });
+
+      when(songMapper.toDto(any(Song.class))).thenAnswer(invocation -> {
+         Song s = invocation.getArgument(0);
+         SongDTO dto = new SongDTO();
+         dto.setId(s.getId());
+         dto.setOrganizationId(s.getOrganizationId());
+         dto.setTitle(s.getTitle());
+         return dto;
+      });
+
+      SongInstrument si = new SongInstrument();
+      si.setSongId(5L);
+      si.setInstrumentId(10L);
+      si.setCount(2);
+      when(songInstrumentRepository.findBySongId(5L)).thenReturn(List.of(si));
+
+      SongFile sf1 = new SongFile();
+      sf1.setSongId(5L);
+      sf1.setFileId(100L);
+      SongFile sf2 = new SongFile();
+      sf2.setSongId(5L);
+      sf2.setFileId(101L);
+      when(songFileRepository.findBySongId(5L)).thenReturn(List.of(sf1, sf2));
 
       SongDTO result = repertoireService.createSong(orgId, request);
 
       assertEquals(5L, result.getId());
       assertEquals(orgId, result.getOrganizationId());
+      assertEquals(List.of("tagA", "tagB"), result.getTags());
+      assertEquals(List.of(100L), result.getSheetFileIds());
+      assertEquals(List.of(101L), result.getAudioFileIds());
+      assertEquals(1, result.getInstrumentation().size());
 
       @SuppressWarnings("unchecked")
       ArgumentCaptor<List<SongInstrument>> instrCaptor = ArgumentCaptor
@@ -121,9 +190,43 @@ class RepertoireServiceTest {
    }
 
    @Test
+   void createSong_tooManyFiles_throwsIllegalArgument() {
+      Long orgId = 1L;
+
+      Instrument instrument = Instrument.builder()
+            .id(10L)
+            .name("Violin")
+            .build();
+      when(instrumentRepository.findAllById(any())).thenReturn(List.of(instrument));
+
+      List<MultipartFile> manySheetFiles = new ArrayList<>();
+      for (int i = 0; i < 51; i++) {
+         manySheetFiles.add(new MockMultipartFile(
+               "sheetFiles",
+               "sheet-" + i + ".jpg",
+               "image/jpeg",
+               "x".getBytes()));
+      }
+
+      SongCreateRequestDTO request = new SongCreateRequestDTO(
+            "Title",
+            null,
+            null,
+            null,
+            null,
+            List.of(new SongInstrumentDTO(10L, 1)),
+            null,
+            manySheetFiles,
+            List.of());
+
+      assertThrows(IllegalArgumentException.class, () -> repertoireService.createSong(orgId, request));
+      verify(songRepository, never()).save(any(Song.class));
+   }
+
+   @Test
    void createSong_nullInstrumentation_throwsIllegalArgument() {
       SongCreateRequestDTO request = new SongCreateRequestDTO(
-            "Title", null, null, null, null, null, null);
+            "Title", null, null, null, null, null, null, null, null);
 
       assertThrows(
             IllegalArgumentException.class,
@@ -133,7 +236,7 @@ class RepertoireServiceTest {
    @Test
    void createSong_emptyInstrumentation_throwsIllegalArgument() {
       SongCreateRequestDTO request = new SongCreateRequestDTO(
-            "Title", null, null, null, null, List.of(), null);
+            "Title", null, null, null, null, List.of(), null, null, null);
 
       assertThrows(
             IllegalArgumentException.class,
@@ -143,35 +246,10 @@ class RepertoireServiceTest {
    @Test
    void createSong_instrumentNotFound_throwsEntityNotFound() {
       SongCreateRequestDTO request = new SongCreateRequestDTO(
-            "Title", null, null, null, null, List.of(new SongInstrumentDTO(10L, 1)), null);
+            "Title", null, null, null, null, List.of(new SongInstrumentDTO(10L, 1)), null, null, null);
 
       when(instrumentRepository.findAllById(any()))
             .thenReturn(List.of()); // ничего не найдено
-
-      assertThrows(
-            EntityNotFoundException.class,
-            () -> repertoireService.createSong(1L, request));
-   }
-
-   @Test
-   void createSong_fileNotFound_throwsEntityNotFound() {
-      SongCreateRequestDTO request = new SongCreateRequestDTO(
-            "Title",
-            null,
-            null,
-            null,
-            null,
-            List.of(new SongInstrumentDTO(10L, 1)),
-            List.of(100L));
-
-      Instrument instrument = Instrument.builder()
-            .id(10L)
-            .name("Violin")
-            .build();
-      when(instrumentRepository.findAllById(any())).thenReturn(List.of(instrument));
-
-      when(storedFileRepository.findAllById(any()))
-            .thenReturn(List.of()); // файл не найден
 
       assertThrows(
             EntityNotFoundException.class,
@@ -184,7 +262,7 @@ class RepertoireServiceTest {
 
       assertThrows(
             EntityNotFoundException.class,
-            () -> repertoireService.updateSong(1L, new SongUpdateRequestDTO()));
+            () -> repertoireService.updateSong(1L, 1L, new SongUpdateRequestDTO()));
    }
 
    @Test
@@ -197,20 +275,88 @@ class RepertoireServiceTest {
       when(songRepository.findById(1L)).thenReturn(Optional.of(existing));
       when(songRepository.save(any(Song.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-      when(songMapper.toDto(existing)).thenReturn(new SongDTO());
-      when(songInstrumentRepository.findBySongId(1L)).thenReturn(List.of());
-      when(songFileRepository.findBySongId(1L)).thenReturn(List.of());
+      when(songMapper.toDto(any(Song.class))).thenReturn(new SongDTO());
 
       SongUpdateRequestDTO request = new SongUpdateRequestDTO();
       request.setTitle("New");
       request.setDescription("Desc");
 
-      repertoireService.updateSong(1L, request);
+      repertoireService.updateSong(1L, 1L, request);
 
       verify(songInstrumentRepository, never()).deleteBySongId(1L);
       verify(songFileRepository, never()).deleteBySongId(1L);
       assertEquals("New", existing.getTitle());
       assertEquals("Desc", existing.getDescription());
+   }
+
+   @Test
+   void updateSong_withTooManyFiles_doesNotDeleteExistingFiles() {
+      Song existing = Song.builder()
+            .id(1L)
+            .organizationId(1L)
+            .title("Song")
+            .build();
+      when(songRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+      // avoid StoredFile lookup inside bucketizeSongFiles by returning no existing files
+      when(songFileRepository.findBySongId(1L)).thenReturn(List.of());
+
+      List<Long> manySheetFiles = new ArrayList<>();
+      for (long i = 1; i <= 51; i++) {
+         manySheetFiles.add(i);
+      }
+
+      SongUpdateRequestDTO request = new SongUpdateRequestDTO();
+      request.setSheetFileIds(manySheetFiles);
+      request.setAudioFileIds(List.of());
+
+      assertThrows(IllegalArgumentException.class, () -> repertoireService.updateSong(1L, 1L, request));
+      verify(songFileRepository, never()).deleteBySongId(1L);
+   }
+
+   @Test
+   void updateSong_existingOtherFilesPlusNewExceedsLimit_throwsIllegalArgument() {
+      Song existing = Song.builder()
+            .id(1L)
+            .organizationId(1L)
+            .title("Song")
+            .build();
+      when(songRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+      Map<Long, StoredFile> fileMap = new HashMap<>();
+
+      // existing OTHER files: 49
+      List<SongFile> existingLinks = new ArrayList<>();
+      for (long i = 1000; i < 1049; i++) {
+         SongFile sf = new SongFile();
+         sf.setSongId(1L);
+         sf.setFileId(i);
+         existingLinks.add(sf);
+         fileMap.put(i, StoredFile.builder().id(i).fileType(FileType.OTHER).build());
+      }
+      when(songFileRepository.findBySongId(1L)).thenReturn(existingLinks);
+
+      // new sheet files: 2
+      fileMap.put(2000L, StoredFile.builder().id(2000L).fileType(FileType.PHOTO).build());
+      fileMap.put(2001L, StoredFile.builder().id(2001L).fileType(FileType.PDF).build());
+
+      when(storedFileRepository.findAllById(any())).thenAnswer(invocation -> {
+         Iterable<Long> ids = invocation.getArgument(0);
+         List<StoredFile> out = new ArrayList<>();
+         for (Long id : ids) {
+            StoredFile f = fileMap.get(id);
+            if (f != null) {
+               out.add(f);
+            }
+         }
+         return out;
+      });
+
+      SongUpdateRequestDTO request = new SongUpdateRequestDTO();
+      request.setSheetFileIds(List.of(2000L, 2001L));
+
+      assertThrows(IllegalArgumentException.class, () -> repertoireService.updateSong(1L, 1L, request));
+      verify(songFileRepository, never()).deleteBySongId(1L);
    }
 
    @Test
@@ -229,14 +375,12 @@ class RepertoireServiceTest {
             .build();
       when(instrumentRepository.findAllById(any())).thenReturn(List.of(instrument));
 
-      when(songMapper.toDto(existing)).thenReturn(new SongDTO());
-      when(songInstrumentRepository.findBySongId(1L)).thenReturn(List.of());
-      when(songFileRepository.findBySongId(1L)).thenReturn(List.of());
+      when(songMapper.toDto(any(Song.class))).thenReturn(new SongDTO());
 
       SongUpdateRequestDTO request = new SongUpdateRequestDTO();
       request.setInstrumentation(List.of(new SongInstrumentDTO(10L, 2)));
 
-      repertoireService.updateSong(1L, request);
+      repertoireService.updateSong(1L, 1L, request);
 
       verify(songInstrumentRepository).deleteBySongId(1L);
       verify(songInstrumentRepository).saveAll(any());
@@ -256,11 +400,11 @@ class RepertoireServiceTest {
 
       assertThrows(
             IllegalArgumentException.class,
-            () -> repertoireService.updateSong(1L, request));
+            () -> repertoireService.updateSong(1L, 1L, request));
    }
 
    @Test
-   void updateSong_withFiles_clearsAndRecreatesFiles() {
+   void updateSong_withSheetFiles_clearsAndRecreatesFiles() {
       Song existing = Song.builder()
             .id(1L)
             .organizationId(1L)
@@ -269,24 +413,40 @@ class RepertoireServiceTest {
       when(songRepository.findById(1L)).thenReturn(Optional.of(existing));
       when(songRepository.save(any(Song.class))).thenReturn(existing);
 
-      StoredFile f1 = StoredFile.builder().id(100L).build();
-      when(storedFileRepository.findAllById(any())).thenReturn(List.of(f1));
+      Map<Long, StoredFile> fileMap = Map.of(
+            101L, StoredFile.builder().id(101L).fileType(FileType.AUDIO).build(),
+            102L, StoredFile.builder().id(102L).fileType(FileType.PHOTO).build());
+      when(storedFileRepository.findAllById(any())).thenAnswer(invocation -> {
+         Iterable<Long> ids = invocation.getArgument(0);
+         List<StoredFile> out = new ArrayList<>();
+         for (Long id : ids) {
+            StoredFile f = fileMap.get(id);
+            if (f != null) {
+               out.add(f);
+            }
+         }
+         return out;
+      });
 
-      when(songMapper.toDto(existing)).thenReturn(new SongDTO());
-      when(songInstrumentRepository.findBySongId(1L)).thenReturn(List.of());
-      when(songFileRepository.findBySongId(1L)).thenReturn(List.of());
+      // existing files: one AUDIO
+      SongFile existingAudio = new SongFile();
+      existingAudio.setSongId(1L);
+      existingAudio.setFileId(101L);
+      when(songFileRepository.findBySongId(1L)).thenReturn(List.of(existingAudio));
+
+      when(songMapper.toDto(any(Song.class))).thenReturn(new SongDTO());
 
       SongUpdateRequestDTO request = new SongUpdateRequestDTO();
-      request.setFileIds(List.of(100L));
+      request.setSheetFileIds(List.of(102L));
 
-      repertoireService.updateSong(1L, request);
+      repertoireService.updateSong(1L, 1L, request);
 
       verify(songFileRepository).deleteBySongId(1L);
       verify(songFileRepository).saveAll(any());
    }
 
    @Test
-   void updateSong_withEmptyFileList_clearsFiles() {
+   void updateSong_withEmptySheetFileList_clearsSheetFilesOnly() {
       Song existing = Song.builder()
             .id(1L)
             .organizationId(1L)
@@ -295,18 +455,39 @@ class RepertoireServiceTest {
       when(songRepository.findById(1L)).thenReturn(Optional.of(existing));
       when(songRepository.save(any(Song.class))).thenReturn(existing);
 
-      when(songMapper.toDto(existing)).thenReturn(new SongDTO());
-      when(songInstrumentRepository.findBySongId(1L)).thenReturn(List.of());
-      when(songFileRepository.findBySongId(1L)).thenReturn(List.of());
+      Map<Long, StoredFile> fileMap = Map.of(
+            100L, StoredFile.builder().id(100L).fileType(FileType.PHOTO).build(),
+            101L, StoredFile.builder().id(101L).fileType(FileType.AUDIO).build());
+      when(storedFileRepository.findAllById(any())).thenAnswer(invocation -> {
+         Iterable<Long> ids = invocation.getArgument(0);
+         List<StoredFile> out = new ArrayList<>();
+         for (Long id : ids) {
+            StoredFile f = fileMap.get(id);
+            if (f != null) {
+               out.add(f);
+            }
+         }
+         return out;
+      });
+
+      SongFile sfSheet = new SongFile();
+      sfSheet.setSongId(1L);
+      sfSheet.setFileId(100L);
+      SongFile sfAudio = new SongFile();
+      sfAudio.setSongId(1L);
+      sfAudio.setFileId(101L);
+      when(songFileRepository.findBySongId(1L)).thenReturn(List.of(sfSheet, sfAudio));
+
+      when(songMapper.toDto(any(Song.class))).thenReturn(new SongDTO());
 
       SongUpdateRequestDTO request = new SongUpdateRequestDTO();
-      request.setFileIds(List.of());
+      request.setSheetFileIds(List.of());
 
-      repertoireService.updateSong(1L, request);
+      repertoireService.updateSong(1L, 1L, request);
 
       verify(songFileRepository).deleteBySongId(1L);
-      // saveSongFiles не должен ничего сохранить при пустом списке
-      verify(songFileRepository, never()).saveAll(any());
+      // still keeps AUDIO file -> should save at least one
+      verify(songFileRepository).saveAll(any());
    }
 
    @Test
@@ -322,27 +503,32 @@ class RepertoireServiceTest {
             .thenReturn(List.of()); // ничего не найдено
 
       SongUpdateRequestDTO request = new SongUpdateRequestDTO();
-      request.setFileIds(List.of(100L));
+      request.setSheetFileIds(List.of(100L));
 
       assertThrows(
             EntityNotFoundException.class,
-            () -> repertoireService.updateSong(1L, request));
+            () -> repertoireService.updateSong(1L, 1L, request));
    }
 
    @Test
    void deleteSong_notFound_throwsEntityNotFound() {
-      when(songRepository.existsById(1L)).thenReturn(false);
+      when(songRepository.findById(1L)).thenReturn(Optional.empty());
 
       assertThrows(
             EntityNotFoundException.class,
-            () -> repertoireService.deleteSong(1L));
+            () -> repertoireService.deleteSong(1L, 1L));
    }
 
    @Test
    void deleteSong_existing_deletes() {
-      when(songRepository.existsById(1L)).thenReturn(true);
+      Song existing = Song.builder()
+            .id(1L)
+            .organizationId(1L)
+            .title("Song")
+            .build();
+      when(songRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-      repertoireService.deleteSong(1L);
+      repertoireService.deleteSong(1L, 1L);
 
       verify(songRepository).deleteById(1L);
    }
@@ -353,7 +539,7 @@ class RepertoireServiceTest {
 
       assertThrows(
             EntityNotFoundException.class,
-            () -> repertoireService.getSong(1L));
+            () -> repertoireService.getSong(1L, 1L));
    }
 
    @Test
@@ -362,13 +548,14 @@ class RepertoireServiceTest {
             .id(1L)
             .organizationId(1L)
             .title("Song")
+            .tags(java.util.Set.of("tag1"))
             .build();
       when(songRepository.findById(1L)).thenReturn(Optional.of(song));
 
       SongDTO baseDto = new SongDTO();
       baseDto.setId(1L);
       baseDto.setOrganizationId(1L);
-      when(songMapper.toDto(song)).thenReturn(baseDto);
+      when(songMapper.toDto(any(Song.class))).thenReturn(baseDto);
 
       SongInstrument si = new SongInstrument();
       si.setSongId(1L);
@@ -381,14 +568,18 @@ class RepertoireServiceTest {
       sf.setFileId(100L);
       when(songFileRepository.findBySongId(1L)).thenReturn(List.of(sf));
 
-      SongDTO dto = repertoireService.getSong(1L);
+      when(storedFileRepository.findAllById(any())).thenReturn(
+            List.of(StoredFile.builder().id(100L).fileType(FileType.PHOTO).build()));
+
+      SongDTO dto = repertoireService.getSong(1L, 1L);
 
       assertEquals(1, dto.getInstrumentation().size());
       assertEquals(10L, dto.getInstrumentation().getFirst().getInstrumentId());
       assertEquals(2, dto.getInstrumentation().getFirst().getCount());
 
-      assertEquals(1, dto.getFileIds().size());
-      assertEquals(100L, dto.getFileIds().getFirst());
+      assertEquals(List.of("tag1"), dto.getTags());
+      assertEquals(List.of(100L), dto.getSheetFileIds());
+      assertTrue(dto.getAudioFileIds().isEmpty());
    }
 
    @Test

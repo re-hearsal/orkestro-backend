@@ -11,6 +11,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -116,6 +118,17 @@ public class GlobalExceptionHandler {
                         HttpStatus.BAD_REQUEST,
                         "Validation failed",
                         ex.getMessage(),
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
+      @ExceptionHandler({MaxUploadSizeExceededException.class, MultipartException.class})
+      public ResponseEntity<ApiErrorResponse> handleMultipartException(
+                  Exception ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.valueOf(413),
+                        "Validation failed",
+                        "Uploaded file is too large (max 30MB)",
                         request.getRequestURI(),
                         Collections.emptyList());
       }

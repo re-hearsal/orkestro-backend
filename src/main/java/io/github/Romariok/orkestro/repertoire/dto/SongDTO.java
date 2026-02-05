@@ -21,5 +21,7 @@ public class SongDTO {
    private Instant createdAt;
 
    private List<SongInstrumentDTO> instrumentation;
-   private List<Long> fileIds;
+   private List<String> tags;
+   private List<Long> sheetFileIds;
+   private List<Long> audioFileIds;
 }

@@ -22,7 +22,6 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Locale;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -64,7 +63,7 @@ public class FileStorageService {
 
          StoredFile stored = StoredFile.builder()
                .name(originalName)
-               .fileType(fileType != null ? fileType : detectFileType(file))
+               .fileType(fileType != null ? fileType : FileTypeDetector.detect(file))
                .bucketName(bucket)
                .objectName(objectName)
                .size(file.getSize())
@@ -187,29 +186,5 @@ public class FileStorageService {
          name = name.substring(lastSlash + 1);
       }
       return name;
-   }
-
-   private FileType detectFileType(MultipartFile file) {
-      String contentType = file.getContentType();
-      String filename = file.getOriginalFilename();
-      String lowerName = filename != null ? filename.toLowerCase(Locale.ROOT) : "";
-
-      if (contentType != null) {
-         if (contentType.startsWith("image/")) {
-            return FileType.PHOTO;
-         }
-         if (contentType.startsWith("audio/")) {
-            return FileType.AUDIO;
-         }
-         if (contentType.startsWith("video/")) {
-            return FileType.VIDEO;
-         }
-      }
-
-      if (lowerName.endsWith(".pdf")) {
-         return FileType.PDF;
-      }
-
-      return FileType.OTHER;
    }
 }
