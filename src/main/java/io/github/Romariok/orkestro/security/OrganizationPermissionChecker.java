@@ -1,13 +1,16 @@
 package io.github.Romariok.orkestro.security;
 
+import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
+import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -20,7 +23,9 @@ public class OrganizationPermissionChecker {
    private final UserRoleRepository userRoleRepository;
    private final RolePermissionRepository rolePermissionRepository;
    private final OrganizationUserRepository organizationUserRepository;
+   private final OrganizationRepository organizationRepository;
    private final SectionUserRepository sectionUserRepository;
+   private final SectionRepository sectionRepository;
 
    public boolean hasOrganizationPermission(Long organizationId, String permissionCode) {
       return hasPermission(RoleScopeType.ORGANIZATION, organizationId, permissionCode);
@@ -29,6 +34,9 @@ public class OrganizationPermissionChecker {
    public boolean isAcceptedOrganizationMember(Long organizationId) {
       if (organizationId == null || organizationId <= 0) {
          return false;
+      }
+      if (!organizationRepository.existsById(organizationId)) {
+         throw new EntityNotFoundException("Organization not found: " + organizationId);
       }
       Long userId;
       try {
@@ -45,6 +53,9 @@ public class OrganizationPermissionChecker {
    public boolean isSectionMember(Long sectionId) {
       if (sectionId == null || sectionId <= 0) {
          return false;
+      }
+      if (!sectionRepository.existsById(sectionId)) {
+         throw new EntityNotFoundException("Section not found: " + sectionId);
       }
       Long userId;
       try {
@@ -63,6 +74,14 @@ public class OrganizationPermissionChecker {
       if (contextId == null || permissionCode == null || permissionCode.isBlank()) {
          return false;
       }
+
+      if (scope == RoleScopeType.ORGANIZATION && !organizationRepository.existsById(contextId)) {
+         throw new EntityNotFoundException("Organization not found: " + contextId);
+      }
+      if (scope == RoleScopeType.SECTION && !sectionRepository.existsById(contextId)) {
+         throw new EntityNotFoundException("Section not found: " + contextId);
+      }
+
       Long userId;
       try {
          userId = securityUtils.getCurrentUserId();
