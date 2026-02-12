@@ -18,7 +18,9 @@ import io.github.Romariok.orkestro.user.repository.UserInstrumentRepository;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.user.service.UserService;
+import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -33,6 +35,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -51,6 +54,9 @@ class UserServiceTest {
 
         @Mock
         private StoredFileRepository storedFileRepository;
+
+        @Mock
+        private FileStorageService fileStorageService;
 
         @InjectMocks
         private UserService userService;
@@ -211,7 +217,6 @@ class UserServiceTest {
                 request.setEmail("new@example.com");
                 request.setLocation("New City");
                 request.setBirthDate(LocalDate.of(1995, 5, 5));
-                request.setNotificationChannel(NotificationChannelType.TELEGRAM);
 
                 User result = userService.updateUserProfile(userId, request);
 
@@ -219,7 +224,7 @@ class UserServiceTest {
                 assertEquals("new@example.com", result.getEmail());
                 assertEquals("New City", result.getLocation());
                 assertEquals(LocalDate.of(1995, 5, 5), result.getBirthDate());
-                assertEquals(NotificationChannelType.TELEGRAM, result.getNotificationChannel());
+                assertEquals(NotificationChannelType.EMAIL, result.getNotificationChannel());
                 assertTrue(result.getUpdatedAt() != null);
                 verify(userRepository).save(user);
         }
@@ -250,5 +255,69 @@ class UserServiceTest {
                 verify(userInstrumentRepository, never()).deleteByUserId(org.mockito.Mockito.any());
                 verify(userRoleRepository, never()).deleteByUserId(org.mockito.Mockito.any());
                 verify(userRepository, never()).deleteById(org.mockito.Mockito.any());
+        }
+
+        @Test
+        void updateNotificationChannel_telegram_throwsBusinessException() {
+                Long userId = 1L;
+                User user = User.builder().id(userId).notificationChannel(NotificationChannelType.EMAIL).build();
+                when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> userService.updateNotificationChannel(userId, NotificationChannelType.TELEGRAM));
+
+                verify(userRepository, never()).save(org.mockito.Mockito.any(User.class));
+        }
+
+        @Test
+        void updateNotificationChannel_email_clearsTelegramUserIdAndSaves() {
+                Long userId = 1L;
+                User user = User.builder()
+                                .id(userId)
+                                .notificationChannel(NotificationChannelType.TELEGRAM)
+                                .telegramUserId(123456789L)
+                                .updatedAt(Instant.parse("2020-01-01T00:00:00Z"))
+                                .build();
+                when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+                when(userRepository.save(org.mockito.Mockito.any(User.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                User result = userService.updateNotificationChannel(userId, NotificationChannelType.EMAIL);
+
+                assertEquals(NotificationChannelType.EMAIL, result.getNotificationChannel());
+                assertEquals(null, result.getTelegramUserId());
+                assertTrue(result.getUpdatedAt() != null);
+                verify(userRepository).save(user);
+        }
+
+        @Test
+        void updateProfileImage_nonImageFile_throwsBusinessException() {
+                Long userId = 1L;
+                User user = User.builder().id(userId).build();
+                when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+                MockMultipartFile file = new MockMultipartFile(
+                                "file",
+                                "notes.txt",
+                                "text/plain",
+                                "hello".getBytes());
+
+                assertThrows(BusinessException.class, () -> userService.updateProfileImage(userId, file));
+
+                verify(fileStorageService, never()).upload(org.mockito.Mockito.any(), org.mockito.Mockito.any(), org.mockito.Mockito.any());
+                verify(userRepository, never()).save(org.mockito.Mockito.any(User.class));
+        }
+
+        @Test
+        void deleteProfileImage_existingImage_deletesFileAndClearsReference() {
+                Long userId = 1L;
+                User user = User.builder().id(userId).profileImageFileId(10L).build();
+                when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+                userService.deleteProfileImage(userId);
+
+                verify(fileStorageService).delete(10L);
+                assertEquals(null, user.getProfileImageFileId());
+                verify(userRepository).save(user);
         }
 }

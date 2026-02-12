@@ -392,6 +392,27 @@ class OrganizationServiceTest {
       }
 
       @Test
+      void createOrganization_withNonImageProfileImage_throwsBusinessException() {
+            MockMultipartFile profileImage = new MockMultipartFile(
+                        "profileImage",
+                        "notes.txt",
+                        "text/plain",
+                        "not-image".getBytes());
+            OrganizationCreateRequestDTO request = new OrganizationCreateRequestDTO(
+                        "Orkestro",
+                        "Moscow",
+                        "Wind orchestra",
+                        profileImage,
+                        VisibilityLevelType.PUBLIC,
+                        null);
+
+            assertThrows(BusinessException.class, () -> organizationService.createOrganization(request));
+
+            verify(fileStorageService, never()).uploadForCurrentUser(any(), any());
+            verify(organizationRepository, never()).save(any());
+      }
+
+      @Test
       void updateOrganization_notFound_throwsEntityNotFound() {
             when(organizationRepository.findById(1L)).thenReturn(Optional.empty());
 
@@ -521,6 +542,21 @@ class OrganizationServiceTest {
             ArgumentCaptor<List<OrganizationLink>> linksCaptor = ArgumentCaptor.forClass(List.class);
             verify(organizationLinkRepository).saveAll(linksCaptor.capture());
             assertEquals(1, linksCaptor.getValue().size());
+      }
+
+      @Test
+      void deleteOrganizationProfileImage_existingImage_deletesFileAndClearsReference() {
+            Organization organization = Organization.builder()
+                        .id(1L)
+                        .profileImageFileId(10L)
+                        .build();
+            when(organizationRepository.findById(1L)).thenReturn(Optional.of(organization));
+
+            organizationService.deleteOrganizationProfileImage(1L);
+
+            verify(fileStorageService).delete(10L);
+            assertEquals(null, organization.getProfileImageFileId());
+            verify(organizationRepository).save(organization);
       }
 
 

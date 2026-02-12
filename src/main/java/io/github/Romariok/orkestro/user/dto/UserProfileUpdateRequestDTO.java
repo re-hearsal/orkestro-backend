@@ -1,8 +1,6 @@
 package io.github.Romariok.orkestro.user.dto;
 
-import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import jakarta.validation.constraints.AssertTrue;
-import jakarta.validation.constraints.AssertFalse;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
@@ -24,20 +22,13 @@ public class UserProfileUpdateRequestDTO {
    @Size(max = 255)
    private String location;
    private LocalDate birthDate;
-   private NotificationChannelType notificationChannel;
 
    @AssertTrue(message = "At least one field must be provided")
    private boolean isAnyFieldProvided() {
       return name != null
             || email != null
             || location != null
-            || birthDate != null
-            || notificationChannel != null;
-   }
-
-   @AssertFalse(message = "Cannot set notification channel 'TELEGRAM' directly")
-   private boolean isNotificationChannelEqualsTelegram() {
-      return notificationChannel.equals(NotificationChannelType.TELEGRAM);
+            || birthDate != null;
    }
 
    @AssertTrue(message = "Name cannot be blank")

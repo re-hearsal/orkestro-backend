@@ -62,6 +62,13 @@ public class OrganizationController {
       return ResponseEntity.ok(organizationService.updateOrganization(organizationId, request));
    }
 
+   @DeleteMapping("/{organizationId}/profile-image")
+   public ResponseEntity<Void> deleteOrganizationProfileImage(
+         @PathVariable @Positive Long organizationId) {
+      organizationService.deleteOrganizationProfileImage(organizationId);
+      return ResponseEntity.noContent().build();
+   }
+
    @PutMapping("/{organizationId}/visibility")
    public ResponseEntity<OrganizationDTO> updateVisibility(
          @PathVariable @Positive Long organizationId,

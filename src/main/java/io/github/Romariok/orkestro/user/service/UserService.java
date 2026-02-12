@@ -2,16 +2,21 @@ package io.github.Romariok.orkestro.user.service;
 
 import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.security.SecurityUtils;
+import io.github.Romariok.orkestro.user.dto.CurrentUserResponseDTO;
 import io.github.Romariok.orkestro.user.dto.UserProfileUpdateRequestDTO;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
+import io.github.Romariok.orkestro.user.mapper.CurrentUserMapper;
 import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.user.repository.UserInstrumentRepository;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
+import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
 
@@ -26,6 +31,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +42,8 @@ public class UserService implements UserDetailsService {
    private final RolePermissionRepository rolePermissionRepository;
    private final StoredFileRepository storedFileRepository;
    private final UserInstrumentRepository userInstrumentRepository;
+   private final FileStorageService fileStorageService;
+   private final CurrentUserMapper currentUserMapper;
    private final SecurityUtils securityUtils;
 
    @Override
@@ -90,6 +98,14 @@ public class UserService implements UserDetailsService {
       return userRepository.existsByUsername(username);
    }
 
+   @Transactional(readOnly = true)
+   public CurrentUserResponseDTO getCurrentUserProfile() {
+      Long currentUserId = securityUtils.getCurrentUserId();
+      User user = userRepository.findById(currentUserId)
+            .orElseThrow(() -> new EntityNotFoundException("User not found: " + currentUserId));
+      return currentUserMapper.toDto(user);
+   }
+
    @Transactional
    public User saveUser(User user) {
       return userRepository.save(user);
@@ -111,13 +127,6 @@ public class UserService implements UserDetailsService {
       }
       if (request.getBirthDate() != null) {
          user.setBirthDate(request.getBirthDate());
-      }
-      if (request.getNotificationChannel() != null) {
-         NotificationChannelType channel = request.getNotificationChannel();
-         user.setNotificationChannel(channel);
-         if (channel == NotificationChannelType.EMAIL) {
-            user.setTelegramUserId(null);
-         }
       }
 
       user.setUpdatedAt(Instant.now());
@@ -172,7 +181,9 @@ public class UserService implements UserDetailsService {
    public User updateNotificationChannel(Long userId, NotificationChannelType channel) {
       User user = userRepository.findById(userId)
             .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
-
+      if (channel.equals(NotificationChannelType.TELEGRAM)) {
+         throw new BusinessException("Cannot set Telegram notification channel directly. Use '/me/telegram/link-token' query instead");
+      }
       user.setNotificationChannel(channel);
       if (channel == NotificationChannelType.EMAIL) {
          user.setTelegramUserId(null);
@@ -189,20 +200,51 @@ public class UserService implements UserDetailsService {
    }
 
    @Transactional
-   public void updateCurrentUserProfileImage(Long fileId) {
+   public void updateCurrentUserProfileImage(MultipartFile file) {
       Long currentUserId = securityUtils.getCurrentUserId();
-      updateProfileImage(currentUserId, fileId);
+      updateProfileImage(currentUserId, file);
    }
 
    @Transactional
-   public void updateProfileImage(Long userId, Long fileId) {
+   public void deleteCurrentUserProfileImage() {
+      Long currentUserId = securityUtils.getCurrentUserId();
+      deleteProfileImage(currentUserId);
+   }
+
+   @Transactional
+   public void updateProfileImage(Long userId, MultipartFile file) {
       User user = userRepository.findById(userId)
             .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
 
-      StoredFile file = storedFileRepository.findById(fileId)
-            .orElseThrow(() -> new EntityNotFoundException("File not found: " + fileId));
+      validateProfileImageFile(file);
+      StoredFile uploadedFile = fileStorageService.upload(file, FileType.PHOTO, userId);
 
-      user.setProfileImageFileId(file.getId());
+      user.setProfileImageFileId(uploadedFile.getId());
       userRepository.save(user);
+   }
+
+   @Transactional
+   public void deleteProfileImage(Long userId) {
+      User user = userRepository.findById(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+
+      Long profileImageFileId = user.getProfileImageFileId();
+      if (profileImageFileId == null) {
+         return;
+      }
+
+      fileStorageService.delete(profileImageFileId);
+      user.setProfileImageFileId(null);
+      userRepository.save(user);
+   }
+
+   private void validateProfileImageFile(MultipartFile file) {
+      if (file == null || file.isEmpty() || file.getSize() <= 0) {
+         throw new BusinessException("Profile image must be a non-empty image file");
+      }
+      String contentType = file.getContentType();
+      if (contentType == null || contentType.isBlank() || !contentType.startsWith("image/")) {
+         throw new BusinessException("Profile image must be an image file");
+      }
    }
 }

@@ -74,6 +74,7 @@ public class OrganizationService {
       StoredFile file = null;
       try {
          if (request.getProfileImage() != null && !request.getProfileImage().isEmpty()) {
+            validateProfileImageFile(request.getProfileImage());
             file = fileStorageService.uploadForCurrentUser(
                   request.getProfileImage(),
                   FileType.PHOTO);
@@ -116,6 +117,18 @@ public class OrganizationService {
       } catch (RuntimeException ex) {
          fileRollbackHelper.deleteFilesSafely(file != null ? List.of(file.getId()) : List.of());
          throw ex;
+      }
+   }
+
+   private void validateProfileImageFile(org.springframework.web.multipart.MultipartFile profileImage) {
+      if (profileImage == null || profileImage.isEmpty() || profileImage.getSize() <= 0) {
+         throw new io.github.Romariok.orkestro.utils.exception.BusinessException(
+               "Organization profile image must be a non-empty image file");
+      }
+      String contentType = profileImage.getContentType();
+      if (contentType == null || contentType.isBlank() || !contentType.startsWith("image/")) {
+         throw new io.github.Romariok.orkestro.utils.exception.BusinessException(
+               "Organization profile image must be an image file");
       }
    }
 
@@ -164,6 +177,22 @@ public class OrganizationService {
       }
 
       return buildOrganizationDto(saved);
+   }
+
+   @Transactional
+   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_EDIT')")
+   public void deleteOrganizationProfileImage(Long organizationId) {
+      Organization organization = organizationRepository.findById(organizationId)
+            .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
+
+      Long profileImageFileId = organization.getProfileImageFileId();
+      if (profileImageFileId == null) {
+         return;
+      }
+
+      fileStorageService.delete(profileImageFileId);
+      organization.setProfileImageFileId(null);
+      organizationRepository.save(organization);
    }
 
    /**
