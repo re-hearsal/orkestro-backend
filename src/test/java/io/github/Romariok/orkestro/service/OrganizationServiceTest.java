@@ -38,6 +38,7 @@ import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 
 import java.time.Instant;
 import java.util.List;
@@ -91,6 +92,9 @@ class OrganizationServiceTest {
 
       @Mock
       private FileStorageService fileStorageService;
+
+      @Mock
+      private FileRollbackHelper fileRollbackHelper;
 
       @InjectMocks
       private OrganizationService organizationService;

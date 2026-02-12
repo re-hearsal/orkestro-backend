@@ -22,6 +22,7 @@ import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.FileTypeDetector;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -58,6 +59,7 @@ public class RepertoireService {
    private final FileStorageService fileStorageService;
    private final StoredFileRepository storedFileRepository;
    private final SongMapper songMapper;
+   private final FileRollbackHelper fileRollbackHelper;
 
    @Transactional
    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'REPERTOIRE_CREATE_SONG')")
@@ -66,31 +68,37 @@ public class RepertoireService {
       validateInstruments(request.getInstrumentation());
 
       List<String> normalizedTags = normalizeTags(request.getTags());
-      List<Long> uploadedFileIds = uploadSongFilesForCreate(
-            request.getSheetFiles(),
-            request.getAudioFiles());
+      List<Long> uploadedFileIds = List.of();
+      try {
+         uploadedFileIds = uploadSongFilesForCreate(
+               request.getSheetFiles(),
+               request.getAudioFiles());
 
-      Song song = Song.builder()
-            .organizationId(organizationId)
-            .title(normalizeRequiredString(request.getTitle(), "title"))
-            .composer(normalizeNullableString(request.getComposer()))
-            .durationSeconds(request.getDurationSeconds())
-            .description(normalizeNullableString(request.getDescription()))
-            .videoUrl(normalizeNullableString(request.getVideoUrl()))
-            .createdAt(Instant.now())
-            .build();
+         Song song = Song.builder()
+               .organizationId(organizationId)
+               .title(normalizeRequiredString(request.getTitle(), "title"))
+               .composer(normalizeNullableString(request.getComposer()))
+               .durationSeconds(request.getDurationSeconds())
+               .description(normalizeNullableString(request.getDescription()))
+               .videoUrl(normalizeNullableString(request.getVideoUrl()))
+               .createdAt(Instant.now())
+               .build();
 
-      if (!normalizedTags.isEmpty()) {
-         song.getTags().addAll(normalizedTags);
+         if (!normalizedTags.isEmpty()) {
+            song.getTags().addAll(normalizedTags);
+         }
+
+         Song saved = songRepository.save(song);
+
+         saveInstrumentation(saved.getId(), request.getInstrumentation());
+         validateSongTotalFilesCount(uploadedFileIds);
+         saveSongFiles(saved.getId(), uploadedFileIds);
+
+         return buildSongDto(saved);
+      } catch (RuntimeException ex) {
+         fileRollbackHelper.deleteFilesSafely(uploadedFileIds);
+         throw ex;
       }
-
-      Song saved = songRepository.save(song);
-
-      saveInstrumentation(saved.getId(), request.getInstrumentation());
-      validateSongTotalFilesCount(uploadedFileIds);
-      saveSongFiles(saved.getId(), uploadedFileIds);
-
-      return buildSongDto(saved);
    }
 
    @Transactional
@@ -189,13 +197,17 @@ public class RepertoireService {
       StoredFile stored = fileStorageService.uploadForCurrentUser(
             request.getFile(),
             detectedType);
+      try {
+         SongFile link = new SongFile();
+         link.setSongId(songId);
+         link.setFileId(stored.getId());
+         songFileRepository.save(link);
 
-      SongFile link = new SongFile();
-      link.setSongId(songId);
-      link.setFileId(stored.getId());
-      songFileRepository.save(link);
-
-      return buildSongDto(song);
+         return buildSongDto(song);
+      } catch (RuntimeException ex) {
+         fileRollbackHelper.deleteFilesSafely(List.of(stored.getId()));
+         throw ex;
+      }
    }
 
    @Transactional

@@ -13,6 +13,8 @@ import io.github.Romariok.orkestro.user.service.AuthService;
 import io.github.Romariok.orkestro.user.service.UserService;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +42,12 @@ class AuthServiceTest {
 
       @Mock
       private AuthenticationManager authenticationManager;
+
+      @Mock
+      private FileStorageService fileStorageService;
+
+      @Mock
+      private FileRollbackHelper fileRollbackHelper;
 
       @InjectMocks
       private AuthService authService;

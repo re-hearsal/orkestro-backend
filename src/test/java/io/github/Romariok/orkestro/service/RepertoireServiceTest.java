@@ -29,6 +29,7 @@ import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -74,6 +75,9 @@ class RepertoireServiceTest {
 
    @Mock
    private SongMapper songMapper;
+
+   @Mock
+   private FileRollbackHelper fileRollbackHelper;
 
    @InjectMocks
    private RepertoireService repertoireService;

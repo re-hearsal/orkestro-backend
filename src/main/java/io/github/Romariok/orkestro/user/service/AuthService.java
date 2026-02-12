@@ -9,10 +9,12 @@ import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.exception.InternalServiceException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class AuthService {
     private final JWTUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
     private final FileStorageService fileStorageService;
+    private final FileRollbackHelper fileRollbackHelper;
 
     @Transactional
     public AuthResponseDTO register(RegisterRequestDTO request) {
@@ -53,6 +56,7 @@ public class AuthService {
             throw new BusinessException("Username is already taken");
         }
 
+        Long uploadedAvatarId = null;
         try {
             Instant now = Instant.now();
             User user = User.builder()
@@ -73,6 +77,7 @@ public class AuthService {
                         request.getAvatar(),
                         FileType.PHOTO,
                         user.getId());
+                uploadedAvatarId = avatar.getId();
                 user.setProfileImageFileId(avatar.getId());
                 user.setUpdatedAt(Instant.now());
                 userService.saveUser(user);
@@ -83,6 +88,8 @@ public class AuthService {
             log.info("Token generated for new user: {}", user.getUsername());
             return new AuthResponseDTO(token, user.getUsername());
         } catch (Exception e) {
+            fileRollbackHelper.deleteFilesSafely(
+                    uploadedAvatarId != null ? List.of(uploadedAvatarId) : List.of());
             log.error("Error during user registration: {}", e.getMessage(), e);
             throw new InternalServiceException("Error during user registration", e);
         }

@@ -31,6 +31,7 @@ import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.FileType;
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -62,6 +63,7 @@ public class OrganizationService {
    private final RolePermissionRepository rolePermissionRepository;
    private final SecurityUtils securityUtils;
    private final FileStorageService fileStorageService;
+   private final FileRollbackHelper fileRollbackHelper;
 
    @Transactional
    public OrganizationDTO createOrganization(OrganizationCreateRequestDTO request) {
@@ -70,46 +72,51 @@ public class OrganizationService {
       String normalizedDescription = request.getDescription() == null ? null : request.getDescription().trim();
 
       StoredFile file = null;
-      if (request.getProfileImage() != null && !request.getProfileImage().isEmpty()) {
-         file = fileStorageService.uploadForCurrentUser(
-               request.getProfileImage(),
-               FileType.PHOTO);
+      try {
+         if (request.getProfileImage() != null && !request.getProfileImage().isEmpty()) {
+            file = fileStorageService.uploadForCurrentUser(
+                  request.getProfileImage(),
+                  FileType.PHOTO);
+         }
+
+         Organization organization = Organization.builder()
+               .name(normalizedName)
+               .location(normalizedLocation)
+               .description(normalizedDescription)
+               .profileImageFileId(file != null ? file.getId() : null)
+               .createdAt(Instant.now())
+               .visibilityLevel(request.getVisibilityLevel())
+               .build();
+
+         Organization saved = organizationRepository.save(organization);
+
+         saveLinks(saved.getId(), request.getLinks());
+
+         // Создатель автоматически становится участником организации
+         Long creatorId = securityUtils.getCurrentUserId();
+         OrganizationUser creatorMembership = OrganizationUser.builder()
+               .organizationId(saved.getId())
+               .userId(creatorId)
+               .status(OrganizationUserStatusType.ACCEPTED)
+               .joinedAt(Instant.now())
+               .build();
+         organizationUserRepository.save(creatorMembership);
+
+         // Первый участник становится Leader
+         ensureOrganizationBaseRoles(saved.getId());
+         syncOrganizationLeadershipRoles(saved.getId());
+
+         // если организация создаётся сразу приватной — генерируем пригласительную
+         // ссылку
+         if (saved.getVisibilityLevel() == VisibilityLevelType.PRIVATE) {
+            createOrRegenerateInvite(saved.getId(), creatorId);
+         }
+
+         return buildOrganizationDto(saved);
+      } catch (RuntimeException ex) {
+         fileRollbackHelper.deleteFilesSafely(file != null ? List.of(file.getId()) : List.of());
+         throw ex;
       }
-
-      Organization organization = Organization.builder()
-            .name(normalizedName)
-            .location(normalizedLocation)
-            .description(normalizedDescription)
-            .profileImageFileId(file != null ? file.getId() : null)
-            .createdAt(Instant.now())
-            .visibilityLevel(request.getVisibilityLevel())
-            .build();
-
-      Organization saved = organizationRepository.save(organization);
-
-      saveLinks(saved.getId(), request.getLinks());
-
-      // Создатель автоматически становится участником организации
-      Long creatorId = securityUtils.getCurrentUserId();
-      OrganizationUser creatorMembership = OrganizationUser.builder()
-            .organizationId(saved.getId())
-            .userId(creatorId)
-            .status(OrganizationUserStatusType.ACCEPTED)
-            .joinedAt(Instant.now())
-            .build();
-      organizationUserRepository.save(creatorMembership);
-
-      // Первый участник становится Leader
-      ensureOrganizationBaseRoles(saved.getId());
-      syncOrganizationLeadershipRoles(saved.getId());
-
-      // если организация создаётся сразу приватной — генерируем пригласительную
-      // ссылку
-      if (saved.getVisibilityLevel() == VisibilityLevelType.PRIVATE) {
-         createOrRegenerateInvite(saved.getId(), creatorId);
-      }
-
-      return buildOrganizationDto(saved);
    }
 
    /**
