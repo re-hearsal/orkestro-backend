@@ -22,6 +22,9 @@ public interface OrganizationUserRepository extends JpaRepository<OrganizationUs
 
    List<OrganizationUser> findByOrganizationIdAndStatus(Long organizationId, OrganizationUserStatusType status);
 
+   List<OrganizationUser> findByOrganizationIdAndStatusOrderByJoinedAtAsc(
+         Long organizationId, OrganizationUserStatusType status);
+
    long countByOrganizationIdAndStatus(Long organizationId, OrganizationUserStatusType status);
 
    @Override

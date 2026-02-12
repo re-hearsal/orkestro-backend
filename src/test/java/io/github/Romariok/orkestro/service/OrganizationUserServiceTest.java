@@ -13,13 +13,13 @@ import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.organization.service.OrganizationService;
 import io.github.Romariok.orkestro.organization.service.OrganizationUserService;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
 import io.github.Romariok.orkestro.organization.mapper.OrganizationMemberMapper;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.User;
-import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
@@ -63,6 +63,9 @@ class OrganizationUserServiceTest {
 
       @Mock
       private OrganizationMemberMapper organizationMemberMapper;
+
+      @Mock
+      private OrganizationService organizationService;
 
       @InjectMocks
       private OrganizationUserService organizationUserService;
@@ -123,16 +126,12 @@ class OrganizationUserServiceTest {
 
             when(organizationUserRepository.findByOrganizationIdAndUserId(1L, 10L))
                         .thenReturn(Optional.of(ou));
-            when(organizationUserRepository.countByOrganizationIdAndStatus(1L, OrganizationUserStatusType.ACCEPTED))
-                        .thenReturn(1L);
 
             organizationUserService.approveJoinRequest(1L, 10L);
 
             assertEquals(OrganizationUserStatusType.ACCEPTED, ou.getStatus());
             verify(organizationUserRepository).save(ou);
-            verify(roleRepository, never()).findByScopeAndOrganizationIdAndName(
-                        org.mockito.Mockito.any(), org.mockito.Mockito.anyLong(), org.mockito.Mockito.anyString());
-            verify(userRoleRepository, never()).save(any(UserRole.class));
+            verify(organizationService).syncOrganizationLeadershipRoles(1L);
       }
 
       @Test
@@ -193,8 +192,17 @@ class OrganizationUserServiceTest {
             membership.setStatus(OrganizationUserStatusType.ACCEPTED);
             membership.setJoinedAt(Instant.now());
 
+            OrganizationUser otherMember = new OrganizationUser();
+            otherMember.setOrganizationId(orgId);
+            otherMember.setUserId(20L);
+            otherMember.setStatus(OrganizationUserStatusType.ACCEPTED);
+            otherMember.setJoinedAt(Instant.now());
+
             when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId))
                         .thenReturn(Optional.of(membership));
+            when(organizationUserRepository.findByOrganizationIdAndStatusOrderByJoinedAtAsc(
+                        orgId, OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(List.of(membership, otherMember));
 
             Role leaderRole = Role.builder()
                         .id(100L)
@@ -231,6 +239,11 @@ class OrganizationUserServiceTest {
 
             when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId))
                         .thenReturn(Optional.of(membership));
+            when(organizationUserRepository.findByOrganizationIdAndStatusOrderByJoinedAtAsc(
+                        orgId, OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(List.of(membership));
+            when(organizationUserRepository.countByOrganizationIdAndStatus(orgId, OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(0L);
 
             when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, orgId, "Leader"))
                         .thenReturn(Optional.empty());
@@ -256,6 +269,7 @@ class OrganizationUserServiceTest {
             org.junit.jupiter.api.Assertions.assertEquals(200L, capturedRoleIds.getFirst());
 
             verify(organizationUserRepository).deleteByOrganizationIdAndUserId(orgId, userId);
+            verify(organizationService).deleteOrganizationCascade(orgId);
       }
 
       @Test
@@ -351,19 +365,6 @@ class OrganizationUserServiceTest {
             when(userRepository.existsById(userId)).thenReturn(true);
             when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId))
                         .thenReturn(Optional.empty());
-            when(organizationUserRepository.countByOrganizationIdAndStatus(orgId, OrganizationUserStatusType.ACCEPTED))
-                        .thenReturn(2L);
-
-            Role coLeaderRole = Role.builder()
-                        .id(200L)
-                        .scope(RoleScopeType.ORGANIZATION)
-                        .organizationId(orgId)
-                        .name("Co-leader")
-                        .build();
-            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, orgId, "Co-leader"))
-                        .thenReturn(Optional.of(coLeaderRole));
-
-            when(userRoleRepository.existsById(any())).thenReturn(false);
 
             organizationUserService.addUserToOrganization(orgId, userId);
 
@@ -371,7 +372,7 @@ class OrganizationUserServiceTest {
             verify(organizationUserRepository).save(ouCaptor.capture());
             assertEquals(OrganizationUserStatusType.ACCEPTED, ouCaptor.getValue().getStatus());
 
-            verify(userRoleRepository).save(any(UserRole.class));
+            verify(organizationService).syncOrganizationLeadershipRoles(orgId);
       }
 
       @Test

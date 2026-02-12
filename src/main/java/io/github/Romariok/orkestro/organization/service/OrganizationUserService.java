@@ -38,6 +38,7 @@ public class OrganizationUserService {
 
       private final OrganizationUserRepository organizationUserRepository;
       private final OrganizationRepository organizationRepository;
+      private final OrganizationService organizationService;
       private final RoleRepository roleRepository;
       private final UserRoleRepository userRoleRepository;
       private final UserRepository userRepository;
@@ -112,7 +113,7 @@ public class OrganizationUserService {
             ou.setStatus(OrganizationUserStatusType.ACCEPTED);
             organizationUserRepository.save(ou);
 
-            assignCoLeaderIfSecondAccepted(organizationId, userId);
+            organizationService.syncOrganizationLeadershipRoles(organizationId);
       }
 
       @Transactional(readOnly = true)
@@ -195,13 +196,15 @@ public class OrganizationUserService {
             organizationUser.setStatus(OrganizationUserStatusType.ACCEPTED);
             organizationUserRepository.save(organizationUser);
 
-            assignCoLeaderIfSecondAccepted(organizationId, userId);
+            organizationService.syncOrganizationLeadershipRoles(organizationId);
       }
 
       @Transactional
+      @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMember(#organizationId)")
       public void leaveCurrentOrganization(Long organizationId) {
             Long currentUserId = securityUtils.getCurrentUserId();
-            removeUserFromOrganizationInternal(organizationId, currentUserId);
+            validateLeaveOrganization(organizationId, currentUserId);
+            removeUserAndReconcileOrganization(organizationId, currentUserId);
       }
 
       @Transactional
@@ -212,34 +215,50 @@ public class OrganizationUserService {
                   throw new IllegalArgumentException(
                               "Cannot remove yourself from organization using this endpoint. Use leave endpoint instead.");
             }
-            removeUserFromOrganizationInternal(organizationId, userId);
+            removeUserAndReconcileOrganization(organizationId, userId);
+      }
+
+      private void validateLeaveOrganization(Long organizationId, Long userId) {
+            organizationUserRepository
+                        .findByOrganizationIdAndUserId(organizationId, userId)
+                        .orElseThrow(() -> new EntityNotFoundException(
+                                    "User " + userId + " is not a member of organization " + organizationId));
+
+            List<OrganizationUser> members = organizationUserRepository
+                        .findByOrganizationIdAndStatusOrderByJoinedAtAsc(organizationId, OrganizationUserStatusType.ACCEPTED);
+            int memberCount = members.size();
+
+            if (memberCount > 0) {
+                  boolean isLeader = roleRepository.findByScopeAndOrganizationIdAndName(
+                                    RoleScopeType.ORGANIZATION, organizationId, "Leader")
+                              .map(role -> userRoleRepository.existsById(
+                                          UserRoleId.builder().userId(userId).roleId(role.getId()).build()))
+                              .orElse(false);
+
+                  boolean isCoLeader = roleRepository
+                              .findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, organizationId, "Co-leader")
+                              .map(role -> userRoleRepository.existsById(
+                                          UserRoleId.builder().userId(userId).roleId(role.getId()).build()))
+                              .orElse(false);
+
+                  if (isLeader && memberCount > 1) {
+                        throw new BusinessException(
+                                    "Leader cannot leave organization while other members exist");
+                  }
+                  if (isCoLeader && memberCount > 2) {
+                        throw new BusinessException(
+                                    "Co-leader cannot leave organization while other non-leader members exist");
+                  }
+            }
       }
 
       @Transactional(propagation = Propagation.SUPPORTS)
-      public void removeUserFromOrganizationInternal(Long organizationId, Long currentUserId) {
+      public void removeUserAndReconcileOrganization(Long organizationId, Long userId) {
             organizationUserRepository
-                        .findByOrganizationIdAndUserId(organizationId, currentUserId)
+                        .findByOrganizationIdAndUserId(organizationId, userId)
                         .orElseThrow(() -> new EntityNotFoundException(
-                                    "User " + currentUserId + " is not a member of organization " + organizationId));
+                                    "User " + userId + " is not a member of organization " + organizationId));
 
-            // Проверяем, что пользователь не является Leader в этой организации
-            roleRepository.findByScopeAndOrganizationIdAndName(
-                        RoleScopeType.ORGANIZATION,
-                        organizationId,
-                        "Leader")
-                        .ifPresent(leaderRole -> {
-                              UserRoleId leaderMappingId = UserRoleId.builder()
-                                          .userId(currentUserId)
-                                          .roleId(leaderRole.getId())
-                                          .build();
-
-                              if (userRoleRepository.existsById(leaderMappingId)) {
-                                    throw new BusinessException(
-                                                "Leader must transfer the Leader role to another user before leaving the organization");
-                              }
-                        });
-
-            // Удаляем все организационные роли пользователя в этой организации
             List<Role> organizationRoles = roleRepository.findByScopeAndOrganizationId(
                         RoleScopeType.ORGANIZATION,
                         organizationId);
@@ -247,10 +266,18 @@ public class OrganizationUserService {
                   List<Long> roleIds = organizationRoles.stream()
                               .map(Role::getId)
                               .toList();
-                  userRoleRepository.deleteByUserIdAndRoleIdIn(currentUserId, roleIds);
+                  userRoleRepository.deleteByUserIdAndRoleIdIn(userId, roleIds);
             }
 
-            organizationUserRepository.deleteByOrganizationIdAndUserId(organizationId, currentUserId);
+            organizationUserRepository.deleteByOrganizationIdAndUserId(organizationId, userId);
+
+            long remainingCount = organizationUserRepository.countByOrganizationIdAndStatus(
+                        organizationId, OrganizationUserStatusType.ACCEPTED);
+            if (remainingCount == 0) {
+                  organizationService.deleteOrganizationCascade(organizationId);
+            } else {
+                  organizationService.syncOrganizationLeadershipRoles(organizationId);
+            }
       }
 
       @Transactional
@@ -268,40 +295,5 @@ public class OrganizationUserService {
 
             organizationUser.setStatus(OrganizationUserStatusType.REJECTED);
             organizationUserRepository.save(organizationUser);
-      }
-
-      private void assignCoLeaderIfSecondAccepted(Long organizationId, Long userId) {
-            long acceptedCount = organizationUserRepository.countByOrganizationIdAndStatus(
-                        organizationId,
-                        OrganizationUserStatusType.ACCEPTED);
-
-            if (acceptedCount != 2) {
-                  return;
-            }
-
-            Role role = roleRepository.findByScopeAndOrganizationIdAndName(
-                        RoleScopeType.ORGANIZATION,
-                        organizationId,
-                        "Co-leader")
-                        .orElse(null);
-
-            if (role == null) {
-                  return;
-            }
-
-            UserRoleId id = UserRoleId.builder()
-                        .userId(userId)
-                        .roleId(role.getId())
-                        .build();
-
-            if (userRoleRepository.existsById(id)) {
-                  return;
-            }
-
-            UserRole userRole = UserRole.builder()
-                        .userId(userId)
-                        .roleId(role.getId())
-                        .build();
-            userRoleRepository.save(userRole);
       }
 }

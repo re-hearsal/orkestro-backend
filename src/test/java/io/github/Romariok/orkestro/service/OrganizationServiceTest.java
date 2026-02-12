@@ -32,7 +32,6 @@ import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
-import io.github.Romariok.orkestro.user.service.TechnicalRoleService;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
@@ -86,9 +85,6 @@ class OrganizationServiceTest {
 
       @Mock
       private SecurityUtils securityUtils;
-
-      @Mock
-      private TechnicalRoleService technicalRoleService;
 
       @Mock
       private OrganizationInviteRepository organizationInviteRepository;
@@ -182,6 +178,26 @@ class OrganizationServiceTest {
                         buildLinkEntity(1L, LinkType.WEBSITE, "https://orkestro.example"),
                         buildLinkEntity(1L, LinkType.YOUTUBE, "https://youtube.com/orkestro")));
 
+            when(organizationRepository.existsById(1L)).thenReturn(true);
+            OrganizationUser creatorOu = OrganizationUser.builder()
+                        .organizationId(1L)
+                        .userId(100L)
+                        .status(io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType.ACCEPTED)
+                        .joinedAt(Instant.now())
+                        .build();
+            when(organizationUserRepository.findByOrganizationIdAndStatusOrderByJoinedAtAsc(
+                        1L, io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(List.of(creatorOu));
+            Role orgCoLeaderRole = Role.builder()
+                        .id(21L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .organizationId(1L)
+                        .name("Co-leader")
+                        .build();
+            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Co-leader"))
+                        .thenReturn(Optional.of(orgCoLeaderRole));
+            when(userRoleRepository.findByRoleId(20L)).thenReturn(List.of());
+
             OrganizationDTO result = organizationService.createOrganization(request);
 
             ArgumentCaptor<Organization> orgCaptor = ArgumentCaptor.forClass(Organization.class);
@@ -198,9 +214,8 @@ class OrganizationServiceTest {
             // создатель добавлен как участник
             verify(organizationUserRepository).save(any(OrganizationUser.class));
 
-            // и для него вызван сервис назначения роли Leader
-            verify(technicalRoleService)
-                        .assignOrganizationRoleToUserInternal(1L, 100L, orgLeaderRole.getId());
+            // syncOrganizationLeadershipRoles назначает Leader первому участнику
+            verify(userRoleRepository).save(any(io.github.Romariok.orkestro.user.models.UserRole.class));
 
             // для публичной организации пригласительная ссылка не создаётся автоматически
             verify(organizationInviteRepository, never()).save(any());
@@ -267,6 +282,26 @@ class OrganizationServiceTest {
             when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Leader"))
                         .thenReturn(Optional.of(orgLeaderRole));
 
+            when(organizationRepository.existsById(1L)).thenReturn(true);
+            OrganizationUser creatorOu = OrganizationUser.builder()
+                        .organizationId(1L)
+                        .userId(100L)
+                        .status(io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType.ACCEPTED)
+                        .joinedAt(Instant.now())
+                        .build();
+            when(organizationUserRepository.findByOrganizationIdAndStatusOrderByJoinedAtAsc(
+                        1L, io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(List.of(creatorOu));
+            Role orgCoLeaderRole = Role.builder()
+                        .id(21L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .organizationId(1L)
+                        .name("Co-leader")
+                        .build();
+            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Co-leader"))
+                        .thenReturn(Optional.of(orgCoLeaderRole));
+            when(userRoleRepository.findByRoleId(20L)).thenReturn(List.of());
+
             OrganizationDTO baseDto = new OrganizationDTO();
             baseDto.setId(1L);
             baseDto.setName("Orkestro");
@@ -321,6 +356,27 @@ class OrganizationServiceTest {
             when(roleRepository.saveAll(any())).thenReturn(List.of(orgLeaderRole));
             when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Leader"))
                         .thenReturn(Optional.of(orgLeaderRole));
+
+            when(organizationRepository.existsById(1L)).thenReturn(true);
+            OrganizationUser creatorOu = OrganizationUser.builder()
+                        .organizationId(1L)
+                        .userId(100L)
+                        .status(io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType.ACCEPTED)
+                        .joinedAt(Instant.now())
+                        .build();
+            when(organizationUserRepository.findByOrganizationIdAndStatusOrderByJoinedAtAsc(
+                        1L, io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(List.of(creatorOu));
+            Role orgCoLeaderRole = Role.builder()
+                        .id(21L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .organizationId(1L)
+                        .name("Co-leader")
+                        .build();
+            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Co-leader"))
+                        .thenReturn(Optional.of(orgCoLeaderRole));
+            when(userRoleRepository.findByRoleId(20L)).thenReturn(List.of());
+
             OrganizationDTO baseDto = new OrganizationDTO();
             baseDto.setId(1L);
             when(organizationMapper.toDto(saved)).thenReturn(baseDto);
@@ -658,6 +714,26 @@ class OrganizationServiceTest {
             when(roleRepository.saveAll(any())).thenReturn(List.of(orgLeaderRole));
             when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Leader"))
                         .thenReturn(Optional.of(orgLeaderRole));
+
+            when(organizationRepository.existsById(1L)).thenReturn(true);
+            OrganizationUser creatorOu = OrganizationUser.builder()
+                        .organizationId(1L)
+                        .userId(100L)
+                        .status(io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType.ACCEPTED)
+                        .joinedAt(Instant.now())
+                        .build();
+            when(organizationUserRepository.findByOrganizationIdAndStatusOrderByJoinedAtAsc(
+                        1L, io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(List.of(creatorOu));
+            Role orgCoLeaderRole = Role.builder()
+                        .id(21L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .organizationId(1L)
+                        .name("Co-leader")
+                        .build();
+            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, 1L, "Co-leader"))
+                        .thenReturn(Optional.of(orgCoLeaderRole));
+            when(userRoleRepository.findByRoleId(20L)).thenReturn(List.of());
 
             when(organizationInviteRepository.findById(1L)).thenReturn(Optional.empty());
             when(organizationInviteRepository.save(any(OrganizationInvite.class)))

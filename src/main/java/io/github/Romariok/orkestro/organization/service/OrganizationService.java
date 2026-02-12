@@ -21,10 +21,11 @@ import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.RolePermission;
+import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
-import io.github.Romariok.orkestro.user.service.TechnicalRoleService;
+import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
@@ -56,10 +57,10 @@ public class OrganizationService {
    private final StoredFileRepository storedFileRepository;
    private final SongRepository songRepository;
    private final RoleRepository roleRepository;
+   private final UserRoleRepository userRoleRepository;
    private final OrganizationMapper organizationMapper;
    private final RolePermissionRepository rolePermissionRepository;
    private final SecurityUtils securityUtils;
-   private final TechnicalRoleService technicalRoleService;
    private final FileStorageService fileStorageService;
 
    @Transactional
@@ -98,20 +99,9 @@ public class OrganizationService {
             .build();
       organizationUserRepository.save(creatorMembership);
 
-      // и получает роль Leader внутри этой организации
+      // Первый участник становится Leader
       ensureOrganizationBaseRoles(saved.getId());
-
-      Role leaderRole = roleRepository.findByScopeAndOrganizationIdAndName(
-            RoleScopeType.ORGANIZATION,
-            saved.getId(),
-            "Leader")
-            .orElseThrow(() -> new EntityNotFoundException(
-                  "Role not found for organization " + saved.getId() + " and name Leader"));
-
-      technicalRoleService.assignOrganizationRoleToUserInternal(
-            saved.getId(),
-            creatorId,
-            leaderRole.getId());
+      syncOrganizationLeadershipRoles(saved.getId());
 
       // если организация создаётся сразу приватной — генерируем пригласительную
       // ссылку
@@ -194,11 +184,14 @@ public class OrganizationService {
       if (!organizationRepository.existsById(organizationId)) {
          throw new EntityNotFoundException("Organization not found: " + organizationId);
       }
+      deleteOrganizationCascade(organizationId);
+   }
 
-      // Удаляем возможную пригласительную ссылку, чтобы не нарушить внешние ключи
+
+   @Transactional
+   public void deleteOrganizationCascade(Long organizationId) {
       organizationInviteRepository.deleteById(organizationId);
 
-      // Очистка зависимостей, которые уже представлены репозиториями в проекте
       organizationLinkRepository.deleteByOrganizationId(organizationId);
       organizationUserRepository.deleteByOrganizationId(organizationId);
 
@@ -219,6 +212,7 @@ public class OrganizationService {
 
       organizationRepository.deleteById(organizationId);
    }
+
 
    /**
     * Установить уровень видимости организации.
@@ -442,5 +436,93 @@ public class OrganizationService {
       if (!permissionsToCreate.isEmpty()) {
          rolePermissionRepository.saveAll(permissionsToCreate);
       }
+   }
+
+   /**
+    * Brings organization leadership roles to a consistent state relative to the current membership.
+    * <p>
+    * Invariants enforced:
+    * - if there is at least 1 accepted member, the organization must have exactly one {@code Leader}
+    * - if there are 2+ accepted members, the organization must have exactly one {@code Co-leader}
+    * - if there is exactly 1 member, there must be no {@code Co-leader} assignment
+    * <p>
+    * First member becomes Leader, second member becomes Co-leader. Priority is to keep current
+    * assignee if they are still a member.
+    */
+   public void syncOrganizationLeadershipRoles(Long organizationId) {
+      if (!organizationRepository.existsById(organizationId)) {
+         return;
+      }
+
+      List<OrganizationUser> members = organizationUserRepository
+            .findByOrganizationIdAndStatusOrderByJoinedAtAsc(organizationId, OrganizationUserStatusType.ACCEPTED);
+      if (members.isEmpty()) {
+         return;
+      }
+
+      List<Long> memberUserIds = members.stream().map(OrganizationUser::getUserId).toList();
+
+      Long leaderUserId = roleRepository.findByScopeAndOrganizationIdAndName(
+                  RoleScopeType.ORGANIZATION, organizationId, "Leader")
+            .map(leaderRole -> ensureSingleRoleAssignee(leaderRole.getId(), memberUserIds,
+                  memberUserIds.getFirst(), null))
+            .orElse(null);
+
+      roleRepository.findByScopeAndOrganizationIdAndName(
+                  RoleScopeType.ORGANIZATION, organizationId, "Co-leader")
+            .ifPresent(coLeaderRole -> {
+               if (memberUserIds.size() < 2) {
+                  userRoleRepository.deleteByRoleId(coLeaderRole.getId());
+                  return;
+               }
+
+               Long effectiveLeaderUserId = leaderUserId != null ? leaderUserId : memberUserIds.getFirst();
+               Long defaultCoLeader = memberUserIds.stream()
+                     .filter(id -> !id.equals(effectiveLeaderUserId))
+                     .findFirst()
+                     .orElse(memberUserIds.get(1));
+
+               ensureSingleRoleAssignee(coLeaderRole.getId(), memberUserIds, defaultCoLeader,
+                     effectiveLeaderUserId);
+            });
+   }
+
+   private Long resolveCurrentAssigneeUserId(Long roleId, List<Long> memberUserIds) {
+      List<UserRole> mappings = userRoleRepository.findByRoleId(roleId);
+      if (mappings == null || mappings.isEmpty()) {
+         return null;
+      }
+      for (UserRole mapping : mappings) {
+         if (mapping != null && mapping.getUserId() != null && memberUserIds.contains(mapping.getUserId())) {
+            return mapping.getUserId();
+         }
+      }
+      return null;
+   }
+
+   private Long ensureSingleRoleAssignee(
+         Long roleId,
+         List<Long> memberUserIds,
+         Long defaultUserId,
+         Long forbiddenUserId) {
+      Long selected = resolveCurrentAssigneeUserId(roleId, memberUserIds);
+      if (forbiddenUserId != null && forbiddenUserId.equals(selected)) {
+         selected = null;
+      }
+      if (selected == null) {
+         selected = defaultUserId;
+         if (forbiddenUserId != null && forbiddenUserId.equals(selected)) {
+            selected = memberUserIds.stream().filter(id -> !id.equals(forbiddenUserId)).findFirst().orElse(null);
+         }
+      }
+
+      userRoleRepository.deleteByRoleId(roleId);
+      if (selected != null) {
+         userRoleRepository.save(UserRole.builder()
+               .userId(selected)
+               .roleId(roleId)
+               .build());
+      }
+      return selected;
    }
 }
