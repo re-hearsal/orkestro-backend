@@ -10,7 +10,6 @@ import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
 import io.github.Romariok.orkestro.organization.specification.OrganizationUserSpecifications;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Role;
-import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.UserRoleId;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
