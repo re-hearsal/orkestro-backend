@@ -9,6 +9,7 @@ import io.github.Romariok.orkestro.task.dto.TaskCommentDTO;
 import io.github.Romariok.orkestro.task.dto.TaskCreateRequestDTO;
 import io.github.Romariok.orkestro.task.dto.TaskDTO;
 import io.github.Romariok.orkestro.task.dto.TaskUpdateRequestDTO;
+import io.github.Romariok.orkestro.task.dto.TaskVisibilityUpdateRequestDTO;
 import io.github.Romariok.orkestro.task.mapper.TaskMapper;
 import io.github.Romariok.orkestro.task.models.Task;
 import io.github.Romariok.orkestro.task.models.TaskComment;
@@ -27,7 +28,11 @@ import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileTypeDetector;
+import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import io.github.Romariok.orkestro.utils.helper.FileValidationHelper;
 
 import java.time.Instant;
@@ -39,9 +44,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -59,6 +68,8 @@ public class TaskService {
     private final OrganizationUserRepository organizationUserRepository;
     private final TaskMapper taskMapper;
     private final SecurityUtils securityUtils;
+    private final FileStorageService fileStorageService;
+    private final FileRollbackHelper fileRollbackHelper;
 
     /**
      * Создать задачу в организации.
@@ -82,32 +93,72 @@ public class TaskService {
             validateAssigneeInOrganization(organization.getId(), request.getAssigneeUserId());
         }
 
-        FileValidationHelper.validateFiles(request.getFileIds(), storedFileRepository);
         validateVisibilityRolesForOrganization(organization.getId(), visibility, request.getVisibilityRoleIds());
 
-        Instant now = Instant.now();
-        Task task = Task.builder()
-                .organizationId(organization.getId())
-                .sectionId(null)
-                .title(request.getTitle().trim())
-                .description(request.getDescription())
-                .authorUserId(authorUserId)
-                .assigneeUserId(request.getAssigneeUserId())
-                .status(TaskStatus.OPEN)
-                .visibility(visibility)
-                .createdAt(now)
-                .updatedAt(now)
-                .closedAt(null)
-                .build();
+        List<Long> uploadedFileIds = List.of();
+        try {
+            uploadedFileIds = uploadTaskFilesForCreate(request.getFiles());
 
-        Task saved = taskRepository.save(task);
+            Instant now = Instant.now();
+            Task task = Task.builder()
+                    .organizationId(organization.getId())
+                    .sectionId(null)
+                    .title(request.getTitle().trim())
+                    .description(request.getDescription())
+                    .authorUserId(authorUserId)
+                    .assigneeUserId(request.getAssigneeUserId())
+                    .status(TaskStatus.OPEN)
+                    .visibility(visibility)
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .closedAt(null)
+                    .build();
 
-        saveTaskFiles(saved.getId(), request.getFileIds());
-        if (visibility == TaskVisibility.ROLE_RESTRICTED) {
-            saveTaskVisibilityRoles(saved.getId(), request.getVisibilityRoleIds());
+            Task saved = taskRepository.save(task);
+
+            saveTaskFiles(saved.getId(), uploadedFileIds);
+            if (visibility == TaskVisibility.ROLE_RESTRICTED) {
+                saveTaskVisibilityRoles(saved.getId(), request.getVisibilityRoleIds());
+            }
+
+            return buildTaskDto(saved);
+        } catch (RuntimeException ex) {
+            fileRollbackHelper.deleteFilesSafely(uploadedFileIds);
+            throw ex;
+        }
+    }
+
+    /**
+     * Изменить уровень доступа задачи.
+     * Доступно только обладателям TASK_MANAGE в контексте организации задачи.
+     */
+    @Transactional
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission("
+            + "@taskRepository.findById(#taskId).orElse(null)?.organizationId, 'TASK_MANAGE')")
+    public TaskDTO updateTaskVisibility(
+            Long organizationId, Long taskId, TaskVisibilityUpdateRequestDTO request) {
+        Task task = taskRepository
+                .findById(taskId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+
+        validateTaskOrganization(task, organizationId);
+
+        TaskVisibility newVisibility = request.getVisibility();
+        List<Long> requestedRoleIds = request.getVisibilityRoleIds();
+        validateVisibilityRolesForOrganization(organizationId, newVisibility, requestedRoleIds);
+
+        if (task.getVisibility() == TaskVisibility.ROLE_RESTRICTED
+                || newVisibility == TaskVisibility.ROLE_RESTRICTED) {
+            taskVisibilityRoleRepository.deleteByTaskId(taskId);
         }
 
-        return buildTaskDto(saved);
+        if (newVisibility == TaskVisibility.ROLE_RESTRICTED) {
+            saveTaskVisibilityRoles(taskId, requestedRoleIds);
+        }
+
+        task.setVisibility(newVisibility);
+        task.setUpdatedAt(Instant.now());
+        return buildTaskDto(taskRepository.save(task));
     }
 
     /**
@@ -215,49 +266,124 @@ public class TaskService {
      * Получить доступные пользователю задачи в организации (открытые и в работе).
      */
     @Transactional(readOnly = true)
-    public List<TaskDTO> getAvailableTasksForCurrentUser(Long organizationId) {
+    public Page<TaskDTO> getAvailableTasksForCurrentUser(Long organizationId, Pageable pageable) {
         Long userId = securityUtils.getCurrentUserId();
-        organizationUserRepository
-                .findByOrganizationIdAndUserId(organizationId, userId)
-                .filter(ou -> ou.getStatus() == OrganizationUserStatusType.ACCEPTED)
-                .orElseThrow(() -> new BusinessException(
-                        "User " + userId + " is not an accepted member of organization " + organizationId));
+        ensureAcceptedOrganizationMember(organizationId, userId);
 
-        List<Task> tasks = taskRepository.findByOrganizationIdAndStatusIn(
-                organizationId, List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS));
+        Page<Task> tasksPage = taskRepository.findByOrganizationIdAndStatusIn(
+                organizationId, List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS), pageable);
+        List<TaskDTO> visibleTasks = filterTasksByVisibilityAndMap(userId, tasksPage.getContent());
 
-        if (tasks.isEmpty()) {
-            return List.of();
-        }
-
-        return filterTasksByVisibilityAndMap(userId, tasks);
+        return new PageImpl<>(visibleTasks, pageable, visibleTasks.size());
     }
 
     /**
      * Получить историю (закрытые задачи) для пользователя в организации.
      */
     @Transactional(readOnly = true)
-    public List<TaskDTO> getClosedTasksForCurrentUser(Long organizationId) {
+    public Page<TaskDTO> getClosedTasksForCurrentUser(Long organizationId, Pageable pageable) {
         Long userId = securityUtils.getCurrentUserId();
-        organizationUserRepository
-                .findByOrganizationIdAndUserId(organizationId, userId)
-                .filter(ou -> ou.getStatus() == OrganizationUserStatusType.ACCEPTED)
-                .orElseThrow(() -> new BusinessException(
-                        "User " + userId + " is not an accepted member of organization " + organizationId));
+        ensureAcceptedOrganizationMember(organizationId, userId);
 
-        List<Task> tasks = taskRepository.findByOrganizationIdAndStatusIn(
-                organizationId, List.of(TaskStatus.DONE, TaskStatus.CANCELLED));
+        Page<Task> tasksPage = taskRepository.findByOrganizationIdAndStatusIn(
+                organizationId, List.of(TaskStatus.DONE, TaskStatus.CANCELLED), pageable);
+        List<TaskDTO> visibleTasks = filterTasksByVisibilityAndMap(userId, tasksPage.getContent());
 
+        return new PageImpl<>(visibleTasks, pageable, visibleTasks.size());
+    }
+
+    /**
+     * Прикрепить файл к задаче. Пользователь должен иметь доступ к задаче.
+     */
+    @Transactional
+    public TaskDTO attachFileToTaskForCurrentUser(Long organizationId, Long taskId, MultipartFile file) {
+        Long userId = securityUtils.getCurrentUserId();
+        ensureAcceptedOrganizationMember(organizationId, userId);
+
+        Task task = taskRepository
+                .findById(taskId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+        validateTaskOrganization(task, organizationId);
+
+        Map<Long, List<Long>> taskRolesMap = new HashMap<>();
+        List<TaskVisibilityRole> visibilityRoles = taskVisibilityRoleRepository.findByTaskId(taskId);
+        if (!visibilityRoles.isEmpty()) {
+            taskRolesMap.put(taskId, visibilityRoles.stream().map(TaskVisibilityRole::getRoleId).toList());
+        }
+
+        if (!hasTaskAccess(userId, task, getUserRoleIds(userId), taskRolesMap)) {
+            throw new BusinessException("User does not have access to task: " + taskId);
+        }
+
+        if (file == null || file.isEmpty() || file.getSize() <= 0) {
+            throw new IllegalArgumentException("file is required");
+        }
+        String originalName = file.getOriginalFilename();
+        if (originalName == null || originalName.isBlank()) {
+            throw new IllegalArgumentException("file name is required");
+        }
+
+        StoredFile stored = fileStorageService.uploadForCurrentUser(file, FileTypeDetector.detect(file));
+        Long fileId = stored.getId();
+        try {
+            if (taskFileRepository.existsByTaskIdAndFileId(taskId, fileId)) {
+                return buildTaskDto(task);
+            }
+
+            TaskFile taskFile = new TaskFile();
+            taskFile.setTaskId(taskId);
+            taskFile.setFileId(fileId);
+            taskFileRepository.save(taskFile);
+
+            task.setUpdatedAt(Instant.now());
+            taskRepository.save(task);
+
+            return buildTaskDto(task);
+        } catch (RuntimeException ex) {
+            fileRollbackHelper.deleteFilesSafely(List.of(fileId));
+            throw ex;
+        }
+    }
+
+    @Transactional
+    public TaskDTO deleteTaskFileForCurrentUser(Long organizationId, Long taskId, Long fileId) {
+        Long userId = securityUtils.getCurrentUserId();
+        ensureAcceptedOrganizationMember(organizationId, userId);
+
+        Task task = taskRepository
+                .findById(taskId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+        validateTaskOrganization(task, organizationId);
+
+        Map<Long, List<Long>> taskRolesMap = new HashMap<>();
+        List<TaskVisibilityRole> visibilityRoles = taskVisibilityRoleRepository.findByTaskId(taskId);
+        if (!visibilityRoles.isEmpty()) {
+            taskRolesMap.put(taskId, visibilityRoles.stream().map(TaskVisibilityRole::getRoleId).toList());
+        }
+
+        if (!hasTaskAccess(userId, task, getUserRoleIds(userId), taskRolesMap)) {
+            throw new BusinessException("User does not have access to task: " + taskId);
+        }
+
+        if (!taskFileRepository.existsByTaskIdAndFileId(taskId, fileId)) {
+            throw new EntityNotFoundException(
+                    "File " + fileId + " is not attached to task " + taskId);
+        }
+
+        taskFileRepository.deleteByTaskIdAndFileId(taskId, fileId);
+        fileStorageService.delete(fileId);
+        task.setUpdatedAt(Instant.now());
+        taskRepository.save(task);
+
+        return buildTaskDto(task);
+    }
+
+    private List<TaskDTO> filterTasksByVisibilityAndMap(Long userId, List<Task> tasks) {
         if (tasks.isEmpty()) {
             return List.of();
         }
 
-        return filterTasksByVisibilityAndMap(userId, tasks);
-    }
-
-    private List<TaskDTO> filterTasksByVisibilityAndMap(Long userId, List<Task> tasks) {
-        List<Role> userRoles = userRoleRepository.findRolesByUserId(userId);
-        Set<Long> userRoleIds = userRoles.stream().map(Role::getId).collect(Collectors.toSet());
+        Set<Long> userRoleIds = getUserRoleIds(userId);
 
         List<Long> taskIds = tasks.stream().map(Task::getId).toList();
 
@@ -273,28 +399,45 @@ public class TaskService {
 
         List<TaskDTO> result = new ArrayList<>();
         for (Task task : tasks) {
-            boolean isAuthorOrAssignee = (task.getAuthorUserId() != null && task.getAuthorUserId().equals(userId))
-                    || (task.getAssigneeUserId() != null && task.getAssigneeUserId().equals(userId));
-
-            if (isAuthorOrAssignee) {
+            if (hasTaskAccess(userId, task, userRoleIds, taskRolesMap)) {
                 result.add(buildTaskDto(task));
-                continue;
-            }
-
-            if (task.getVisibility() == TaskVisibility.ALL_MEMBERS) {
-                result.add(buildTaskDto(task));
-                continue;
-            }
-
-            List<Long> allowedRoleIds = taskRolesMap.get(task.getId());
-            if (allowedRoleIds != null && !userRoleIds.isEmpty()) {
-                boolean hasIntersection = allowedRoleIds.stream().anyMatch(userRoleIds::contains);
-                if (hasIntersection) {
-                    result.add(buildTaskDto(task));
-                }
             }
         }
         return result;
+    }
+
+    private boolean hasTaskAccess(
+            Long userId, Task task, Set<Long> userRoleIds, Map<Long, List<Long>> taskRolesMap) {
+        boolean isAuthorOrAssignee = (task.getAuthorUserId() != null && task.getAuthorUserId().equals(userId))
+                || (task.getAssigneeUserId() != null && task.getAssigneeUserId().equals(userId));
+        if (isAuthorOrAssignee || task.getVisibility() == TaskVisibility.ALL_MEMBERS) {
+            return true;
+        }
+
+        List<Long> allowedRoleIds = taskRolesMap.get(task.getId());
+        return allowedRoleIds != null
+                && !userRoleIds.isEmpty()
+                && allowedRoleIds.stream().anyMatch(userRoleIds::contains);
+    }
+
+    private Set<Long> getUserRoleIds(Long userId) {
+        List<Role> userRoles = userRoleRepository.findRolesByUserId(userId);
+        return userRoles.stream().map(Role::getId).collect(Collectors.toSet());
+    }
+
+    private void ensureAcceptedOrganizationMember(Long organizationId, Long userId) {
+        organizationUserRepository
+                .findByOrganizationIdAndUserId(organizationId, userId)
+                .filter(ou -> ou.getStatus() == OrganizationUserStatusType.ACCEPTED)
+                .orElseThrow(() -> new BusinessException(
+                        "User " + userId + " is not an accepted member of organization " + organizationId));
+    }
+
+    private void validateTaskOrganization(Task task, Long organizationId) {
+        if (!task.getOrganizationId().equals(organizationId)) {
+            throw new BusinessException(
+                    "Task " + task.getId() + " does not belong to organization " + organizationId);
+        }
     }
 
     private void validateAssigneeInOrganization(Long organizationId, Long assigneeUserId) {
@@ -354,6 +497,26 @@ public class TaskService {
                 .toList();
 
         taskFileRepository.saveAll(entities);
+    }
+
+    private List<Long> uploadTaskFilesForCreate(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            return List.of();
+        }
+        List<Long> uploadedFileIds = new ArrayList<>();
+        for (int i = 0; i < files.size(); i++) {
+            MultipartFile file = files.get(i);
+            if (file == null || file.isEmpty() || file.getSize() <= 0) {
+                throw new IllegalArgumentException("files[" + i + "] file is required");
+            }
+            String originalName = file.getOriginalFilename();
+            if (originalName == null || originalName.isBlank()) {
+                throw new IllegalArgumentException("files[" + i + "] file name is required");
+            }
+            StoredFile stored = fileStorageService.uploadForCurrentUser(file, FileTypeDetector.detect(file));
+            uploadedFileIds.add(stored.getId());
+        }
+        return uploadedFileIds;
     }
 
     private void saveTaskVisibilityRoles(Long taskId, List<Long> roleIds) {

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,9 +33,10 @@ import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
-
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -45,6 +47,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class TaskServiceTest {
@@ -85,17 +91,28 @@ class TaskServiceTest {
         @Mock
         private SecurityUtils securityUtils;
 
+        @Mock
+        private FileStorageService fileStorageService;
+
+        @Mock
+        private FileRollbackHelper fileRollbackHelper;
+
         @InjectMocks
         private TaskService taskService;
 
         @Test
-        void createTaskInOrganization_success_savesTask() {
+        void createTaskInOrganization_success_uploadsAndAttachesFiles() {
                 Long organizationId = 1L;
                 Long currentUserId = 10L;
                 Long assigneeId = 20L;
 
+                MockMultipartFile first = new MockMultipartFile(
+                                "files", "task-note.pdf", "application/pdf", "pdf".getBytes());
+                MockMultipartFile second = new MockMultipartFile(
+                                "files", "task-audio.mp3", "audio/mpeg", "audio".getBytes());
+
                 TaskCreateRequestDTO request = new TaskCreateRequestDTO(
-                                "Title", "Desc", assigneeId, TaskVisibility.ALL_MEMBERS, null, null);
+                                "Title", "Desc", assigneeId, TaskVisibility.ALL_MEMBERS, null, List.of(first, second));
 
                 Organization organization = Organization.builder()
                                 .id(organizationId)
@@ -106,6 +123,9 @@ class TaskServiceTest {
 
                 when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(organization));
                 when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(fileStorageService.uploadForCurrentUser(any(), any()))
+                                .thenReturn(StoredFile.builder().id(501L).build())
+                                .thenReturn(StoredFile.builder().id(502L).build());
 
                 when(userRepository.existsById(assigneeId)).thenReturn(true);
                 OrganizationUser membership = OrganizationUser.builder()
@@ -168,6 +188,7 @@ class TaskServiceTest {
 
                 assertEquals("Title", result.getTitle());
                 assertEquals(currentUserId, result.getAuthorUserId());
+                verify(taskFileRepository).saveAll(any());
         }
 
         @Test
@@ -224,6 +245,7 @@ class TaskServiceTest {
         void getAvailableTasksForCurrentUser_filtersByVisibilityRolesAndAuthorAssignee() {
                 Long organizationId = 1L;
                 Long userId = 10L;
+                PageRequest pageable = PageRequest.of(0, 20);
 
                 when(securityUtils.getCurrentUserId()).thenReturn(userId);
 
@@ -268,8 +290,9 @@ class TaskServiceTest {
                                 .build();
 
                 when(taskRepository.findByOrganizationIdAndStatusIn(
-                                organizationId, List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS)))
-                                .thenReturn(List.of(taskAll, taskRestrictedByRole, taskRestrictedByAuthor));
+                                organizationId, List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS), pageable))
+                                .thenReturn(new PageImpl<>(
+                                                List.of(taskAll, taskRestrictedByRole, taskRestrictedByAuthor), pageable, 3));
 
                 Role role = Role.builder().id(100L).build();
                 when(userRoleRepository.findRolesByUserId(userId)).thenReturn(List.of(role));
@@ -297,15 +320,16 @@ class TaskServiceTest {
                 when(taskCommentRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
                 when(taskVisibilityRoleRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
 
-                List<TaskDTO> result = taskService.getAvailableTasksForCurrentUser(organizationId);
+                Page<TaskDTO> result = taskService.getAvailableTasksForCurrentUser(organizationId, pageable);
 
-                assertEquals(3, result.size());
+                assertEquals(3, result.getContent().size());
         }
 
         @Test
         void getAvailableTasksForCurrentUser_userNotMember_throwsBusinessException() {
                 Long organizationId = 1L;
                 Long userId = 10L;
+                PageRequest pageable = PageRequest.of(0, 20);
 
                 when(securityUtils.getCurrentUserId()).thenReturn(userId);
 
@@ -314,36 +338,210 @@ class TaskServiceTest {
 
                 assertThrows(
                                 BusinessException.class,
-                                () -> taskService.getAvailableTasksForCurrentUser(organizationId));
+                                () -> taskService.getAvailableTasksForCurrentUser(organizationId, pageable));
 
-                verify(taskRepository, never()).findByOrganizationIdAndStatusIn(anyLong(), any());
+                verify(taskRepository, never()).findByOrganizationIdAndStatusIn(anyLong(), any(), any());
         }
 
         @Test
-        void createTaskInOrganization_withNonExistingFile_throwsEntityNotFound() {
+        void attachFileToTaskForCurrentUser_success_uploadsAndAttaches() {
+                Long organizationId = 1L;
+                Long taskId = 200L;
+                Long userId = 10L;
+                Long uploadedFileId = 777L;
+
+                Task task = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .title("Task")
+                                .visibility(TaskVisibility.ALL_MEMBERS)
+                                .status(TaskStatus.OPEN)
+                                .authorUserId(99L)
+                                .assigneeUserId(98L)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                MockMultipartFile multipartFile = new MockMultipartFile(
+                                "file", "attach.pdf", "application/pdf", "pdf-content".getBytes());
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+                when(taskVisibilityRoleRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(userRoleRepository.findRolesByUserId(userId)).thenReturn(List.of());
+                when(fileStorageService.uploadForCurrentUser(any(), any()))
+                                .thenReturn(StoredFile.builder().id(uploadedFileId).build());
+                when(taskFileRepository.existsByTaskIdAndFileId(taskId, uploadedFileId)).thenReturn(false);
+                when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
+                        Task mapped = invocation.getArgument(0);
+                        TaskDTO dto = new TaskDTO();
+                        dto.setId(mapped.getId());
+                        dto.setOrganizationId(mapped.getOrganizationId());
+                        dto.setTitle(mapped.getTitle());
+                        dto.setVisibility(mapped.getVisibility());
+                        dto.setStatus(mapped.getStatus());
+                        return dto;
+                });
+                when(taskFileRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(taskCommentRepository.findByTaskId(taskId)).thenReturn(List.of());
+
+                TaskDTO result = taskService.attachFileToTaskForCurrentUser(organizationId, taskId, multipartFile);
+
+                assertEquals(taskId, result.getId());
+                verify(taskFileRepository).save(any());
+                verify(fileStorageService).uploadForCurrentUser(any(), any());
+        }
+
+        @Test
+        void createTaskInOrganization_rollsBackUploadedFiles_whenSaveFails() {
                 Long organizationId = 1L;
                 Long currentUserId = 10L;
+                MockMultipartFile first = new MockMultipartFile(
+                                "files", "task-note.pdf", "application/pdf", "pdf".getBytes());
 
                 TaskCreateRequestDTO request = new TaskCreateRequestDTO(
-                                "Title", "Desc", null, TaskVisibility.ALL_MEMBERS, null, List.of(1L, 2L));
-
-                Organization organization = Organization.builder()
-                                .id(organizationId)
-                                .name("Org")
-                                .location("City")
-                                .profileImageFileId(100L)
-                                .build();
+                                "Title", "Desc", null, TaskVisibility.ALL_MEMBERS, null, List.of(first));
+                Organization organization = Organization.builder().id(organizationId).name("Org").location("City").build();
 
                 when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(organization));
                 when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(fileStorageService.uploadForCurrentUser(any(), any()))
+                                .thenReturn(StoredFile.builder().id(901L).build());
+                doThrow(new RuntimeException("db error")).when(taskRepository).save(any(Task.class));
 
-                when(storedFileRepository.findAllById(any()))
-                                .thenReturn(List.of(StoredFile.builder().id(1L).build()));
+                assertThrows(
+                                RuntimeException.class,
+                                () -> taskService.createTaskInOrganization(organizationId, request));
+
+                verify(fileRollbackHelper).deleteFilesSafely(List.of(901L));
+        }
+
+        @Test
+        void attachFileToTaskForCurrentUser_rollsBackUploadedFile_whenPersistFails() {
+                Long organizationId = 1L;
+                Long taskId = 200L;
+                Long userId = 10L;
+                Long uploadedFileId = 777L;
+                MockMultipartFile multipartFile = new MockMultipartFile(
+                                "file", "attach.pdf", "application/pdf", "pdf-content".getBytes());
+
+                Task task = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .title("Task")
+                                .visibility(TaskVisibility.ALL_MEMBERS)
+                                .status(TaskStatus.OPEN)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+                when(taskVisibilityRoleRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(userRoleRepository.findRolesByUserId(userId)).thenReturn(List.of());
+                when(fileStorageService.uploadForCurrentUser(any(), any()))
+                                .thenReturn(StoredFile.builder().id(uploadedFileId).build());
+                when(taskFileRepository.existsByTaskIdAndFileId(taskId, uploadedFileId)).thenReturn(false);
+                doThrow(new RuntimeException("persist error")).when(taskFileRepository).save(any());
+
+                assertThrows(
+                                RuntimeException.class,
+                                () -> taskService.attachFileToTaskForCurrentUser(organizationId, taskId, multipartFile));
+
+                verify(fileRollbackHelper).deleteFilesSafely(List.of(uploadedFileId));
+        }
+
+        @Test
+        void deleteTaskFileForCurrentUser_success_removesAttachment() {
+                Long organizationId = 1L;
+                Long taskId = 200L;
+                Long userId = 10L;
+                Long fileId = 777L;
+
+                Task task = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .title("Task")
+                                .visibility(TaskVisibility.ALL_MEMBERS)
+                                .status(TaskStatus.OPEN)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+                when(taskVisibilityRoleRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(userRoleRepository.findRolesByUserId(userId)).thenReturn(List.of());
+                when(taskFileRepository.existsByTaskIdAndFileId(taskId, fileId)).thenReturn(true);
+                when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(taskMapper.toDto(any(Task.class))).thenReturn(TaskDTO.builder().id(taskId).build());
+                when(taskFileRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(taskCommentRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(taskVisibilityRoleRepository.findByTaskId(taskId)).thenReturn(List.of());
+
+                TaskDTO result = taskService.deleteTaskFileForCurrentUser(organizationId, taskId, fileId);
+
+                assertEquals(taskId, result.getId());
+                verify(taskFileRepository).deleteByTaskIdAndFileId(taskId, fileId);
+                verify(fileStorageService).delete(fileId);
+        }
+
+        @Test
+        void deleteTaskFileForCurrentUser_fileNotAttached_throwsEntityNotFound() {
+                Long organizationId = 1L;
+                Long taskId = 200L;
+                Long userId = 10L;
+                Long fileId = 777L;
+
+                Task task = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .visibility(TaskVisibility.ALL_MEMBERS)
+                                .status(TaskStatus.OPEN)
+                                .build();
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .build();
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+                when(taskVisibilityRoleRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(userRoleRepository.findRolesByUserId(userId)).thenReturn(List.of());
+                when(taskFileRepository.existsByTaskIdAndFileId(taskId, fileId)).thenReturn(false);
 
                 assertThrows(
                                 EntityNotFoundException.class,
-                                () -> taskService.createTaskInOrganization(organizationId, request));
+                                () -> taskService.deleteTaskFileForCurrentUser(organizationId, taskId, fileId));
 
-                verify(taskRepository, never()).save(any());
+                verify(taskFileRepository, never()).deleteByTaskIdAndFileId(anyLong(), anyLong());
         }
 }

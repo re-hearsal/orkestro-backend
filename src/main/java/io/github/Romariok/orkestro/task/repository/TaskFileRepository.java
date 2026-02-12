@@ -13,4 +13,8 @@ public interface TaskFileRepository extends JpaRepository<TaskFile, TaskFileId> 
     List<TaskFile> findByTaskId(Long taskId);
 
     void deleteByTaskId(Long taskId);
+
+    boolean existsByTaskIdAndFileId(Long taskId, Long fileId);
+
+    void deleteByTaskIdAndFileId(Long taskId, Long fileId);
 }

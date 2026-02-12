@@ -14,29 +14,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class TaskUpdateRequestDTO {
-
-    @Size(min = 1, max = 255)
-    private String title;
-
-    @Size(max = 5000)
-    private String description;
-
-    @Positive
-    private Long assigneeUserId;
+public class TaskVisibilityUpdateRequestDTO {
 
     @NotNull
     private TaskVisibility visibility;
 
-    /**
-     * Если не null — полностью заменить список ролей, которые могут видеть задачу.
-     */
     @Size(max = 50)
     private List<@NotNull @Positive Long> visibilityRoleIds;
-
-    /**
-     * Если не null — полностью заменить список файлов.
-     */
-    @Size(max = 50)
-    private List<@NotNull @Positive Long> fileIds;
 }
