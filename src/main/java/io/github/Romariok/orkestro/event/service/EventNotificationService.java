@@ -117,14 +117,14 @@ public class EventNotificationService {
 
     private String buildInviteText(Event event, String organizationName) {
         String title = event.getTitle() != null ? event.getTitle() : "без названия";
-        return "Вас пригласили на мероприятие \"" + title + "\" в организации \"" + organizationName
+        return "📩 Вас пригласили на мероприятие \"" + title + "\" в организации \"" + organizationName
                 + "\". Просим вас сообщить о вашем присутствии.";
     }
 
     private String buildReminderText(Event event, String organizationName) {
         String title = event.getTitle() != null ? event.getTitle() : "без названия";
         String startTime = event.getStartTime() != null ? event.getStartTime().toString() : "не указано";
-        return "Напоминаем о мероприятии \"" + title + "\" в организации \"" + organizationName
+        return "⏰ Напоминаем о мероприятии \"" + title + "\" в организации \"" + organizationName
                 + "\". Начало: " + startTime + ".";
     }
 
