@@ -649,11 +649,9 @@ public class EventService {
             }
 
             sb.append("BEGIN:VEVENT\r\n");
-            String uidBase = event.getTitle() != null ? event.getTitle() : String.valueOf(event.getId());
             sb.append("UID:")
-                    .append(escapeIcsText(uidBase))
-                    .append("-")
-                    .append(currentUserId)
+                    .append("event-")
+                    .append(event.getId())
                     .append("@orkestro\r\n");
             sb.append("DTSTAMP:")
                     .append(formatInstantForIcs(now))

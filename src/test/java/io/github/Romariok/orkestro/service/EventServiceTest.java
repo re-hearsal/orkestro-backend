@@ -1080,6 +1080,65 @@ class EventServiceTest {
         }
 
         @Test
+        void exportCurrentUserScheduleAsIcal_generatesUniqueUidForEventsWithSameTitle() {
+                Long currentUserId = 42L;
+                Long eventId1 = 953L;
+                Long eventId2 = 954L;
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+                EventParticipant participant1 = EventParticipant.builder()
+                                .eventId(eventId1)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                EventParticipant participant2 = EventParticipant.builder()
+                                .eventId(eventId2)
+                                .userId(currentUserId)
+                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .build();
+
+                when(eventParticipantRepository.findByUserId(currentUserId))
+                                .thenReturn(List.of(participant1, participant2));
+
+                Instant start1 = Instant.parse("2026-02-15T00:00:00Z");
+                Instant end1 = Instant.parse("2026-02-16T00:00:00Z");
+                Instant start2 = Instant.parse("2027-01-03T10:00:00Z");
+                Instant end2 = Instant.parse("2027-01-04T10:00:00Z");
+
+                Event event1 = Event.builder()
+                                .id(eventId1)
+                                .organizationId(1L)
+                                .title("Event 953")
+                                .description("Event description")
+                                .startTime(start1)
+                                .endTime(end1)
+                                .createdAt(Instant.now())
+                                .build();
+
+                Event event2 = Event.builder()
+                                .id(eventId2)
+                                .organizationId(1L)
+                                .title("Event 953")
+                                .description("Event description")
+                                .startTime(start2)
+                                .endTime(end2)
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findAllById(anyCollection()))
+                                .thenReturn(List.of(event1, event2));
+
+                String ics = eventService.exportCurrentUserScheduleAsIcal(true);
+
+                assertTrue(ics.contains("UID:event-953@orkestro"));
+                assertTrue(ics.contains("UID:event-954@orkestro"));
+        }
+
+        @Test
         void exportCurrentUserScheduleAsCsv_excludesDeclinedWhenFlagFalse() {
                 Long currentUserId = 42L;
                 Long eventId1 = 100L;
