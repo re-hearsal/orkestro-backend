@@ -40,6 +40,7 @@ public class OrganizationCreateRequestDTO {
    @NotNull
    private VisibilityLevelType visibilityLevel;
 
+   @Size(max = 100)
    private List<@Valid @NotNull OrganizationLinkDTO> links;
 
    @AssertTrue(message = "Profile image must be a non-empty image")

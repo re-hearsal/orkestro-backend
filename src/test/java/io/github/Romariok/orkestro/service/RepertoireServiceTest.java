@@ -5,11 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
+import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.repertoire.dto.SongCreateRequestDTO;
 import io.github.Romariok.orkestro.repertoire.dto.SongDTO;
 import io.github.Romariok.orkestro.repertoire.dto.SongInstrumentDTO;
@@ -79,12 +81,16 @@ class RepertoireServiceTest {
    @Mock
    private FileRollbackHelper fileRollbackHelper;
 
+   @Mock
+   private FileLimitsProperties fileLimitsProperties;
+
    @InjectMocks
    private RepertoireService repertoireService;
 
    @BeforeEach
    void setup() {
       when(organizationRepository.existsById(anyLong())).thenReturn(true);
+      lenient().when(fileLimitsProperties.getSongMaxFiles()).thenReturn(50);
    }
 
    @Test

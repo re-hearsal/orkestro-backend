@@ -12,6 +12,7 @@ import io.github.Romariok.orkestro.user.models.User;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
+  boolean existsByProfileImageFileId(Long profileImageFileId);
 
   Optional<User> findByUsername(String username);
 

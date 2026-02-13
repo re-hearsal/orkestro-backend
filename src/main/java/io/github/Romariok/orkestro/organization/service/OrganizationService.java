@@ -17,6 +17,7 @@ import io.github.Romariok.orkestro.organization.repository.OrganizationRepositor
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.repertoire.models.Song;
 import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
+import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
@@ -30,6 +31,7 @@ import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 
@@ -63,7 +65,9 @@ public class OrganizationService {
    private final RolePermissionRepository rolePermissionRepository;
    private final SecurityUtils securityUtils;
    private final FileStorageService fileStorageService;
+   private final FileReferenceService fileReferenceService;
    private final FileRollbackHelper fileRollbackHelper;
+   private final FileLimitsProperties fileLimitsProperties;
 
    @Transactional
    public OrganizationDTO createOrganization(OrganizationCreateRequestDTO request) {
@@ -190,9 +194,11 @@ public class OrganizationService {
          return;
       }
 
-      fileStorageService.delete(profileImageFileId);
       organization.setProfileImageFileId(null);
       organizationRepository.save(organization);
+      if (!fileReferenceService.isFileReferenced(profileImageFileId)) {
+         fileStorageService.delete(profileImageFileId);
+      }
    }
 
    /**
@@ -350,6 +356,10 @@ public class OrganizationService {
    private void saveLinks(Long organizationId, List<OrganizationLinkDTO> links) {
       if (links == null || links.isEmpty()) {
          return;
+      }
+      if (links.size() > fileLimitsProperties.getOrganizationMaxFiles()) {
+         throw new IllegalArgumentException(
+               "Organization cannot have more than " + fileLimitsProperties.getOrganizationMaxFiles() + " links");
       }
 
       Map<String, OrganizationLinkDTO> uniqueLinks = new LinkedHashMap<>();

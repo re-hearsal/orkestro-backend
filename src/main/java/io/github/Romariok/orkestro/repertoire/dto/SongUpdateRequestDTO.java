@@ -50,11 +50,13 @@ public class SongUpdateRequestDTO {
     * Если не null — полностью заменить список файлов с нотами (PDF/PHOTO).
     * Пустой список означает очистку.
     */
+   @Size(max = 50)
    private List<@NotNull @Positive Long> sheetFileIds;
 
    /**
     * Если не null — полностью заменить список аудио файлов (AUDIO).
     * Пустой список означает очистку.
     */
+   @Size(max = 50)
    private List<@NotNull @Positive Long> audioFileIds;
 }

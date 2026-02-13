@@ -1,6 +1,7 @@
 package io.github.Romariok.orkestro.task.service;
 
 import io.github.Romariok.orkestro.organization.models.Organization;
+import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
@@ -29,6 +30,7 @@ import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileTypeDetector;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
@@ -69,7 +71,9 @@ public class TaskService {
     private final TaskMapper taskMapper;
     private final SecurityUtils securityUtils;
     private final FileStorageService fileStorageService;
+    private final FileReferenceService fileReferenceService;
     private final FileRollbackHelper fileRollbackHelper;
+    private final FileLimitsProperties fileLimitsProperties;
 
     /**
      * Создать задачу в организации.
@@ -217,6 +221,10 @@ public class TaskService {
         task.setVisibility(newVisibility);
 
         if (request.getFileIds() != null) {
+            if (new HashSet<>(request.getFileIds()).size() > fileLimitsProperties.getTaskMaxFiles()) {
+                throw new IllegalArgumentException(
+                        "Task cannot have more than " + fileLimitsProperties.getTaskMaxFiles() + " files");
+            }
             FileValidationHelper.validateFiles(request.getFileIds(), storedFileRepository);
             taskFileRepository.deleteByTaskId(taskId);
             saveTaskFiles(taskId, request.getFileIds());
@@ -318,6 +326,10 @@ public class TaskService {
         if (file == null || file.isEmpty() || file.getSize() <= 0) {
             throw new IllegalArgumentException("file is required");
         }
+        if (taskFileRepository.findByTaskId(taskId).size() >= fileLimitsProperties.getTaskMaxFiles()) {
+            throw new IllegalArgumentException(
+                    "Task cannot have more than " + fileLimitsProperties.getTaskMaxFiles() + " files");
+        }
         String originalName = file.getOriginalFilename();
         if (originalName == null || originalName.isBlank()) {
             throw new IllegalArgumentException("file name is required");
@@ -371,7 +383,9 @@ public class TaskService {
         }
 
         taskFileRepository.deleteByTaskIdAndFileId(taskId, fileId);
-        fileStorageService.delete(fileId);
+        if (!fileReferenceService.isFileReferenced(fileId)) {
+            fileStorageService.delete(fileId);
+        }
         task.setUpdatedAt(Instant.now());
         taskRepository.save(task);
 
@@ -486,6 +500,10 @@ public class TaskService {
         if (fileIds == null || fileIds.isEmpty()) {
             return;
         }
+        if (new HashSet<>(fileIds).size() > fileLimitsProperties.getTaskMaxFiles()) {
+            throw new IllegalArgumentException(
+                    "Task cannot have more than " + fileLimitsProperties.getTaskMaxFiles() + " files");
+        }
 
         List<TaskFile> entities = fileIds.stream()
                 .map(fileId -> {
@@ -502,6 +520,10 @@ public class TaskService {
     private List<Long> uploadTaskFilesForCreate(List<MultipartFile> files) {
         if (files == null || files.isEmpty()) {
             return List.of();
+        }
+        if (files.size() > fileLimitsProperties.getTaskMaxFiles()) {
+            throw new IllegalArgumentException(
+                    "Task cannot have more than " + fileLimitsProperties.getTaskMaxFiles() + " files");
         }
         List<Long> uploadedFileIds = new ArrayList<>();
         for (int i = 0; i < files.size(); i++) {

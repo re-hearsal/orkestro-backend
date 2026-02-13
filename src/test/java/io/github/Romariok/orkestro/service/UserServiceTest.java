@@ -18,9 +18,12 @@ import io.github.Romariok.orkestro.user.repository.UserInstrumentRepository;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.user.service.UserService;
+import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -57,6 +60,12 @@ class UserServiceTest {
 
         @Mock
         private FileStorageService fileStorageService;
+
+        @Mock
+        private FileReferenceService fileReferenceService;
+
+        @Mock
+        private FileLimitsProperties fileLimitsProperties;
 
         @InjectMocks
         private UserService userService;
@@ -313,11 +322,32 @@ class UserServiceTest {
                 Long userId = 1L;
                 User user = User.builder().id(userId).profileImageFileId(10L).build();
                 when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+                when(fileReferenceService.isFileReferenced(10L)).thenReturn(false);
 
                 userService.deleteProfileImage(userId);
 
                 verify(fileStorageService).delete(10L);
                 assertEquals(null, user.getProfileImageFileId());
                 verify(userRepository).save(user);
+        }
+
+        @Test
+        void updateProfileImage_replacesOldAndDeletesOnlyIfUnreferenced() {
+                Long userId = 1L;
+                User user = User.builder().id(userId).profileImageFileId(10L).build();
+                when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+                when(fileStorageService.upload(org.mockito.Mockito.any(), org.mockito.Mockito.any(), org.mockito.Mockito.eq(userId)))
+                                .thenReturn(StoredFile.builder().id(20L).build());
+                when(fileReferenceService.isFileReferenced(10L)).thenReturn(false);
+
+                MockMultipartFile file = new MockMultipartFile(
+                                "file",
+                                "avatar.png",
+                                "image/png",
+                                "img".getBytes());
+                userService.updateProfileImage(userId, file);
+
+                assertEquals(20L, user.getProfileImageFileId());
+                verify(fileStorageService).delete(10L);
         }
 }

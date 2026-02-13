@@ -1,6 +1,7 @@
 package io.github.Romariok.orkestro.repertoire.service;
 
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
+import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.repertoire.dto.SongCreateRequestDTO;
 import io.github.Romariok.orkestro.repertoire.dto.SongDTO;
 import io.github.Romariok.orkestro.repertoire.dto.SongFileUploadRequestDTO;
@@ -49,8 +50,6 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 public class RepertoireService {
 
-   private static final int MAX_SONG_FILES = 50;
-
    private final OrganizationRepository organizationRepository;
    private final SongRepository songRepository;
    private final SongInstrumentRepository songInstrumentRepository;
@@ -60,6 +59,7 @@ public class RepertoireService {
    private final StoredFileRepository storedFileRepository;
    private final SongMapper songMapper;
    private final FileRollbackHelper fileRollbackHelper;
+   private final FileLimitsProperties fileLimitsProperties;
 
    @Transactional
    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'REPERTOIRE_CREATE_SONG')")
@@ -189,9 +189,9 @@ public class RepertoireService {
       }
 
       int existingCount = songFileRepository.findBySongId(songId).size();
-      if (existingCount >= MAX_SONG_FILES) {
+      if (existingCount >= fileLimitsProperties.getSongMaxFiles()) {
          throw new IllegalArgumentException(
-               "Song cannot have more than " + MAX_SONG_FILES + " files");
+               "Song cannot have more than " + fileLimitsProperties.getSongMaxFiles() + " files");
       }
 
       StoredFile stored = fileStorageService.uploadForCurrentUser(
@@ -445,9 +445,9 @@ public class RepertoireService {
       }
 
       int totalUnique = sheetSet.size() + audioSet.size();
-      if (totalUnique > MAX_SONG_FILES) {
+      if (totalUnique > fileLimitsProperties.getSongMaxFiles()) {
          throw new IllegalArgumentException(
-               "Song cannot have more than " + MAX_SONG_FILES + " files");
+               "Song cannot have more than " + fileLimitsProperties.getSongMaxFiles() + " files");
       }
 
       validateFilesByTypes(sheetFileIds, Set.of(FileType.PDF, FileType.PHOTO), "sheetFileIds");
@@ -460,9 +460,9 @@ public class RepertoireService {
       int sheetCount = sheetFiles == null ? 0 : sheetFiles.size();
       int audioCount = audioFiles == null ? 0 : audioFiles.size();
       int totalCount = sheetCount + audioCount;
-      if (totalCount > MAX_SONG_FILES) {
+      if (totalCount > fileLimitsProperties.getSongMaxFiles()) {
          throw new IllegalArgumentException(
-               "Song cannot have more than " + MAX_SONG_FILES + " files");
+               "Song cannot have more than " + fileLimitsProperties.getSongMaxFiles() + " files");
       }
 
       validateMultipartFiles(sheetFiles, "sheetFiles");
@@ -520,9 +520,9 @@ public class RepertoireService {
          return;
       }
       int uniqueCount = normalizeFileIds(fileIds).size();
-      if (uniqueCount > MAX_SONG_FILES) {
+      if (uniqueCount > fileLimitsProperties.getSongMaxFiles()) {
          throw new IllegalArgumentException(
-               "Song cannot have more than " + MAX_SONG_FILES + " files");
+               "Song cannot have more than " + fileLimitsProperties.getSongMaxFiles() + " files");
       }
    }
 

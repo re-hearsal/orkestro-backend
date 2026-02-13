@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import io.github.Romariok.orkestro.event.dto.EventAttendanceRowDTO;
 import io.github.Romariok.orkestro.event.dto.EventCreateRequestDTO;
@@ -29,6 +30,7 @@ import io.github.Romariok.orkestro.event.repository.EventSongRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
 import io.github.Romariok.orkestro.event.service.EventService;
 import io.github.Romariok.orkestro.event.service.EventNotificationService;
+import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
@@ -52,6 +54,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -104,11 +107,19 @@ class EventServiceTest {
         @Mock
         private FileReferenceService fileReferenceService;
 
+        @Mock
+        private FileLimitsProperties fileLimitsProperties;
+
         @InjectMocks
         private EventService eventService;
 
         @Mock
         private EventNotificationService eventNotificationService;
+
+        @BeforeEach
+        void setup() {
+                lenient().when(fileLimitsProperties.getEventMaxFiles()).thenReturn(50);
+        }
 
         @Test
         void createEventInOrganization_success_savesEventAndParticipants() {

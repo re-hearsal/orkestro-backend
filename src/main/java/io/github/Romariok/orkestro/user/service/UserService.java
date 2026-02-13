@@ -16,6 +16,7 @@ import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
@@ -43,6 +44,7 @@ public class UserService implements UserDetailsService {
    private final StoredFileRepository storedFileRepository;
    private final UserInstrumentRepository userInstrumentRepository;
    private final FileStorageService fileStorageService;
+   private final FileReferenceService fileReferenceService;
    private final CurrentUserMapper currentUserMapper;
    private final SecurityUtils securityUtils;
 
@@ -217,10 +219,14 @@ public class UserService implements UserDetailsService {
             .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
 
       validateProfileImageFile(file);
+      Long previousProfileImageFileId = user.getProfileImageFileId();
       StoredFile uploadedFile = fileStorageService.upload(file, FileType.PHOTO, userId);
 
       user.setProfileImageFileId(uploadedFile.getId());
       userRepository.save(user);
+      if (previousProfileImageFileId != null && !fileReferenceService.isFileReferenced(previousProfileImageFileId)) {
+         fileStorageService.delete(previousProfileImageFileId);
+      }
    }
 
    @Transactional
@@ -233,9 +239,11 @@ public class UserService implements UserDetailsService {
          return;
       }
 
-      fileStorageService.delete(profileImageFileId);
       user.setProfileImageFileId(null);
       userRepository.save(user);
+      if (!fileReferenceService.isFileReferenced(profileImageFileId)) {
+         fileStorageService.delete(profileImageFileId);
+      }
    }
 
    private void validateProfileImageFile(MultipartFile file) {

@@ -1,6 +1,7 @@
 package io.github.Romariok.orkestro.utils.file.controller;
 
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.dto.FileUploadRequestDTO;
 import io.github.Romariok.orkestro.utils.file.dto.FileUploadResponseDTO;
@@ -27,6 +28,7 @@ import jakarta.validation.Valid;
 public class FileController {
 
       private final FileStorageService fileStorageService;
+      private final FileReferenceService fileReferenceService;
 
       @PostMapping("/upload")
       public ResponseEntity<FileUploadResponseDTO> upload(
@@ -52,6 +54,9 @@ public class FileController {
 
    @DeleteMapping("/{fileId}")
    public ResponseEntity<Void> delete(@PathVariable @Positive Long fileId) {
+      if (fileReferenceService.isFileReferenced(fileId)) {
+         throw new BusinessException("Cannot delete file that is still attached to entities");
+      }
       fileStorageService.delete(fileId);
       return ResponseEntity.noContent().build();
    }

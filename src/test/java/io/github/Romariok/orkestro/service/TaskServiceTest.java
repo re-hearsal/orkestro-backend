@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,6 +15,7 @@ import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.task.dto.TaskCreateRequestDTO;
 import io.github.Romariok.orkestro.task.dto.TaskDTO;
@@ -33,6 +35,7 @@ import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
@@ -42,6 +45,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -95,10 +99,21 @@ class TaskServiceTest {
         private FileStorageService fileStorageService;
 
         @Mock
+        private FileReferenceService fileReferenceService;
+
+        @Mock
         private FileRollbackHelper fileRollbackHelper;
+
+        @Mock
+        private FileLimitsProperties fileLimitsProperties;
 
         @InjectMocks
         private TaskService taskService;
+
+        @BeforeEach
+        void setup() {
+                lenient().when(fileLimitsProperties.getTaskMaxFiles()).thenReturn(50);
+        }
 
         @Test
         void createTaskInOrganization_success_uploadsAndAttachesFiles() {
@@ -498,6 +513,7 @@ class TaskServiceTest {
                 when(taskVisibilityRoleRepository.findByTaskId(taskId)).thenReturn(List.of());
                 when(userRoleRepository.findRolesByUserId(userId)).thenReturn(List.of());
                 when(taskFileRepository.existsByTaskIdAndFileId(taskId, fileId)).thenReturn(true);
+                when(fileReferenceService.isFileReferenced(fileId)).thenReturn(false);
                 when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
                 when(taskMapper.toDto(any(Task.class))).thenReturn(TaskDTO.builder().id(taskId).build());
                 when(taskFileRepository.findByTaskId(taskId)).thenReturn(List.of());
@@ -509,6 +525,45 @@ class TaskServiceTest {
                 assertEquals(taskId, result.getId());
                 verify(taskFileRepository).deleteByTaskIdAndFileId(taskId, fileId);
                 verify(fileStorageService).delete(fileId);
+        }
+
+        @Test
+        void deleteTaskFileForCurrentUser_whenFileStillReferenced_doesNotDeletePhysicalFile() {
+                Long organizationId = 1L;
+                Long taskId = 200L;
+                Long userId = 10L;
+                Long fileId = 777L;
+
+                Task task = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .visibility(TaskVisibility.ALL_MEMBERS)
+                                .status(TaskStatus.OPEN)
+                                .build();
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .build();
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+                when(taskVisibilityRoleRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(userRoleRepository.findRolesByUserId(userId)).thenReturn(List.of());
+                when(taskFileRepository.existsByTaskIdAndFileId(taskId, fileId)).thenReturn(true);
+                when(fileReferenceService.isFileReferenced(fileId)).thenReturn(true);
+                when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(taskMapper.toDto(any(Task.class))).thenReturn(TaskDTO.builder().id(taskId).build());
+                when(taskFileRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(taskCommentRepository.findByTaskId(taskId)).thenReturn(List.of());
+                when(taskVisibilityRoleRepository.findByTaskId(taskId)).thenReturn(List.of());
+
+                taskService.deleteTaskFileForCurrentUser(organizationId, taskId, fileId);
+
+                verify(taskFileRepository).deleteByTaskIdAndFileId(taskId, fileId);
+                verify(fileStorageService, never()).delete(fileId);
         }
 
         @Test

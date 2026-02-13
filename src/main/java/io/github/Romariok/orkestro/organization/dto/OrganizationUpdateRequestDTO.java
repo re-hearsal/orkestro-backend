@@ -37,6 +37,7 @@ public class OrganizationUpdateRequestDTO {
     * Если не null — полностью заменить список ссылок.
     * Пустой список означает удаление всех ссылок.
     */
+   @Size(max = 100)
    private List<@Valid @NotNull OrganizationLinkDTO> links;
 
    @AssertTrue(message = "At least one field must be provided")

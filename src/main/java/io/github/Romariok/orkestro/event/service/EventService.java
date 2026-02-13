@@ -18,6 +18,7 @@ import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
 import io.github.Romariok.orkestro.event.repository.EventSongRepository;
 import io.github.Romariok.orkestro.event.specification.EventSpecifications;
+import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.repertoire.models.Song;
 import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
@@ -62,7 +63,6 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @RequiredArgsConstructor
 public class EventService {
-    private static final int MAX_EVENT_FILES = 50;
 
     private final EventRepository eventRepository;
     private final EventParticipantRepository eventParticipantRepository;
@@ -80,6 +80,7 @@ public class EventService {
     private final FileRollbackHelper fileRollbackHelper;
     private final EventNotificationService eventNotificationService;
     private final FileReferenceService fileReferenceService;
+    private final FileLimitsProperties fileLimitsProperties;
 
     @Transactional
     public EventDTO createEventInOrganization(Long organizationId, EventCreateRequestDTO request) {
@@ -390,8 +391,8 @@ public class EventService {
         }
 
         List<EventFile> currentFiles = eventFileRepository.findByEventId(eventId);
-        if (currentFiles.size() >= MAX_EVENT_FILES) {
-            throw new BusinessException("Event files limit reached (" + MAX_EVENT_FILES + ")");
+        if (currentFiles.size() >= fileLimitsProperties.getEventMaxFiles()) {
+            throw new BusinessException("Event files limit reached (" + fileLimitsProperties.getEventMaxFiles() + ")");
         }
 
         if (file == null || file.isEmpty() || file.getSize() <= 0) {
@@ -897,8 +898,8 @@ public class EventService {
         if (fileIds == null || fileIds.isEmpty()) {
             return;
         }
-        if (new HashSet<>(fileIds).size() > MAX_EVENT_FILES) {
-            throw new BusinessException("Event files limit reached (" + MAX_EVENT_FILES + ")");
+        if (new HashSet<>(fileIds).size() > fileLimitsProperties.getEventMaxFiles()) {
+            throw new BusinessException("Event files limit reached (" + fileLimitsProperties.getEventMaxFiles() + ")");
         }
 
         List<EventFile> entities = fileIds.stream()
@@ -917,8 +918,8 @@ public class EventService {
         if (files == null || files.isEmpty()) {
             return List.of();
         }
-        if (files.size() > MAX_EVENT_FILES) {
-            throw new IllegalArgumentException("Event files limit is " + MAX_EVENT_FILES);
+        if (files.size() > fileLimitsProperties.getEventMaxFiles()) {
+            throw new IllegalArgumentException("Event files limit is " + fileLimitsProperties.getEventMaxFiles());
         }
 
         List<Long> uploadedFileIds = new ArrayList<>();

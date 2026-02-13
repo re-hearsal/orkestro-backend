@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface OrganizationRepository extends JpaRepository<Organization, Long> {
+   boolean existsByProfileImageFileId(Long profileImageFileId);
 
    List<Organization> findByVisibilityLevel(VisibilityLevelType visibilityLevel);
 

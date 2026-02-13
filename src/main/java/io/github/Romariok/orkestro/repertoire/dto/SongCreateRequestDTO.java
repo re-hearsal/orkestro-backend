@@ -45,10 +45,12 @@ public class SongCreateRequestDTO {
    /**
     * Загружаемые файлы с нотами (PDF/PHOTO).
     */
+  @Size(max = 50)
    private List<MultipartFile> sheetFiles;
 
    /**
     * Загружаемые аудио файлы (AUDIO).
     */
+  @Size(max = 50)
    private List<MultipartFile> audioFiles;
 }

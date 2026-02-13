@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import io.github.Romariok.orkestro.organization.dto.OrganizationCreateRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationDTO;
@@ -23,6 +24,7 @@ import io.github.Romariok.orkestro.organization.repository.OrganizationLinkRepos
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.service.OrganizationService;
+import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.repertoire.models.Song;
 import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
@@ -34,6 +36,7 @@ import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
@@ -44,6 +47,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -94,10 +98,21 @@ class OrganizationServiceTest {
       private FileStorageService fileStorageService;
 
       @Mock
+      private FileReferenceService fileReferenceService;
+
+      @Mock
       private FileRollbackHelper fileRollbackHelper;
+
+      @Mock
+      private FileLimitsProperties fileLimitsProperties;
 
       @InjectMocks
       private OrganizationService organizationService;
+
+      @BeforeEach
+      void setup() {
+            lenient().when(fileLimitsProperties.getOrganizationMaxFiles()).thenReturn(100);
+      }
 
       @Test
       void createOrganization_success_savesOrganizationAndLinks() {
@@ -551,12 +566,33 @@ class OrganizationServiceTest {
                         .profileImageFileId(10L)
                         .build();
             when(organizationRepository.findById(1L)).thenReturn(Optional.of(organization));
+            when(fileReferenceService.isFileReferenced(10L)).thenReturn(false);
 
             organizationService.deleteOrganizationProfileImage(1L);
 
             verify(fileStorageService).delete(10L);
             assertEquals(null, organization.getProfileImageFileId());
             verify(organizationRepository).save(organization);
+      }
+
+      @Test
+      void updateOrganization_withMoreThan100Links_throwsIllegalArgumentException() {
+            Organization existing = Organization.builder()
+                        .id(1L)
+                        .name("Orkestro")
+                        .location("Moscow")
+                        .visibilityLevel(VisibilityLevelType.PUBLIC)
+                        .build();
+            when(organizationRepository.findById(1L)).thenReturn(Optional.of(existing));
+            when(organizationRepository.save(any(Organization.class))).thenReturn(existing);
+
+            OrganizationUpdateRequestDTO request = new OrganizationUpdateRequestDTO();
+            List<OrganizationLinkDTO> links = java.util.stream.IntStream.range(0, 101)
+                        .mapToObj(i -> new OrganizationLinkDTO(LinkType.WEBSITE, "https://example.org/" + i))
+                        .toList();
+            request.setLinks(links);
+
+            assertThrows(IllegalArgumentException.class, () -> organizationService.updateOrganization(1L, request));
       }
 
 

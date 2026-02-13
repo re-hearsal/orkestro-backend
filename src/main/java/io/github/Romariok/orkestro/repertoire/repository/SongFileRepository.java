@@ -13,4 +13,6 @@ public interface SongFileRepository extends JpaRepository<SongFile, SongFileId> 
    List<SongFile> findBySongId(Long songId);
 
    void deleteBySongId(Long songId);
+
+   boolean existsByFileId(Long fileId);
 }
