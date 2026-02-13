@@ -3,6 +3,7 @@ package io.github.Romariok.orkestro.event.service;
 import io.github.Romariok.orkestro.event.dto.EventAttendanceRowDTO;
 import io.github.Romariok.orkestro.event.dto.EventCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventDTO;
+import io.github.Romariok.orkestro.event.dto.EventSearchRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventUpdateRequestDTO;
 import io.github.Romariok.orkestro.event.mapper.EventMapper;
 import io.github.Romariok.orkestro.event.models.Event;
@@ -16,6 +17,7 @@ import io.github.Romariok.orkestro.event.repository.EventFileRepository;
 import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
 import io.github.Romariok.orkestro.event.repository.EventSongRepository;
+import io.github.Romariok.orkestro.event.specification.EventSpecifications;
 import io.github.Romariok.orkestro.repertoire.models.Song;
 import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
@@ -27,9 +29,13 @@ import io.github.Romariok.orkestro.section.models.Section;
 import io.github.Romariok.orkestro.section.models.SectionUser;
 import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
+import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
-import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
-import io.github.Romariok.orkestro.utils.helper.FileValidationHelper;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.file.FileReferenceService;
+import io.github.Romariok.orkestro.utils.file.FileTypeDetector;
+import io.github.Romariok.orkestro.utils.file.StoredFile;
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
@@ -44,13 +50,19 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
 public class EventService {
+    private static final int MAX_EVENT_FILES = 50;
 
     private final EventRepository eventRepository;
     private final EventParticipantRepository eventParticipantRepository;
@@ -64,8 +76,10 @@ public class EventService {
     private final UserRepository userRepository;
     private final EventMapper eventMapper;
     private final SecurityUtils securityUtils;
-    private final StoredFileRepository storedFileRepository;
+    private final FileStorageService fileStorageService;
+    private final FileRollbackHelper fileRollbackHelper;
     private final EventNotificationService eventNotificationService;
+    private final FileReferenceService fileReferenceService;
 
     @Transactional
     public EventDTO createEventInOrganization(Long organizationId, EventCreateRequestDTO request) {
@@ -98,7 +112,6 @@ public class EventService {
 
         Instant now = Instant.now();
 
-        FileValidationHelper.validateFiles(request.getFileIds(), storedFileRepository);
         validateSongsForOrganization(organizationId, request.getSongIds());
 
         boolean includeAll = Boolean.TRUE.equals(request.getIncludeAllOrganizationMembers());
@@ -126,21 +139,29 @@ public class EventService {
                 .tags(tags)
                 .build();
 
-        Event saved = eventRepository.save(event);
+        List<Long> uploadedFileIds = List.of();
+        try {
+            uploadedFileIds = uploadEventFiles(request.getFiles());
 
-        saveParticipants(saved.getId(), sources);
-        saveEventFiles(saved.getId(), request.getFileIds());
-        saveEventSongs(saved.getId(), request.getSongIds());
+            Event saved = eventRepository.save(event);
 
-        if (sendRsvp) {
-            eventNotificationService.sendEventCreatedNotifications(saved, sources.keySet());
+            saveParticipants(saved.getId(), sources);
+            saveEventFiles(saved.getId(), uploadedFileIds);
+            saveEventSongs(saved.getId(), request.getSongIds());
+
+            if (sendRsvp) {
+                eventNotificationService.sendEventCreatedNotifications(saved, sources.keySet());
+            }
+
+            return buildEventDto(saved);
+        } catch (RuntimeException ex) {
+            fileRollbackHelper.deleteFilesSafely(uploadedFileIds);
+            throw ex;
         }
-
-        return buildEventDto(saved);
     }
 
     @Transactional
-    public EventDTO updateEvent(Long eventId, EventUpdateRequestDTO request) {
+    public EventDTO updateEvent(Long organizationId, Long eventId, EventUpdateRequestDTO request) {
         if (request == null) {
             throw new IllegalArgumentException("Request must not be null");
         }
@@ -148,6 +169,7 @@ public class EventService {
         Event event = eventRepository
                 .findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
 
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(event.getOrganizationId(), currentUserId);
@@ -211,12 +233,6 @@ public class EventService {
             saveParticipants(eventId, sources);
         }
 
-        if (request.getFileIds() != null) {
-            FileValidationHelper.validateFiles(request.getFileIds(), storedFileRepository);
-            eventFileRepository.deleteByEventId(eventId);
-            saveEventFiles(eventId, request.getFileIds());
-        }
-
         if (request.getSongIds() != null) {
             validateSongsForOrganization(event.getOrganizationId(), request.getSongIds());
             eventSongRepository.deleteByEventId(eventId);
@@ -228,13 +244,104 @@ public class EventService {
     }
 
     @Transactional
+    public List<EventDTO> duplicateEvent(Long organizationId, Long eventId, List<Instant> startTimes) {
+        if (startTimes == null || startTimes.isEmpty()) {
+            throw new IllegalArgumentException("startTimes must not be empty");
+        }
+
+        Event source = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(source, organizationId);
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(source.getOrganizationId(), currentUserId);
+
+        if (source.getStartTime() == null || source.getEndTime() == null || !source.getEndTime().isAfter(source.getStartTime())) {
+            throw new IllegalStateException("Source event has invalid time range");
+        }
+        long durationSeconds = source.getEndTime().getEpochSecond() - source.getStartTime().getEpochSecond();
+
+        List<EventParticipant> sourceParticipants = eventParticipantRepository.findByEventId(eventId);
+        List<EventFile> sourceFiles = eventFileRepository.findByEventId(eventId);
+        List<EventSong> sourceSongs = eventSongRepository.findByEventId(eventId);
+
+        List<EventDTO> result = new ArrayList<>();
+        for (Instant duplicatedStartTime : startTimes) {
+            if (duplicatedStartTime == null) {
+                throw new IllegalArgumentException("startTimes must not contain null values");
+            }
+            Instant duplicatedEndTime = duplicatedStartTime.plusSeconds(durationSeconds);
+            Event duplicated = Event.builder()
+                    .organizationId(source.getOrganizationId())
+                    .creatorUserId(currentUserId)
+                    .title(source.getTitle())
+                    .description(source.getDescription())
+                    .eventType(source.getEventType())
+                    .externalLink(source.getExternalLink())
+                    .location(source.getLocation())
+                    .startTime(duplicatedStartTime)
+                    .endTime(duplicatedEndTime)
+                    .sendRsvp(source.isSendRsvp())
+                    .remindBeforeMinutes(source.getRemindBeforeMinutes())
+                    .tags(source.getTags() != null ? new HashSet<>(source.getTags()) : new HashSet<>())
+                    .build();
+
+            Event saved = eventRepository.save(duplicated);
+            Long newEventId = saved.getId();
+
+            if (!sourceParticipants.isEmpty()) {
+                List<EventParticipant> duplicatedParticipants = sourceParticipants.stream()
+                        .map(p -> EventParticipant.builder()
+                                .eventId(newEventId)
+                                .userId(p.getUserId())
+                                .source(p.getSource())
+                                .rsvpStatus(EventRsvpStatus.PENDING)
+                                .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                .rsvpAt(null)
+                                .build())
+                        .toList();
+                eventParticipantRepository.saveAll(duplicatedParticipants);
+            }
+
+            if (!sourceFiles.isEmpty()) {
+                List<EventFile> duplicatedFiles = sourceFiles.stream()
+                        .map(f -> {
+                            EventFile ef = new EventFile();
+                            ef.setEventId(newEventId);
+                            ef.setFileId(f.getFileId());
+                            return ef;
+                        })
+                        .toList();
+                eventFileRepository.saveAll(duplicatedFiles);
+            }
+
+            if (!sourceSongs.isEmpty()) {
+                List<EventSong> duplicatedSongs = sourceSongs.stream()
+                        .map(s -> {
+                            EventSong es = new EventSong();
+                            es.setEventId(newEventId);
+                            es.setSongId(s.getSongId());
+                            es.setPosition(s.getPosition());
+                            return es;
+                        })
+                        .toList();
+                eventSongRepository.saveAll(duplicatedSongs);
+            }
+
+            result.add(buildEventDto(saved));
+        }
+        return result;
+    }
+
+    @Transactional
     @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
             + "or @organizationPermissionChecker.hasOrganizationPermission("
             + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_DELETION')")
-    public void deleteEvent(Long eventId) {
+    public void deleteEvent(Long organizationId, Long eventId) {
         Event event = eventRepository
                 .findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
 
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(event.getOrganizationId(), currentUserId);
@@ -247,7 +354,8 @@ public class EventService {
     @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
             + "or @organizationPermissionChecker.hasOrganizationPermission("
             + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MARK_ATTENDANCE')")
-    public void markEventAttendance(Long eventId, Long participantUserId, EventAttendanceStatus attendanceStatus) {
+    public void markEventAttendance(
+            Long organizationId, Long eventId, Long participantUserId, EventAttendanceStatus attendanceStatus) {
         if (attendanceStatus == null) {
             throw new IllegalArgumentException("Attendance status must not be null");
         }
@@ -255,6 +363,7 @@ public class EventService {
         Event event = eventRepository
                 .findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
 
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(event.getOrganizationId(), currentUserId);
@@ -268,14 +377,75 @@ public class EventService {
         eventParticipantRepository.save(participant);
     }
 
+    @Transactional
+    public EventDTO attachFileToEvent(Long organizationId, Long eventId, MultipartFile file) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(organizationId, currentUserId);
+
+        Event event = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        if (!organizationId.equals(event.getOrganizationId())) {
+            throw new BusinessException("Event " + eventId + " does not belong to organization " + organizationId);
+        }
+
+        List<EventFile> currentFiles = eventFileRepository.findByEventId(eventId);
+        if (currentFiles.size() >= MAX_EVENT_FILES) {
+            throw new BusinessException("Event files limit reached (" + MAX_EVENT_FILES + ")");
+        }
+
+        if (file == null || file.isEmpty() || file.getSize() <= 0) {
+            throw new IllegalArgumentException("file is required");
+        }
+
+        StoredFile stored = fileStorageService.uploadForCurrentUser(file, FileTypeDetector.detect(file));
+        Long fileId = stored.getId();
+        try {
+            if (!eventFileRepository.existsByEventIdAndFileId(eventId, fileId)) {
+                EventFile eventFile = new EventFile();
+                eventFile.setEventId(eventId);
+                eventFile.setFileId(fileId);
+                eventFileRepository.save(eventFile);
+            }
+            return buildEventDto(event);
+        } catch (RuntimeException ex) {
+            fileRollbackHelper.deleteFilesSafely(List.of(fileId));
+            throw ex;
+        }
+    }
+
+    @Transactional
+    public EventDTO deleteEventFile(Long organizationId, Long eventId, Long fileId) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(organizationId, currentUserId);
+
+        Event event = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        if (!organizationId.equals(event.getOrganizationId())) {
+            throw new BusinessException("Event " + eventId + " does not belong to organization " + organizationId);
+        }
+
+        if (!eventFileRepository.existsByEventIdAndFileId(eventId, fileId)) {
+            throw new EntityNotFoundException("File " + fileId + " is not attached to event " + eventId);
+        }
+
+        eventFileRepository.deleteByEventIdAndFileId(eventId, fileId);
+        if (!fileReferenceService.isFileReferenced(fileId)) {
+            fileStorageService.delete(fileId);
+        }
+        return buildEventDto(event);
+    }
+
     @Transactional(readOnly = true)
     @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
             + "or @organizationPermissionChecker.hasOrganizationPermission("
             + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MARK_ATTENDANCE')")
-    public List<EventAttendanceRowDTO> getEventAttendanceTable(Long eventId) {
+    public List<EventAttendanceRowDTO> getEventAttendanceTable(Long organizationId, Long eventId) {
         Event event = eventRepository
                 .findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
 
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(event.getOrganizationId(), currentUserId);
@@ -289,15 +459,15 @@ public class EventService {
                 .map(EventParticipant::getUserId)
                 .collect(Collectors.toSet());
 
-        Map<Long, io.github.Romariok.orkestro.user.models.User> usersById = userRepository.findAllById(userIds)
+        Map<Long, User> usersById = userRepository.findAllById(userIds)
                 .stream()
                 .collect(Collectors.toMap(
-                        io.github.Romariok.orkestro.user.models.User::getId,
+                        User::getId,
                         u -> u));
 
         return participants.stream()
                 .map(p -> {
-                    io.github.Romariok.orkestro.user.models.User user = usersById.get(p.getUserId());
+                    User user = usersById.get(p.getUserId());
                     String name = user != null ? user.getName() : null;
 
                     return EventAttendanceRowDTO.builder()
@@ -310,10 +480,11 @@ public class EventService {
     }
 
     @Transactional(readOnly = true)
-    public EventDTO getEventForCurrentUser(Long eventId) {
+    public EventDTO getEventForCurrentUser(Long organizationId, Long eventId) {
         Event event = eventRepository
                 .findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
 
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(event.getOrganizationId(), currentUserId);
@@ -386,6 +557,34 @@ public class EventService {
         }
 
         return buildEventDtoList(filtered);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EventDTO> searchEventsPageForCurrentUserInOrganization(
+            Long organizationId, EventSearchRequestDTO request, Pageable pageable) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(organizationId, currentUserId);
+
+        String titleQuery = request != null ? request.getTitle() : null;
+        List<String> tagFilters = request != null ? request.getTags() : null;
+        Instant from = request != null ? request.getFrom() : null;
+        Instant to = request != null ? request.getTo() : null;
+
+        String normalizedTitle = titleQuery == null ? null : titleQuery.trim();
+        if (normalizedTitle != null && normalizedTitle.isEmpty()) {
+            normalizedTitle = null;
+        }
+        final String titleFilter = normalizedTitle;
+        Set<String> normalizedTags = tagFilters == null ? Set.of() : sanitizeTags(tagFilters);
+
+        Specification<Event> spec = Specification.where(EventSpecifications.organizationEquals(organizationId))
+                .and(EventSpecifications.titleContainsIgnoreCase(titleFilter))
+                .and(EventSpecifications.hasAllTags(normalizedTags))
+                .and(EventSpecifications.intersectsDateRange(from, to));
+
+        Page<Event> eventsPage = eventRepository.findAll(spec, pageable);
+        List<EventDTO> content = buildEventDtoList(eventsPage.getContent());
+        return new PageImpl<>(content, pageable, eventsPage.getTotalElements());
     }
 
     /**
@@ -575,6 +774,13 @@ public class EventService {
                         "User " + userId + " is not an accepted member of organization " + organizationId));
     }
 
+    private void validateEventOrganization(Event event, Long organizationId) {
+        if (!organizationId.equals(event.getOrganizationId())) {
+            throw new BusinessException(
+                    "Event " + event.getId() + " does not belong to organization " + organizationId);
+        }
+    }
+
     private Map<Long, EventParticipantSourceType> buildParticipantSources(
             Long organizationId,
             List<Long> participantUserIds,
@@ -691,6 +897,9 @@ public class EventService {
         if (fileIds == null || fileIds.isEmpty()) {
             return;
         }
+        if (new HashSet<>(fileIds).size() > MAX_EVENT_FILES) {
+            throw new BusinessException("Event files limit reached (" + MAX_EVENT_FILES + ")");
+        }
 
         List<EventFile> entities = fileIds.stream()
                 .map(fileId -> {
@@ -702,6 +911,30 @@ public class EventService {
                 .toList();
 
         eventFileRepository.saveAll(entities);
+    }
+
+    private List<Long> uploadEventFiles(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            return List.of();
+        }
+        if (files.size() > MAX_EVENT_FILES) {
+            throw new IllegalArgumentException("Event files limit is " + MAX_EVENT_FILES);
+        }
+
+        List<Long> uploadedFileIds = new ArrayList<>();
+        for (int i = 0; i < files.size(); i++) {
+            MultipartFile file = files.get(i);
+            if (file == null || file.isEmpty() || file.getSize() <= 0) {
+                throw new IllegalArgumentException("files[" + i + "] file is required");
+            }
+            String originalName = file.getOriginalFilename();
+            if (originalName == null || originalName.isBlank()) {
+                throw new IllegalArgumentException("files[" + i + "] file name is required");
+            }
+            StoredFile stored = fileStorageService.uploadForCurrentUser(file, FileTypeDetector.detect(file));
+            uploadedFileIds.add(stored.getId());
+        }
+        return uploadedFileIds;
     }
 
     private void validateSongsForOrganization(Long organizationId, List<Long> songIds) {

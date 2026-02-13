@@ -39,11 +39,6 @@ public class EventUpdateRequestDTO {
     private Boolean includeAllOrganizationMembers;
 
     /**
-     * Если не null — полностью заменить список файлов события.
-     */
-    private List<Long> fileIds;
-
-    /**
      * Если не null — полностью заменить список песен события.
      */
     private List<Long> songIds;

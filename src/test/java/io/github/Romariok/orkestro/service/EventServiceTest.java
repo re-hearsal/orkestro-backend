@@ -43,8 +43,9 @@ import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
-import io.github.Romariok.orkestro.utils.file.StoredFile;
-import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+import io.github.Romariok.orkestro.utils.file.FileReferenceService;
+import io.github.Romariok.orkestro.utils.file.FileStorageService;
+import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -56,6 +57,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class EventServiceTest {
@@ -91,10 +93,16 @@ class EventServiceTest {
         private EventFileRepository eventFileRepository;
 
         @Mock
-        private StoredFileRepository storedFileRepository;
+        private EventSongRepository eventSongRepository;
 
         @Mock
-        private EventSongRepository eventSongRepository;
+        private FileStorageService fileStorageService;
+
+        @Mock
+        private FileRollbackHelper fileRollbackHelper;
+
+        @Mock
+        private FileReferenceService fileReferenceService;
 
         @InjectMocks
         private EventService eventService;
@@ -120,7 +128,6 @@ class EventServiceTest {
                                 .startTime(start)
                                 .endTime(end)
                                 .participantUserIds(List.of(userId1, userId2))
-                                .fileIds(List.of(1000L, 2000L))
                                 .tags(List.of("strings", "morning"))
                                 .build();
 
@@ -142,14 +149,6 @@ class EventServiceTest {
                                 .build();
                 when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
                                 .thenReturn(Optional.of(currentMembership));
-
-                StoredFile file1 = StoredFile.builder().id(1000L).name("f1").fileType(null).bucketName("b")
-                                .objectName("o1").size(1L).createdAt(Instant.now()).uploadedByUserId(currentUserId)
-                                .build();
-                StoredFile file2 = StoredFile.builder().id(2000L).name("f2").fileType(null).bucketName("b")
-                                .objectName("o2").size(1L).createdAt(Instant.now()).uploadedByUserId(currentUserId)
-                                .build();
-                when(storedFileRepository.findAllById(anyCollection())).thenReturn(List.of(file1, file2));
 
                 User user1 = User.builder().id(userId1).username("u1").email("u1@example.com").password("p")
                                 .profileImageFileId(1L).build();
@@ -188,13 +187,7 @@ class EventServiceTest {
                 when(eventRepository.save(any(Event.class))).thenReturn(saved);
 
                 when(eventParticipantRepository.findByEventId(100L)).thenReturn(List.of());
-                EventFile ef1 = new EventFile();
-                ef1.setEventId(100L);
-                ef1.setFileId(1000L);
-                EventFile ef2 = new EventFile();
-                ef2.setEventId(100L);
-                ef2.setFileId(2000L);
-                when(eventFileRepository.findByEventId(100L)).thenReturn(List.of(ef1, ef2));
+                when(eventFileRepository.findByEventId(100L)).thenReturn(List.of());
 
                 when(eventMapper.toDto(any(Event.class))).thenAnswer(invocation -> {
                         Event e = invocation.getArgument(0);
@@ -668,7 +661,7 @@ class EventServiceTest {
                 when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
                                 .thenReturn(Optional.empty());
 
-                assertThrows(BusinessException.class, () -> eventService.getEventForCurrentUser(eventId));
+                assertThrows(BusinessException.class, () -> eventService.getEventForCurrentUser(organizationId, eventId));
         }
 
         @Test
@@ -711,7 +704,7 @@ class EventServiceTest {
                                         .build();
                 });
 
-                EventDTO dto = eventService.getEventForCurrentUser(eventId);
+                EventDTO dto = eventService.getEventForCurrentUser(organizationId, eventId);
 
                 assertEquals(eventId, dto.getId());
                 assertEquals(organizationId, dto.getOrganizationId());
@@ -808,7 +801,7 @@ class EventServiceTest {
 
                 when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
 
-                assertThrows(EntityNotFoundException.class, () -> eventService.deleteEvent(eventId));
+                assertThrows(EntityNotFoundException.class, () -> eventService.deleteEvent(1L, eventId));
 
                 verify(eventParticipantRepository, never()).deleteByEventId(anyLong());
                 verify(eventRepository, never()).deleteById(anyLong());
@@ -887,7 +880,7 @@ class EventServiceTest {
 
                 when(userRepository.findAllById(anyCollection())).thenReturn(List.of(user1, user2));
 
-                List<EventAttendanceRowDTO> rows = eventService.getEventAttendanceTable(eventId);
+                List<EventAttendanceRowDTO> rows = eventService.getEventAttendanceTable(organizationId, eventId);
 
                 assertEquals(2, rows.size());
 
@@ -914,7 +907,7 @@ class EventServiceTest {
 
                 when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
 
-                assertThrows(EntityNotFoundException.class, () -> eventService.getEventAttendanceTable(eventId));
+                assertThrows(EntityNotFoundException.class, () -> eventService.getEventAttendanceTable(1L, eventId));
 
                 verify(eventParticipantRepository, never()).findByEventId(anyLong());
                 verify(userRepository, never()).findAllById(anyCollection());
@@ -949,7 +942,7 @@ class EventServiceTest {
 
                 when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of());
 
-                List<EventAttendanceRowDTO> rows = eventService.getEventAttendanceTable(eventId);
+                List<EventAttendanceRowDTO> rows = eventService.getEventAttendanceTable(organizationId, eventId);
 
                 assertEquals(0, rows.size());
                 verify(userRepository, never()).findAllById(anyCollection());
@@ -1233,7 +1226,7 @@ class EventServiceTest {
                 when(eventParticipantRepository.findByEventIdAndUserId(eventId, participantUserId))
                                 .thenReturn(Optional.of(participant));
 
-                eventService.markEventAttendance(eventId, participantUserId, EventAttendanceStatus.ATTENDED);
+                eventService.markEventAttendance(organizationId, eventId, participantUserId, EventAttendanceStatus.ATTENDED);
 
                 ArgumentCaptor<EventParticipant> participantCaptor = ArgumentCaptor.forClass(EventParticipant.class);
                 verify(eventParticipantRepository).save(participantCaptor.capture());
@@ -1251,7 +1244,7 @@ class EventServiceTest {
                 when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
 
                 assertThrows(EntityNotFoundException.class,
-                                () -> eventService.markEventAttendance(eventId, 10L, EventAttendanceStatus.ATTENDED));
+                                () -> eventService.markEventAttendance(1L, eventId, 10L, EventAttendanceStatus.ATTENDED));
 
                 verify(eventParticipantRepository, never()).findByEventIdAndUserId(anyLong(), anyLong());
                 verify(eventParticipantRepository, never()).save(any());
@@ -1291,8 +1284,71 @@ class EventServiceTest {
                 assertThrows(
                                 EntityNotFoundException.class,
                                 () -> eventService.markEventAttendance(
-                                                eventId, participantUserId, EventAttendanceStatus.ATTENDED));
+                                                organizationId, eventId, participantUserId, EventAttendanceStatus.ATTENDED));
 
                 verify(eventParticipantRepository, never()).save(any());
+        }
+
+        @Test
+        void attachFileToEvent_whenAlreadyHas50Files_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long currentUserId = 99L;
+
+                Event event = Event.builder().id(eventId).organizationId(organizationId).build();
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(currentUserId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(membership));
+
+                List<EventFile> files = java.util.stream.IntStream.range(0, 50)
+                                .mapToObj(i -> {
+                                        EventFile f = new EventFile();
+                                        f.setEventId(eventId);
+                                        f.setFileId((long) i + 1);
+                                        return f;
+                                })
+                                .toList();
+                when(eventFileRepository.findByEventId(eventId)).thenReturn(files);
+
+                MockMultipartFile file = new MockMultipartFile("file", "a.pdf", "application/pdf", "x".getBytes());
+                assertThrows(BusinessException.class, () -> eventService.attachFileToEvent(organizationId, eventId, file));
+                verify(fileStorageService, never()).uploadForCurrentUser(any(), any());
+        }
+
+        @Test
+        void deleteEventFile_whenFileStillReferenced_doesNotDeletePhysicalFile() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long currentUserId = 99L;
+                Long fileId = 700L;
+
+                Event event = Event.builder().id(eventId).organizationId(organizationId).build();
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(currentUserId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(membership));
+                when(eventFileRepository.existsByEventIdAndFileId(eventId, fileId)).thenReturn(true);
+                when(fileReferenceService.isFileReferenced(fileId)).thenReturn(true);
+                when(eventMapper.toDto(any(Event.class))).thenReturn(EventDTO.builder().id(eventId).organizationId(organizationId).build());
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of());
+                when(eventFileRepository.findByEventId(eventId)).thenReturn(List.of());
+
+                eventService.deleteEventFile(organizationId, eventId, fileId);
+
+                verify(eventFileRepository).deleteByEventIdAndFileId(eventId, fileId);
+                verify(fileStorageService, never()).delete(fileId);
         }
 }

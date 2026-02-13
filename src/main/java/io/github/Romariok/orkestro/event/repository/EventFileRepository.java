@@ -14,4 +14,10 @@ public interface EventFileRepository extends JpaRepository<EventFile, EventFileI
     List<EventFile> findByEventIdIn(List<Long> eventIds);
 
     void deleteByEventId(Long eventId);
+
+    boolean existsByEventIdAndFileId(Long eventId, Long fileId);
+
+    void deleteByEventIdAndFileId(Long eventId, Long fileId);
+
+    boolean existsByFileId(Long fileId);
 }

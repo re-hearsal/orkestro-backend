@@ -3,12 +3,14 @@ package io.github.Romariok.orkestro.event.dto;
 import io.github.Romariok.orkestro.event.models.enums.EventType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.web.multipart.MultipartFile;
 
 @Data
 @NoArgsConstructor
@@ -40,7 +42,8 @@ public class EventCreateRequestDTO {
 
     private Boolean includeAllOrganizationMembers;
 
-    private List<Long> fileIds;
+    @Size(max = 50)
+    private List<MultipartFile> files;
 
     private List<Long> songIds;
 
