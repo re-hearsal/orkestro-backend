@@ -13,6 +13,8 @@ import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -129,6 +131,28 @@ public class GlobalExceptionHandler {
                         HttpStatus.valueOf(413),
                         "Validation failed",
                         "Uploaded file is too large (max 30MB)",
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
+      @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+      public ResponseEntity<ApiErrorResponse> handleUnsupportedMediaType(
+                  HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                        "Unsupported media type",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
+      @ExceptionHandler(HttpMessageNotReadableException.class)
+      public ResponseEntity<ApiErrorResponse> handleNotReadableBody(
+                  HttpMessageNotReadableException ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.BAD_REQUEST,
+                        "Validation failed",
+                        ex.getMessage(),
                         request.getRequestURI(),
                         Collections.emptyList());
       }
