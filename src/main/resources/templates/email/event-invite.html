@@ -1,19 +1,19 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{lang}}">
 <head>
     <meta charset="UTF-8">
-    <title>Уведомление о мероприятии</title>
+    <title>{{emailTitle}}</title>
 </head>
 <body>
 <p>{{text}}</p>
 <p>
-    <b>Организация:</b> {{organizationName}}<br/>
-    <b>Мероприятие:</b> {{eventTitle}}
+    <b>{{organizationLabel}}</b> {{organizationName}}<br/>
+    <b>{{eventLabel}}</b> {{eventTitle}}
 </p>
 <p>
-    <a href="{{attendUrl}}" style="display:inline-block;padding:10px 16px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;">Да, приду</a>
+    <a href="{{attendUrl}}" style="display:inline-block;padding:10px 16px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;">{{attendButtonLabel}}</a>
     &nbsp;
-    <a href="{{absentUrl}}" style="display:inline-block;padding:10px 16px;background:#dc2626;color:#fff;text-decoration:none;border-radius:6px;">Нет, не смогу</a>
+    <a href="{{absentUrl}}" style="display:inline-block;padding:10px 16px;background:#dc2626;color:#fff;text-decoration:none;border-radius:6px;">{{absentButtonLabel}}</a>
 </p>
 </body>
 </html>

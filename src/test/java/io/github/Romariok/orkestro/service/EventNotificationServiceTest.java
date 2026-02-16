@@ -3,6 +3,7 @@ package io.github.Romariok.orkestro.service;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,15 +16,18 @@ import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.MessageSource;
 
 @ExtendWith(MockitoExtension.class)
 class EventNotificationServiceTest {
@@ -39,6 +43,9 @@ class EventNotificationServiceTest {
 
         @Mock
         private EmailEventNotificationService emailEventNotificationService;
+
+        @Mock
+        private MessageSource messageSource;
 
         @InjectMocks
         private EventNotificationService eventNotificationService;
@@ -67,6 +74,7 @@ class EventNotificationServiceTest {
                                 .id(1L)
                                 .organizationId(1L)
                                 .title("Concert")
+                                .startTime(Instant.now())
                                 .createdAt(Instant.now())
                                 .build();
 
@@ -78,6 +86,7 @@ class EventNotificationServiceTest {
                                 .username("user")
                                 .telegramUserId(telegramUserId)
                                 .notificationChannel(NotificationChannelType.TELEGRAM)
+                                .preferredLanguage(UserLanguageType.EN)
                                 .createdAt(Instant.now())
                                 .updatedAt(Instant.now())
                                 .profileImageFileId(1L)
@@ -92,6 +101,8 @@ class EventNotificationServiceTest {
 
                 when(userRepository.findAllById(anyCollection())).thenReturn(List.of(user));
                 when(organizationRepository.findById(1L)).thenReturn(Optional.of(organization));
+                when(messageSource.getMessage(anyString(), org.mockito.ArgumentMatchers.<Object[]>any(), any(Locale.class)))
+                                .thenReturn("Reminder about the event");
                 when(telegramEventNotificationService
                                 .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user), any()))
                                 .thenReturn(true);
@@ -99,7 +110,9 @@ class EventNotificationServiceTest {
                 eventNotificationService.sendEventReminderNotifications(event, List.of(userId));
 
                 verify(telegramEventNotificationService)
-                                .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user), any());
+                                .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user),
+                                                org.mockito.ArgumentMatchers.argThat(
+                                                                text -> text != null && text.contains("Reminder about the event")));
                 verify(emailEventNotificationService, never())
                                 .sendEventCreatedNotification(any(Event.class), any(), any(User.class), any());
         }
@@ -110,6 +123,7 @@ class EventNotificationServiceTest {
                                 .id(1L)
                                 .organizationId(1L)
                                 .title("Concert")
+                                .startTime(Instant.now())
                                 .createdAt(Instant.now())
                                 .build();
 
@@ -121,6 +135,7 @@ class EventNotificationServiceTest {
                                 .username("user")
                                 .telegramUserId(telegramUserId)
                                 .notificationChannel(NotificationChannelType.TELEGRAM)
+                                .preferredLanguage(UserLanguageType.EN)
                                 .createdAt(Instant.now())
                                 .updatedAt(Instant.now())
                                 .profileImageFileId(1L)
@@ -135,6 +150,8 @@ class EventNotificationServiceTest {
 
                 when(userRepository.findAllById(anyCollection())).thenReturn(List.of(user));
                 when(organizationRepository.findById(1L)).thenReturn(Optional.of(organization));
+                when(messageSource.getMessage(anyString(), org.mockito.ArgumentMatchers.<Object[]>any(), any(Locale.class)))
+                                .thenReturn("Reminder about the event");
                 when(telegramEventNotificationService
                                 .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user), any()))
                                 .thenReturn(false);
@@ -142,8 +159,12 @@ class EventNotificationServiceTest {
                 eventNotificationService.sendEventReminderNotifications(event, List.of(userId));
 
                 verify(telegramEventNotificationService)
-                                .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user), any());
+                                .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user),
+                                                org.mockito.ArgumentMatchers.argThat(
+                                                                text -> text != null && text.contains("Reminder about the event")));
                 verify(emailEventNotificationService)
-                                .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user), any());
+                                .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user),
+                                                org.mockito.ArgumentMatchers.argThat(
+                                                                text -> text != null && text.contains("Reminder about the event")));
         }
 }

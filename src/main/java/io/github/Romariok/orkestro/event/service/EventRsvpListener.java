@@ -8,6 +8,7 @@ import io.github.Romariok.orkestro.event.models.EventParticipant;
 import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
 import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
 import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import java.time.Instant;
 import java.util.Locale;
@@ -18,6 +19,7 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +32,7 @@ public class EventRsvpListener {
     private final EventParticipantRepository eventParticipantRepository;
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
+    private final MessageSource messageSource;
 
     @Value("${orkestro.telegram.bot-message-queue-name:telegram_bot_messages}")
     private String telegramBotMessageQueueName;
@@ -42,24 +45,6 @@ public class EventRsvpListener {
 
     @Value("${orkestro.telegram.contract.status.error:ERROR}")
     private String statusError;
-
-    @Value("${orkestro.telegram.messages.rsvp.invalid-request:Не удалось сохранить ответ: данные запроса некорректны.}")
-    private String msgRsvpInvalidRequest;
-
-    @Value("${orkestro.telegram.messages.rsvp.unknown-decision:Не удалось сохранить ответ: неизвестное значение решения.}")
-    private String msgRsvpUnknownDecision;
-
-    @Value("${orkestro.telegram.messages.rsvp.user-not-found:Не удалось сохранить ответ: пользователь не найден.}")
-    private String msgRsvpUserNotFound;
-
-    @Value("${orkestro.telegram.messages.rsvp.participant-not-found:Не удалось сохранить ответ: вы не являетесь участником этого события.}")
-    private String msgRsvpParticipantNotFound;
-
-    @Value("${orkestro.telegram.messages.rsvp.success:✅ Ваш ответ по участию в событии сохранён.}")
-    private String msgRsvpSuccess;
-
-    @Value("${orkestro.telegram.messages.rsvp.server-error:Не удалось сохранить ответ из-за ошибки сервера. Попробуйте позже.}")
-    private String msgRsvpServerError;
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record EventRsvpMessage(
@@ -100,7 +85,7 @@ public class EventRsvpListener {
                     requestId,
                     type,
                     (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                    msgRsvpInvalidRequest);
+                    getMessage("notification.telegram.rsvp.invalid-request", Locale.forLanguageTag("ru")));
             return;
         }
 
@@ -114,7 +99,7 @@ public class EventRsvpListener {
                         requestId,
                         type,
                         (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                        msgRsvpUnknownDecision);
+                        getMessage("notification.telegram.rsvp.unknown-decision", Locale.forLanguageTag("ru")));
                 return;
             }
 
@@ -127,7 +112,7 @@ public class EventRsvpListener {
                         requestId,
                         type,
                         (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                        msgRsvpUserNotFound);
+                        getMessage("notification.telegram.rsvp.user-not-found", Locale.forLanguageTag("ru")));
                 return;
             }
 
@@ -143,7 +128,7 @@ public class EventRsvpListener {
                         requestId,
                         type,
                         (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                        msgRsvpParticipantNotFound);
+                        getMessage("notification.telegram.rsvp.participant-not-found", resolveLocale(userOpt.get())));
                 return;
             }
 
@@ -163,7 +148,7 @@ public class EventRsvpListener {
                     requestId,
                     type,
                     (statusOk == null || statusOk.isBlank()) ? "OK" : statusOk,
-                    msgRsvpSuccess);
+                    getMessage("notification.telegram.rsvp.success", resolveLocale(userOpt.get())));
         } catch (Exception ex) {
             log.error("Failed to handle RSVP message for telegram_user_id={} event_id={}", telegramUserId, eventId, ex);
             sendResultToTelegram(
@@ -171,7 +156,7 @@ public class EventRsvpListener {
                     requestId,
                     type,
                     (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                    msgRsvpServerError);
+                    getMessage("notification.telegram.rsvp.server-error", Locale.forLanguageTag("ru")));
         }
     }
 
@@ -214,5 +199,14 @@ public class EventRsvpListener {
             case "DECLINE", "DECLINED", "REJECT" -> EventRsvpStatus.DECLINED;
             default -> null;
         };
+    }
+
+    private Locale resolveLocale(User user) {
+        UserLanguageType language = user.getPreferredLanguage() == null ? UserLanguageType.RU : user.getPreferredLanguage();
+        return language == UserLanguageType.EN ? Locale.ENGLISH : Locale.forLanguageTag("ru");
+    }
+
+    private String getMessage(String key, Locale locale) {
+        return messageSource.getMessage(key, null, locale);
     }
 }

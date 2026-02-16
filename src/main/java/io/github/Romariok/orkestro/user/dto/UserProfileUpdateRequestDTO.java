@@ -1,5 +1,6 @@
 package io.github.Romariok.orkestro.user.dto;
 
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
@@ -22,13 +23,15 @@ public class UserProfileUpdateRequestDTO {
    @Size(max = 255)
    private String location;
    private LocalDate birthDate;
+   private UserLanguageType preferredLanguage;
 
    @AssertTrue(message = "At least one field must be provided")
    private boolean isAnyFieldProvided() {
       return name != null
             || email != null
             || location != null
-            || birthDate != null;
+            || birthDate != null
+            || preferredLanguage != null;
    }
 
    @AssertTrue(message = "Name cannot be blank")

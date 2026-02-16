@@ -6,6 +6,7 @@ import io.github.Romariok.orkestro.user.dto.AuthResponseDTO;
 import io.github.Romariok.orkestro.user.dto.LoginRequestDTO;
 import io.github.Romariok.orkestro.user.dto.RegisterRequestDTO;
 import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
@@ -69,6 +70,7 @@ public class AuthService {
                     .createdAt(now)
                     .updatedAt(now)
                     .notificationChannel(NotificationChannelType.EMAIL)
+                    .preferredLanguage(request.getPreferredLanguage() == null ? UserLanguageType.RU : request.getPreferredLanguage())
                     .build();
             userService.saveUser(user);
 

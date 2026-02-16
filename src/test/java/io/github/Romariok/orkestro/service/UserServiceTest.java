@@ -13,6 +13,7 @@ import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.user.repository.UserInstrumentRepository;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
@@ -214,6 +215,7 @@ class UserServiceTest {
                                 .location("Old City")
                                 .birthDate(LocalDate.of(1990, 1, 1))
                                 .notificationChannel(NotificationChannelType.EMAIL)
+                                .preferredLanguage(UserLanguageType.RU)
                                 .updatedAt(Instant.parse("2020-01-01T00:00:00Z"))
                                 .build();
 
@@ -226,6 +228,7 @@ class UserServiceTest {
                 request.setEmail("new@example.com");
                 request.setLocation("New City");
                 request.setBirthDate(LocalDate.of(1995, 5, 5));
+                request.setPreferredLanguage(UserLanguageType.EN);
 
                 User result = userService.updateUserProfile(userId, request);
 
@@ -234,6 +237,7 @@ class UserServiceTest {
                 assertEquals("New City", result.getLocation());
                 assertEquals(LocalDate.of(1995, 5, 5), result.getBirthDate());
                 assertEquals(NotificationChannelType.EMAIL, result.getNotificationChannel());
+                assertEquals(UserLanguageType.EN, result.getPreferredLanguage());
                 assertTrue(result.getUpdatedAt() != null);
                 verify(userRepository).save(user);
         }

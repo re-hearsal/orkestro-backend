@@ -3,6 +3,7 @@ package io.github.Romariok.orkestro.service;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.Romariok.orkestro.user.dto.RegisterRequestDTO;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
@@ -24,6 +25,7 @@ class RegisterRequestDTOValidationTest {
       dto.setName("User Name");
       dto.setEmail("user@example.com");
       dto.setLocation("a".repeat(256));
+      dto.setPreferredLanguage(UserLanguageType.RU);
 
       var violations = buildValidator().validate(dto);
       assertTrue(
@@ -39,10 +41,12 @@ class RegisterRequestDTOValidationTest {
       dto.setName("User Name");
       dto.setEmail("user@example.com");
       dto.setBirthDate(LocalDate.now().plusDays(1));
+      dto.setPreferredLanguage(UserLanguageType.RU);
 
       var violations = buildValidator().validate(dto);
       assertTrue(
             violations.stream().anyMatch(v -> "birthDate".equals(v.getPropertyPath().toString())),
             "Expected validation violation for birthDate");
    }
+
 }

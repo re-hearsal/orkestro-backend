@@ -28,6 +28,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 
 @Getter
 @Setter
@@ -72,6 +73,12 @@ public class User implements UserDetails {
    @ColumnDefault("'EMAIL'")
    @Column(name = "notification_channel_id", nullable = false)
    private NotificationChannelType notificationChannel;
+
+   @Enumerated(EnumType.STRING)
+   @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+   @ColumnDefault("'RU'")
+   @Column(name = "preferred_language", nullable = false)
+   private UserLanguageType preferredLanguage;
 
    @Column(name = "location")
    private String location;

@@ -4,10 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.Romariok.orkestro.event.models.Event;
 import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 
 /**
@@ -20,6 +23,7 @@ public class EmailEventNotificationService implements EventNotificationSender {
 
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
+    private final MessageSource messageSource;
 
     @Value("${orkestro.email.queue-name:email_notifications}")
     private String emailQueueName;
@@ -32,8 +36,13 @@ public class EmailEventNotificationService implements EventNotificationSender {
         }
 
         try {
-            String eventTitle = event.getTitle() != null ? event.getTitle() : "без названия";
-            String subject = "Приглашение на мероприятие \"" + eventTitle + "\"";
+            UserLanguageType language = user.getPreferredLanguage() == null ? UserLanguageType.RU : user.getPreferredLanguage();
+            Locale locale = language == UserLanguageType.EN ? Locale.ENGLISH : Locale.forLanguageTag("ru");
+            String eventTitle = event.getTitle() != null
+                    ? event.getTitle()
+                    : messageSource.getMessage("notification.event.title.untitled", null, locale);
+            String subject = messageSource.getMessage("notification.event.email.subject.created",
+                    new Object[] { eventTitle }, locale);
             EmailNotificationMessage message = new EmailNotificationMessage(
                     user.getId(),
                     event.getId(),

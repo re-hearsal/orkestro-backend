@@ -29,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.context.MessageSource;
 
 @ExtendWith(MockitoExtension.class)
 class TelegramNotificationListenerTest {
@@ -44,6 +45,9 @@ class TelegramNotificationListenerTest {
 
       @Mock
       private ObjectMapper objectMapper;
+
+      @Mock
+      private MessageSource messageSource;
 
       @InjectMocks
       private TelegramNotificationListener listener;
@@ -136,7 +140,6 @@ class TelegramNotificationListenerTest {
 
             verify(tokenService).parseToken(token);
             verify(userRepository).findByTelegramUserId(telegramUserId);
-            verify(userRepository, never()).findById(anyLong());
             verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), anyString());
       }
 

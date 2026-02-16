@@ -130,6 +130,9 @@ public class UserService implements UserDetailsService {
       if (request.getBirthDate() != null) {
          user.setBirthDate(request.getBirthDate());
       }
+      if (request.getPreferredLanguage() != null) {
+         user.setPreferredLanguage(request.getPreferredLanguage());
+      }
 
       user.setUpdatedAt(Instant.now());
       return userRepository.save(user);

@@ -26,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.context.MessageSource;
 
 @ExtendWith(MockitoExtension.class)
 class EventRsvpListenerTest {
@@ -38,6 +39,9 @@ class EventRsvpListenerTest {
 
         @Mock
         private RabbitTemplate rabbitTemplate;
+
+        @Mock
+        private MessageSource messageSource;
 
         private EventRsvpListener listener;
 
@@ -60,7 +64,8 @@ class EventRsvpListenerTest {
                                 userRepository,
                                 eventParticipantRepository,
                                 rabbitTemplate,
-                                objectMapper);
+                                objectMapper,
+                                messageSource);
                 Field field = EventRsvpListener.class.getDeclaredField("telegramBotMessageQueueName");
                 field.setAccessible(true);
                 field.set(listener, "telegram_bot_messages");

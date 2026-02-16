@@ -13,18 +13,9 @@
             endDelimiter=";" />
     </changeSet>
 
-    <changeSet id="002-song-tags" author="romariok">
+    <changeSet id="004-add-user-preferred-language" author="romariok">
         <sqlFile
-            path="002-song-tags.sql"
-            relativeToChangelogFile="true"
-            stripComments="false"
-            splitStatements="true"
-            endDelimiter=";" />
-    </changeSet>
-
-    <changeSet id="003-drop-user-telegram-link-token" author="romariok">
-        <sqlFile
-            path="003-drop-user-telegram-link-token.sql"
+            path="004-add-user-preferred-language.sql"
             relativeToChangelogFile="true"
             stripComments="false"
             splitStatements="true"

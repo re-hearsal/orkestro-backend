@@ -6,8 +6,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import java.util.Locale;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,7 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +30,7 @@ public class TelegramNotificationListener {
    private final UserTelegramLinkTokenService tokenService;
    private final RabbitTemplate rabbitTemplate;
    private final ObjectMapper objectMapper;
+   private final MessageSource messageSource;
 
    @Value("${orkestro.telegram.bot-message-queue-name:telegram_bot_messages}")
    private String telegramBotMessageQueueName;
@@ -37,24 +41,6 @@ public class TelegramNotificationListener {
    private final String statusOk = "OK";
 
    private final String statusError = "ERROR";
-
-   @Value("${orkestro.telegram.messages.link.invalid-request:Не удалось подключить Telegram-уведомления: данные запроса некорректны.}")
-   private String msgLinkInvalidRequest;
-
-   @Value("${orkestro.telegram.messages.link.token-not-found:Не удалось подключить Telegram-уведомления: ссылка недействительна. Сгенерируйте новую ссылку в личном кабинете приложения.}")
-   private String msgLinkTokenNotFound;
-
-   @Value("${orkestro.telegram.messages.link.token-expired:Ссылка для подключения Telegram-уведомлений истекла. Пожалуйста, сгенерируйте новую ссылку в личном кабинете приложения.}")
-   private String msgLinkTokenExpired;
-
-   @Value("${orkestro.telegram.messages.link.telegram-already-linked:Этот Telegram-аккаунт уже привязан к другому пользователю. Если вы считаете это ошибкой, обратитесь к администратору.}")
-   private String msgLinkTelegramAlreadyLinked;
-
-   @Value("${orkestro.telegram.messages.link.success:✅ Telegram-уведомления успешно подключены к вашему аккаунту.}")
-   private String msgLinkSuccess;
-
-   @Value("${orkestro.telegram.messages.link.server-error:Не удалось подключить Telegram-уведомления из-за ошибки сервера. Попробуйте позже.}")
-   private String msgLinkServerError;
 
    @JsonIgnoreProperties(ignoreUnknown = true)
    public record TelegramRegistrationMessage(
@@ -93,7 +79,7 @@ public class TelegramNotificationListener {
                requestId,
                type,
                (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-               msgLinkInvalidRequest);
+               getMessage("notification.telegram.link.invalid-request", Locale.forLanguageTag("ru")));
          return;
       }
 
@@ -108,7 +94,7 @@ public class TelegramNotificationListener {
                   requestId,
                   type,
                   (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                  msgLinkTokenNotFound);
+                  getMessage("notification.telegram.link.token-not-found", Locale.forLanguageTag("ru")));
             return;
          }
 
@@ -123,7 +109,7 @@ public class TelegramNotificationListener {
                   requestId,
                   type,
                   (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                  msgLinkTelegramAlreadyLinked);
+                  getMessage("notification.telegram.link.telegram-already-linked", resolveLocaleByUserId(userId)));
             return;
          }
 
@@ -142,7 +128,7 @@ public class TelegramNotificationListener {
                requestId,
                type,
                (statusOk == null || statusOk.isBlank()) ? "OK" : statusOk,
-               msgLinkSuccess);
+               getMessage("notification.telegram.link.success", resolveLocale(user)));
       } catch (Exception ex) {
          log.error("Failed to handle Telegram registration request", ex);
          sendResultToTelegram(
@@ -150,7 +136,7 @@ public class TelegramNotificationListener {
                requestId,
                type,
                (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-               msgLinkServerError);
+               getMessage("notification.telegram.link.server-error", Locale.forLanguageTag("ru")));
       }
    }
 
@@ -185,5 +171,24 @@ public class TelegramNotificationListener {
       } catch (Exception e) {
          log.error("Failed to send Telegram result message to queue {}", telegramBotMessageQueueName, e);
       }
+   }
+
+   private Locale resolveLocale(User user) {
+      UserLanguageType language = user.getPreferredLanguage() == null ? UserLanguageType.RU : user.getPreferredLanguage();
+      return language == UserLanguageType.EN ? Locale.ENGLISH : Locale.forLanguageTag("ru");
+   }
+
+   private Locale resolveLocaleByUserId(Long userId) {
+      if (userId == null) {
+         return Locale.forLanguageTag("ru");
+      }
+      UserLanguageType language = userRepository.findById(userId)
+            .map(User::getPreferredLanguage)
+            .orElse(UserLanguageType.RU);
+      return language == UserLanguageType.EN ? Locale.ENGLISH : Locale.forLanguageTag("ru");
+   }
+
+   private String getMessage(String key, Locale locale) {
+      return messageSource.getMessage(key, null, locale);
    }
 }
