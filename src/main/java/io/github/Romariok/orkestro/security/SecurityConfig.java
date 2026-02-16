@@ -43,6 +43,7 @@ public class SecurityConfig {
                                     "/api/v1/auth/register",
                                     "/api/v1/auth/login",
                                     "/api/v1/auth/password/reset",
+                                    "/api/v1/events/rsvp/email",
                                     "/api/v1/instruments",
                                     "/api/v1/organizations/public",
                                     "/api/v1/organizations/public/page")

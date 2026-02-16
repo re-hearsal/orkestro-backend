@@ -25,4 +25,10 @@ public class RabbitMQConfig {
          @Value("${orkestro.telegram.event-rsvp-queue-name:telegram_event_rsvp}") String queueName) {
       return new Queue(queueName, true);
    }
+
+   @Bean
+   public Queue emailNotificationQueue(
+         @Value("${orkestro.email.queue-name:email_notifications}") String queueName) {
+      return new Queue(queueName, true);
+   }
 }
