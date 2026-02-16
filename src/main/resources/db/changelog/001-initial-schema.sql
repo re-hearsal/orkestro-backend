@@ -203,6 +203,15 @@ CREATE TABLE song (
     UNIQUE (organization_id, title)
 );
 
+CREATE TABLE song_tags (
+    song_id BIGINT NOT NULL,
+    tag TEXT NOT NULL,
+    PRIMARY KEY (song_id, tag),
+    FOREIGN KEY (song_id) REFERENCES song (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_song_tags_tag ON song_tags (tag);
+
 CREATE TABLE song_instruments (
     song_id BIGINT NOT NULL,
     instrument_id BIGINT NOT NULL,
@@ -396,16 +405,6 @@ CREATE TABLE task_visibility_role (
     PRIMARY KEY (task_id, role_id),
     FOREIGN KEY (task_id) REFERENCES task (id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES role (id) ON DELETE CASCADE
-);
-
-
-CREATE TABLE user_telegram_link_token (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    token TEXT NOT NULL UNIQUE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP,
-    used_at TIMESTAMP
 );
 
 CREATE UNIQUE INDEX ux_users_telegram_user_id ON users (telegram_user_id);

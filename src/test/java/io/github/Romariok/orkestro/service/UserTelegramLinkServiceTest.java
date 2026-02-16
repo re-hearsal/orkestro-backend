@@ -4,23 +4,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.User;
-import io.github.Romariok.orkestro.user.models.UserTelegramLinkToken;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
-import io.github.Romariok.orkestro.user.repository.UserTelegramLinkTokenRepository;
 import io.github.Romariok.orkestro.user.service.UserTelegramLinkService;
+import io.github.Romariok.orkestro.user.service.UserTelegramLinkTokenService;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
-import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -32,7 +28,7 @@ class UserTelegramLinkServiceTest {
       private UserRepository userRepository;
 
       @Mock
-      private UserTelegramLinkTokenRepository tokenRepository;
+      private UserTelegramLinkTokenService tokenService;
 
       @Mock
       private SecurityUtils securityUtils;
@@ -48,11 +44,11 @@ class UserTelegramLinkServiceTest {
             assertThrows(EntityNotFoundException.class,
                         () -> userTelegramLinkService.createLinkTokenForUser(userId));
 
-            verify(tokenRepository, never()).save(any());
+            verify(tokenService, never()).createToken(any());
       }
 
       @Test
-      void createLinkTokenForUser_validUser_createsTokenAndInvalidatesPrevious() {
+      void createLinkTokenForUser_validUser_createsToken() {
             Long userId = 1L;
             User user = User.builder()
                         .id(userId)
@@ -60,25 +56,12 @@ class UserTelegramLinkServiceTest {
                         .build();
 
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-            when(tokenRepository.save(any(UserTelegramLinkToken.class)))
-                        .thenAnswer(invocation -> invocation.getArgument(0));
+            when(tokenService.createToken(userId)).thenReturn("generated-token");
 
             String generatedToken = userTelegramLinkService.createLinkTokenForUser(userId);
 
-            // Проверяем, что предыдущие активные токены были инвалидированы
-            verify(tokenRepository).invalidateActiveTokensForUser(eq(userId), any(Instant.class));
-
-            // Проверяем, что новый токен корректно сохранён
-            ArgumentCaptor<UserTelegramLinkToken> captor = ArgumentCaptor.forClass(UserTelegramLinkToken.class);
-            verify(tokenRepository).save(captor.capture());
-            UserTelegramLinkToken saved = captor.getValue();
-
-            assertEquals(userId, saved.getUserId());
-            assertEquals(generatedToken, saved.getToken());
-            assertNotNull(saved.getCreatedAt());
-            assertNotNull(saved.getExpiresAt());
-            // expiresAt должен быть позже createdAt (TTL > 0)
-            assertEquals(true, saved.getExpiresAt().isAfter(saved.getCreatedAt()));
+            assertEquals("generated-token", generatedToken);
+            verify(tokenService).createToken(userId);
       }
 
       @Test
@@ -91,14 +74,12 @@ class UserTelegramLinkServiceTest {
 
             when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
             when(userRepository.findById(currentUserId)).thenReturn(Optional.of(user));
-            when(tokenRepository.save(any(UserTelegramLinkToken.class)))
-                        .thenAnswer(invocation -> invocation.getArgument(0));
+            when(tokenService.createToken(currentUserId)).thenReturn("token");
 
             String token = userTelegramLinkService.createLinkTokenForCurrentUser();
 
             assertNotNull(token);
             verify(userRepository).findById(currentUserId);
-            verify(tokenRepository).invalidateActiveTokensForUser(eq(currentUserId), any(Instant.class));
-            verify(tokenRepository).save(any(UserTelegramLinkToken.class));
+            verify(tokenService).createToken(currentUserId);
       }
 }

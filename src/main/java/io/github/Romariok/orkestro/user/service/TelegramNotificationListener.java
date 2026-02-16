@@ -4,14 +4,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.user.models.User;
-import io.github.Romariok.orkestro.user.models.UserTelegramLinkToken;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
-import io.github.Romariok.orkestro.user.repository.UserTelegramLinkTokenRepository;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
-import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TelegramNotificationListener {
 
    private final UserRepository userRepository;
-   private final UserTelegramLinkTokenRepository tokenRepository;
+   private final UserTelegramLinkTokenService tokenService;
    private final RabbitTemplate rabbitTemplate;
    private final ObjectMapper objectMapper;
 
@@ -47,9 +43,6 @@ public class TelegramNotificationListener {
 
    @Value("${orkestro.telegram.messages.link.token-not-found:Не удалось подключить Telegram-уведомления: ссылка недействительна. Сгенерируйте новую ссылку в личном кабинете приложения.}")
    private String msgLinkTokenNotFound;
-
-   @Value("${orkestro.telegram.messages.link.token-already-used:Ссылка для подключения Telegram-уведомлений уже была использована. Сгенерируйте новую ссылку в личном кабинете приложения.}")
-   private String msgLinkTokenAlreadyUsed;
 
    @Value("${orkestro.telegram.messages.link.token-expired:Ссылка для подключения Telegram-уведомлений истекла. Пожалуйста, сгенерируйте новую ссылку в личном кабинете приложения.}")
    private String msgLinkTokenExpired;
@@ -105,10 +98,11 @@ public class TelegramNotificationListener {
       }
 
       try {
-         Optional<UserTelegramLinkToken> optionalToken = tokenRepository.findByToken(token);
-
-         if (optionalToken.isEmpty()) {
-            log.warn("No Telegram link token found for token={}", token);
+         UserTelegramLinkTokenService.ParsedTelegramLinkToken parsedToken;
+         try {
+            parsedToken = tokenService.parseToken(token);
+         } catch (Exception ex) {
+            log.warn("Invalid Telegram link token: {}", ex.getMessage());
             sendResultToTelegram(
                   telegramUserId,
                   requestId,
@@ -118,31 +112,7 @@ public class TelegramNotificationListener {
             return;
          }
 
-         UserTelegramLinkToken linkToken = optionalToken.get();
-
-         if (linkToken.getUsedAt() != null) {
-            log.warn("Telegram link token already used, token={}", token);
-            sendResultToTelegram(
-                  telegramUserId,
-                  requestId,
-                  type,
-                  (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                  msgLinkTokenAlreadyUsed);
-            return;
-         }
-
-         if (linkToken.getExpiresAt() != null && linkToken.getExpiresAt().isBefore(Instant.now())) {
-            log.warn("Telegram link token expired, token={}", token);
-            sendResultToTelegram(
-                  telegramUserId,
-                  requestId,
-                  type,
-                  (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                  msgLinkTokenExpired);
-            return;
-         }
-
-         Long userId = linkToken.getUserId();
+         Long userId = parsedToken.userId();
 
          Optional<User> existingByTelegram = userRepository.findByTelegramUserId(telegramUserId);
          if (existingByTelegram.isPresent() && !existingByTelegram.get().getId().equals(userId)) {
@@ -162,11 +132,7 @@ public class TelegramNotificationListener {
 
          user.setTelegramUserId(telegramUserId);
          user.setNotificationChannel(NotificationChannelType.TELEGRAM);
-         user.setUpdatedAt(Instant.now());
          userRepository.save(user);
-
-         linkToken.setUsedAt(Instant.now());
-         tokenRepository.save(linkToken);
 
          log.info("Enabled TELEGRAM notifications for user id={} (telegram_user_id={})",
                user.getId(), telegramUserId);
