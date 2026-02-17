@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.Romariok.orkestro.event.models.Event;
 import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -34,11 +35,14 @@ public class TelegramEventNotificationService implements EventNotificationSender
         }
 
         try {
+            String locale = user.getPreferredLanguage() == UserLanguageType.EN ? "en" : "ru";
             Map<String, Object> payload = Map.of(
                     "telegram_user_id",
                     telegramUserId,
                     "text",
                     text,
+                    "locale",
+                    locale,
                     "buttons",
                     List.of(
                             Map.of(
