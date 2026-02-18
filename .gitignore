@@ -40,3 +40,4 @@ build/
 /pgdata
 /minio-data
 
+.DS_STORE

@@ -46,7 +46,12 @@ public class SecurityConfig {
                                     "/api/v1/events/rsvp/email",
                                     "/api/v1/instruments",
                                     "/api/v1/organizations/public",
-                                    "/api/v1/organizations/public/page")
+                                    "/api/v1/organizations/public/page",
+                                    "/swagger-ui/**",
+                                    "/swagger-ui.html",
+                                    "/v3/api-docs/**",
+                                    "/swagger-resources/**",
+                                    "/webjars/**")
                             .permitAll()
                             .anyRequest().authenticated())
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

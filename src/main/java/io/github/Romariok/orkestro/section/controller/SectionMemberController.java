@@ -2,6 +2,7 @@ package io.github.Romariok.orkestro.section.controller;
 
 import io.github.Romariok.orkestro.section.dto.SectionMemberDTO;
 import io.github.Romariok.orkestro.section.service.SectionService;
+import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
 import jakarta.validation.constraints.Positive;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -17,38 +18,83 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @Validated
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/sections/{sectionId}/members")
+@Tag(name = "Sections - Members", description = "API для управления участниками секций")
 public class SectionMemberController {
 
    private final SectionService sectionService;
 
-   @PostMapping("/{userId}")
-   public ResponseEntity<Void> addUserToSection(
-         @PathVariable @Positive Long sectionId,
-         @PathVariable @Positive Long userId) {
+   @Operation(
+           summary = "Добавить участника в секцию",
+           description = "Добавляет пользователя в секцию."
+   )
+   @ApiResponses({
+           @ApiResponse(responseCode = "204", description = "Участник добавлен", content = @Content),
+           @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "404", description = "Секция или пользователь не найдены", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+   })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{userId}")
+    public ResponseEntity<Void> addUserToSection(
+          @Parameter(description = "ID секции", required = true) @PathVariable @Positive Long sectionId,
+          @Parameter(description = "ID пользователя", required = true) @PathVariable @Positive Long userId) {
       sectionService.addUserToSection(sectionId, userId);
       return ResponseEntity.noContent().build();
    }
 
-   @DeleteMapping("/{userId}")
-   public ResponseEntity<Void> removeUserFromSection(
-         @PathVariable @Positive Long sectionId,
-         @PathVariable @Positive Long userId) {
+    @Operation(
+            summary = "Удалить участника из секции",
+            description = "Удаляет пользователя из секции."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Участник удален", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Секция или пользователь не найдены", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/{userId}")
+    public ResponseEntity<Void> removeUserFromSection(
+          @Parameter(description = "ID секции", required = true) @PathVariable @Positive Long sectionId,
+          @Parameter(description = "ID пользователя", required = true) @PathVariable @Positive Long userId) {
       sectionService.removeUserFromSection(sectionId, userId);
       return ResponseEntity.noContent().build();
    }
 
-   @GetMapping("/page")
-   public ResponseEntity<Page<SectionMemberDTO>> searchMembersPage(
-         @PathVariable @Positive Long sectionId,
-         @RequestParam(required = false) String query,
-         @RequestParam(required = false) List<@Positive Long> roleIds,
-         @RequestParam(required = false) List<@Positive Long> instrumentIds,
-         @PageableDefault(size = 20) Pageable pageable) {
+    @Operation(
+            summary = "Поиск участников секции",
+            description = "Возвращает страницу участников секции с возможностью фильтрации по имени, ролям и инструментам."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Список участников получен", content = @Content(schema = @Schema(implementation = Page.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Секция не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/page")
+    public ResponseEntity<Page<SectionMemberDTO>> searchMembersPage(
+          @Parameter(description = "ID секции", required = true) @PathVariable @Positive Long sectionId,
+          @Parameter(description = "Поиск по имени") @RequestParam(required = false) String query,
+          @Parameter(description = "Фильтр по ID ролей") @RequestParam(required = false) List<@Positive Long> roleIds,
+          @Parameter(description = "Фильтр по ID инструментов") @RequestParam(required = false) List<@Positive Long> instrumentIds,
+          @Parameter(description = "Параметры пагинации") @PageableDefault(size = 20) Pageable pageable) {
       return ResponseEntity.ok(
             sectionService.searchMembers(
                   sectionId,

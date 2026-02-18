@@ -3,6 +3,7 @@ package io.github.Romariok.orkestro.event.controller;
 import io.github.Romariok.orkestro.event.dto.EventAttendanceMarkRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventAttendanceRowDTO;
 import io.github.Romariok.orkestro.event.service.EventService;
+import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import java.util.List;
@@ -15,32 +16,67 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @Validated
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/organizations/{organizationId}/events")
+@Tag(name = "Events - Attendance", description = "API для управления посещаемостью событий")
 public class EventAttendanceController {
 
     private final EventService eventService;
 
+    @Operation(
+            summary = "Отметить посещаемость",
+            description = "Отмечает статус посещения участником события (присутствовал, отсутствовал и т.д.)"
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Посещаемость отмечена", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Ошибка валидации", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Событие или пользователь не найдены", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     @PostMapping("/{eventId}/attendance")
     public ResponseEntity<Void> markEventAttendance(
-            @PathVariable @Positive Long organizationId,
-            @PathVariable @Positive Long eventId,
+            @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID события", required = true) @PathVariable @Positive Long eventId,
+            @Parameter(description = "Данные о посещаемости", required = true, content = @Content(examples = {
+                @ExampleObject(name = "Отметить присутствие", value = "{\"participantUserId\": 5, \"attendanceStatus\": \"PRESENT\"}"),
+                @ExampleObject(name = "Отметить отсутствие", value = "{\"participantUserId\": 5, \"attendanceStatus\": \"ABSENT\"}")
+            }))
             @Valid @RequestBody EventAttendanceMarkRequestDTO request) {
-        eventService.markEventAttendance(
-                organizationId,
-                eventId,
-                request.getParticipantUserId(),
-                request.getAttendanceStatus());
+        eventService.markEventAttendance(organizationId, eventId, request.getParticipantUserId(), request.getAttendanceStatus());
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(
+            summary = "Получить матрицу посещаемости",
+            description = "Возвращает таблицу посещаемости для всех участников события."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Матрица получена", content = @Content(schema = @Schema(implementation = List.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Событие не найдено", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/{eventId}/attendance/matrix")
     public ResponseEntity<List<EventAttendanceRowDTO>> getAttendanceMatrix(
-            @PathVariable @Positive Long organizationId,
-            @PathVariable @Positive Long eventId) {
+            @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID события", required = true) @PathVariable @Positive Long eventId) {
         return ResponseEntity.ok(eventService.getEventAttendanceTable(organizationId, eventId));
     }
 }
