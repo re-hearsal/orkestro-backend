@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -367,7 +368,7 @@ public class OrganizationService {
          if (dto == null || dto.getLinkType() == null || dto.getUrl() == null) {
             continue;
          }
-         String key = dto.getLinkType().name() + "|" + dto.getUrl().trim().toLowerCase();
+          String key = dto.getLinkType().name() + "|" + dto.getUrl().trim().toLowerCase(Locale.ROOT);
          uniqueLinks.putIfAbsent(key, dto);
       }
 

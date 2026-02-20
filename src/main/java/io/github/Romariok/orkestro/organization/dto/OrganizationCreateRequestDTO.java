@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
@@ -16,6 +17,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.web.multipart.MultipartFile;
 
+@SuppressWarnings("unused")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -65,7 +67,7 @@ public class OrganizationCreateRequestDTO {
          if (link == null || link.getLinkType() == null || link.getUrl() == null) {
             continue;
          }
-         String key = link.getLinkType().name() + "|" + link.getUrl().trim().toLowerCase();
+          String key = link.getLinkType().name() + "|" + link.getUrl().trim().toLowerCase(Locale.ROOT);
          if (!seen.add(key)) {
             return false;
          }

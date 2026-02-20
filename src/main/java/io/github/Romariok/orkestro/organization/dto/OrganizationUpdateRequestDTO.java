@@ -8,11 +8,13 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+@SuppressWarnings("unused")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -59,7 +61,7 @@ public class OrganizationUpdateRequestDTO {
          if (link == null || link.getLinkType() == null || link.getUrl() == null) {
             continue;
          }
-         String key = link.getLinkType().name() + "|" + link.getUrl().trim().toLowerCase();
+          String key = link.getLinkType().name() + "|" + link.getUrl().trim().toLowerCase(Locale.ROOT);
          if (!seen.add(key)) {
             return false;
          }

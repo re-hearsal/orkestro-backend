@@ -38,9 +38,9 @@ public class TelegramNotificationListener {
    @Value("${orkestro.telegram.contract.type.telegram-link:telegram.link}")
    private String telegramLinkType;
 
-   private final String statusOk = "OK";
+   private static final String STATUS_OK = "OK";
 
-   private final String statusError = "ERROR";
+   private static final String STATUS_ERROR = "ERROR";
 
    @JsonIgnoreProperties(ignoreUnknown = true)
    public record TelegramRegistrationMessage(
@@ -78,7 +78,7 @@ public class TelegramNotificationListener {
                telegramUserId,
                requestId,
                type,
-               (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
+               STATUS_ERROR,
                getMessage("notification.telegram.link.invalid-request", Locale.forLanguageTag("ru")));
          return;
       }
@@ -93,7 +93,7 @@ public class TelegramNotificationListener {
                   telegramUserId,
                   requestId,
                   type,
-                  (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
+                  STATUS_ERROR,
                   getMessage("notification.telegram.link.token-not-found", Locale.forLanguageTag("ru")));
             return;
          }
@@ -108,7 +108,7 @@ public class TelegramNotificationListener {
                   telegramUserId,
                   requestId,
                   type,
-                  (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
+                  STATUS_ERROR,
                   getMessage("notification.telegram.link.telegram-already-linked", resolveLocaleByUserId(userId)));
             return;
          }
@@ -127,7 +127,7 @@ public class TelegramNotificationListener {
                telegramUserId,
                requestId,
                type,
-               (statusOk == null || statusOk.isBlank()) ? "OK" : statusOk,
+               STATUS_OK,
                getMessage("notification.telegram.link.success", resolveLocale(user)));
       } catch (Exception ex) {
          log.error("Failed to handle Telegram registration request", ex);
@@ -135,7 +135,7 @@ public class TelegramNotificationListener {
                telegramUserId,
                requestId,
                type,
-               (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
+               STATUS_ERROR,
                getMessage("notification.telegram.link.server-error", Locale.forLanguageTag("ru")));
       }
    }

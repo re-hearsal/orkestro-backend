@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.web.multipart.MultipartFile;
 
+@SuppressWarnings("unused")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
