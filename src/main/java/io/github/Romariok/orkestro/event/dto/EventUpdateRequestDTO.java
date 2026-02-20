@@ -41,6 +41,8 @@ public class EventUpdateRequestDTO {
     @Schema(description = "If true, event applies to whole organization and section IDs are ignored", example = "false")
     private Boolean includeAllOrganizationMembers;
 
+    private Integer remindBeforeMinutes;
+
     /**
      * Если не null — полностью заменить список песен события.
      */

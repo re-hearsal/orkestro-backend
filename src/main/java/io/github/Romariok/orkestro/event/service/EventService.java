@@ -219,6 +219,10 @@ public class EventService {
             event.setLocation(request.getLocation());
         }
 
+        if (request.getRemindBeforeMinutes() != null) {
+            event.setRemindBeforeMinutes(request.getRemindBeforeMinutes());
+        }
+
         if (request.getStartTime() != null) {
             event.setStartTime(request.getStartTime());
         }

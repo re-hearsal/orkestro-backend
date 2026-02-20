@@ -35,6 +35,8 @@ public class EventDTO {
     @Schema(description = "Whether this event applies to all organization members")
     private Boolean includeAllOrganizationMembers;
 
+    private Integer remindBeforeMinutes;
+
     private List<Long> fileIds;
 
     private List<Long> songIds;
