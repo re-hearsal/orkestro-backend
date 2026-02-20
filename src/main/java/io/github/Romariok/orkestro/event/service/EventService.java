@@ -1,14 +1,20 @@
 package io.github.Romariok.orkestro.event.service;
 
 import io.github.Romariok.orkestro.event.dto.EventAttendanceRowDTO;
+import io.github.Romariok.orkestro.event.dto.EventCalendarDTO;
+import io.github.Romariok.orkestro.event.dto.EventCalendarGroupedResponseDTO;
+import io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO;
+import io.github.Romariok.orkestro.event.dto.EventCalendarScope;
+import io.github.Romariok.orkestro.event.dto.EventCalendarSectionGroupDTO;
+import io.github.Romariok.orkestro.event.dto.EventUserCalendarRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventDTO;
-import io.github.Romariok.orkestro.event.dto.EventSearchRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventUpdateRequestDTO;
 import io.github.Romariok.orkestro.event.mapper.EventMapper;
 import io.github.Romariok.orkestro.event.models.Event;
 import io.github.Romariok.orkestro.event.models.EventFile;
 import io.github.Romariok.orkestro.event.models.EventParticipant;
+import io.github.Romariok.orkestro.event.models.EventSection;
 import io.github.Romariok.orkestro.event.models.EventSong;
 import io.github.Romariok.orkestro.event.models.enums.EventAttendanceStatus;
 import io.github.Romariok.orkestro.event.models.enums.EventParticipantSourceType;
@@ -16,6 +22,7 @@ import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
 import io.github.Romariok.orkestro.event.repository.EventFileRepository;
 import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
+import io.github.Romariok.orkestro.event.repository.EventSectionRepository;
 import io.github.Romariok.orkestro.event.repository.EventSongRepository;
 import io.github.Romariok.orkestro.event.specification.EventSpecifications;
 import io.github.Romariok.orkestro.config.FileLimitsProperties;
@@ -25,6 +32,7 @@ import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.security.OrganizationPermissionChecker;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.section.models.Section;
 import io.github.Romariok.orkestro.section.models.SectionUser;
@@ -39,14 +47,15 @@ import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -68,6 +77,7 @@ public class EventService {
     private final EventParticipantRepository eventParticipantRepository;
     private final EventFileRepository eventFileRepository;
     private final EventSongRepository eventSongRepository;
+    private final EventSectionRepository eventSectionRepository;
     private final SongRepository songRepository;
     private final OrganizationRepository organizationRepository;
     private final OrganizationUserRepository organizationUserRepository;
@@ -81,6 +91,12 @@ public class EventService {
     private final EventNotificationService eventNotificationService;
     private final FileReferenceService fileReferenceService;
     private final FileLimitsProperties fileLimitsProperties;
+    private final OrganizationPermissionChecker organizationPermissionChecker;
+
+    private static final int CALENDAR_MAX_PAGE_SIZE = 500;
+    private static final Duration CALENDAR_DEFAULT_PAST_WINDOW = Duration.ofDays(7);
+    private static final Duration CALENDAR_DEFAULT_FUTURE_WINDOW = Duration.ofDays(42);
+    private static final Duration CALENDAR_MAX_WINDOW = Duration.ofDays(92);
 
     @Transactional
     public EventDTO createEventInOrganization(Long organizationId, EventCreateRequestDTO request) {
@@ -116,8 +132,10 @@ public class EventService {
         validateSongsForOrganization(organizationId, request.getSongIds());
 
         boolean includeAll = Boolean.TRUE.equals(request.getIncludeAllOrganizationMembers());
+        List<Long> participantSectionIds = normalizeAndValidateParticipantSectionIds(
+                organizationId, request.getParticipantSectionIds(), includeAll);
         Map<Long, EventParticipantSourceType> sources = buildParticipantSources(
-                organizationId, request.getParticipantUserIds(), request.getParticipantSectionIds(), includeAll);
+                organizationId, request.getParticipantUserIds(), participantSectionIds, includeAll);
 
         Set<String> tags = request.getTags() != null ? sanitizeTags(request.getTags()) : null;
 
@@ -136,6 +154,7 @@ public class EventService {
                 .endTime(request.getEndTime())
                 .sendRsvp(sendRsvp)
                 .remindBeforeMinutes(remindBeforeMinutes)
+                .includeAllOrganizationMembers(includeAll)
                 .createdAt(now)
                 .tags(tags)
                 .build();
@@ -147,6 +166,7 @@ public class EventService {
             Event saved = eventRepository.save(event);
 
             saveParticipants(saved.getId(), sources);
+            saveEventSections(saved.getId(), participantSectionIds, includeAll);
             saveEventFiles(saved.getId(), uploadedFileIds);
             saveEventSongs(saved.getId(), request.getSongIds());
 
@@ -219,19 +239,32 @@ public class EventService {
             Set<String> tags = sanitizeTags(request.getTags());
             event.setTags(tags);
         }
+        if (request.getIncludeAllOrganizationMembers() != null) {
+            event.setIncludeAllOrganizationMembers(Boolean.TRUE.equals(request.getIncludeAllOrganizationMembers()));
+        }
         boolean participantsChanged = request.getParticipantUserIds() != null
                 || request.getParticipantSectionIds() != null
                 || request.getIncludeAllOrganizationMembers() != null;
         if (participantsChanged) {
-            boolean includeAll = Boolean.TRUE.equals(request.getIncludeAllOrganizationMembers());
+            boolean includeAll = event.isIncludeAllOrganizationMembers();
+            List<Long> participantSectionIds = request.getParticipantSectionIds();
+            if (participantSectionIds == null) {
+                participantSectionIds = eventSectionRepository.findByEventId(eventId).stream()
+                        .map(EventSection::getSectionId)
+                        .toList();
+            }
+            participantSectionIds = normalizeAndValidateParticipantSectionIds(
+                    event.getOrganizationId(), participantSectionIds, includeAll);
             Map<Long, EventParticipantSourceType> sources = buildParticipantSources(
                     event.getOrganizationId(),
                     request.getParticipantUserIds(),
-                    request.getParticipantSectionIds(),
+                    participantSectionIds,
                     includeAll);
 
             eventParticipantRepository.deleteByEventId(eventId);
             saveParticipants(eventId, sources);
+            eventSectionRepository.deleteByEventId(eventId);
+            saveEventSections(eventId, participantSectionIds, includeAll);
         }
 
         if (request.getSongIds() != null) {
@@ -257,7 +290,8 @@ public class EventService {
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(source.getOrganizationId(), currentUserId);
 
-        if (source.getStartTime() == null || source.getEndTime() == null || !source.getEndTime().isAfter(source.getStartTime())) {
+        if (source.getStartTime() == null || source.getEndTime() == null
+                || !source.getEndTime().isAfter(source.getStartTime())) {
             throw new IllegalStateException("Source event has invalid time range");
         }
         long durationSeconds = source.getEndTime().getEpochSecond() - source.getStartTime().getEpochSecond();
@@ -265,6 +299,7 @@ public class EventService {
         List<EventParticipant> sourceParticipants = eventParticipantRepository.findByEventId(eventId);
         List<EventFile> sourceFiles = eventFileRepository.findByEventId(eventId);
         List<EventSong> sourceSongs = eventSongRepository.findByEventId(eventId);
+        List<EventSection> sourceSections = eventSectionRepository.findByEventId(eventId);
 
         List<EventDTO> result = new ArrayList<>();
         for (Instant duplicatedStartTime : startTimes) {
@@ -284,6 +319,7 @@ public class EventService {
                     .endTime(duplicatedEndTime)
                     .sendRsvp(source.isSendRsvp())
                     .remindBeforeMinutes(source.getRemindBeforeMinutes())
+                    .includeAllOrganizationMembers(source.isIncludeAllOrganizationMembers())
                     .tags(source.getTags() != null ? new HashSet<>(source.getTags()) : new HashSet<>())
                     .build();
 
@@ -327,6 +363,17 @@ public class EventService {
                         })
                         .toList();
                 eventSongRepository.saveAll(duplicatedSongs);
+            }
+            if (!sourceSections.isEmpty() && !source.isIncludeAllOrganizationMembers()) {
+                List<EventSection> duplicatedSections = sourceSections.stream()
+                        .map(s -> {
+                            EventSection es = new EventSection();
+                            es.setEventId(newEventId);
+                            es.setSectionId(s.getSectionId());
+                            return es;
+                        })
+                        .toList();
+                eventSectionRepository.saveAll(duplicatedSections);
             }
 
             result.add(buildEventDto(saved));
@@ -506,86 +553,62 @@ public class EventService {
         return buildEventDtoList(events);
     }
 
-    /**
-     * Поиск доступных пользователю мероприятий в организации по названию и тегам.
-     * Если оба фильтра пустые/отсутствуют — возвращаются все события организации.
-     */
     @Transactional(readOnly = true)
-    public List<EventDTO> searchEventsForCurrentUserInOrganization(
-            Long organizationId, String titleQuery, List<String> tagFilters) {
+    public EventCalendarGroupedResponseDTO getCalendarForCurrentUserInOrganization(
+            Long organizationId, EventCalendarRequestDTO request, Pageable pageable) {
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(organizationId, currentUserId);
+        validateCalendarPageable(pageable);
 
-        String normalizedTitle = titleQuery == null ? null : titleQuery.trim();
-        if (normalizedTitle != null && normalizedTitle.isEmpty()) {
-            normalizedTitle = null;
+        EventCalendarRequestDTO calendarRequest = request != null ? request : new EventCalendarRequestDTO();
+        EventCalendarScope scope = calendarRequest.scopeAsEnum();
+
+        CalendarRange range = resolveCalendarRange(calendarRequest.getFrom(), calendarRequest.getTo());
+        boolean includeOrgWide = calendarRequest.getIncludeOrgWide() == null
+                || calendarRequest.getIncludeOrgWide();
+
+        Specification<Event> spec = Specification.where(EventSpecifications.organizationEquals(organizationId))
+                .and(EventSpecifications.intersectsDateRange(range.from(), range.to()));
+
+        switch (scope) {
+            case ORGANIZATION -> {
+                // All accepted organization members can access organization scope.
+            }
+            case SECTION -> {
+                Long sectionId = calendarRequest.getSectionId();
+                validateSectionBelongsToOrganization(organizationId, sectionId);
+                ensureSectionCalendarAccess(organizationId, sectionId);
+                spec = spec.and(buildSectionScopeSpec(List.of(sectionId), includeOrgWide));
+            }
+            case SECTIONS -> {
+                List<Long> sectionIds = calendarRequest.normalizedSectionIds();
+                validateSectionsBelongToOrganization(organizationId, sectionIds);
+                for (Long sectionId : sectionIds) {
+                    ensureSectionCalendarAccess(organizationId, sectionId);
+                }
+                spec = spec.and(buildSectionScopeSpec(sectionIds, includeOrgWide));
+            }
         }
 
-        Set<String> normalizedTags = tagFilters == null ? Set.of() : sanitizeTags(tagFilters);
-
-        List<Event> events = eventRepository.findByOrganizationId(organizationId);
-        if (events.isEmpty()) {
-            return List.of();
-        }
-
-        final String titleFilter = normalizedTitle;
-        final Set<String> tagsFilter = normalizedTags;
-
-        List<Event> filtered = events.stream()
-                .filter(event -> {
-                    if (titleFilter != null) {
-                        String title = event.getTitle();
-                        if (title == null
-                                || !title.toLowerCase(Locale.ROOT)
-                                        .contains(titleFilter.toLowerCase(Locale.ROOT))) {
-                            return false;
-                        }
-                    }
-
-                    if (!tagsFilter.isEmpty()) {
-                        Set<String> eventTags = event.getTags();
-                        if (eventTags == null || !eventTags.containsAll(tagsFilter)) {
-                            return false;
-                        }
-                    }
-
-                    return true;
-                })
-                .toList();
-
-        if (filtered.isEmpty()) {
-            return List.of();
-        }
-
-        return buildEventDtoList(filtered);
+        Page<Event> eventsPage = eventRepository.findAll(spec, pageable);
+        return toGroupedCalendarResponse(eventsPage, pageable, scope, calendarRequest, includeOrgWide);
     }
 
     @Transactional(readOnly = true)
-    public Page<EventDTO> searchEventsPageForCurrentUserInOrganization(
-            Long organizationId, EventSearchRequestDTO request, Pageable pageable) {
+    public Page<EventCalendarDTO> getCurrentUserCalendarInOrganization(
+            Long organizationId, EventUserCalendarRequestDTO request, Pageable pageable) {
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(organizationId, currentUserId);
+        validateCalendarPageable(pageable);
 
-        String titleQuery = request != null ? request.getTitle() : null;
-        List<String> tagFilters = request != null ? request.getTags() : null;
-        Instant from = request != null ? request.getFrom() : null;
-        Instant to = request != null ? request.getTo() : null;
-
-        String normalizedTitle = titleQuery == null ? null : titleQuery.trim();
-        if (normalizedTitle != null && normalizedTitle.isEmpty()) {
-            normalizedTitle = null;
-        }
-        final String titleFilter = normalizedTitle;
-        Set<String> normalizedTags = tagFilters == null ? Set.of() : sanitizeTags(tagFilters);
-
+        EventUserCalendarRequestDTO calendarRequest = request != null ? request : new EventUserCalendarRequestDTO();
+        CalendarRange range = resolveCalendarRange(calendarRequest.getFrom(), calendarRequest.getTo());
         Specification<Event> spec = Specification.where(EventSpecifications.organizationEquals(organizationId))
-                .and(EventSpecifications.titleContainsIgnoreCase(titleFilter))
-                .and(EventSpecifications.hasAllTags(normalizedTags))
-                .and(EventSpecifications.intersectsDateRange(from, to));
+                .and(EventSpecifications.intersectsDateRange(range.from(), range.to()))
+                .and(EventSpecifications.hasParticipantUser(currentUserId));
 
         Page<Event> eventsPage = eventRepository.findAll(spec, pageable);
-        List<EventDTO> content = buildEventDtoList(eventsPage.getContent());
-        return new PageImpl<>(content, pageable, eventsPage.getTotalElements());
+        return toCalendarPage(eventsPage, pageable);
     }
 
     /**
@@ -892,6 +915,58 @@ public class EventService {
         eventParticipantRepository.saveAll(entities);
     }
 
+    private List<Long> normalizeAndValidateParticipantSectionIds(
+            Long organizationId, List<Long> participantSectionIds, boolean includeAllOrganizationMembers) {
+        if (includeAllOrganizationMembers) {
+            return List.of();
+        }
+        if (participantSectionIds == null || participantSectionIds.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Long> uniqueSectionIds = participantSectionIds.stream()
+                .filter(id -> id != null)
+                .collect(Collectors.toCollection(HashSet::new));
+        if (uniqueSectionIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<Section> sections = sectionRepository.findAllById(uniqueSectionIds);
+        if (sections.size() != uniqueSectionIds.size()) {
+            Set<Long> existingIds = sections.stream().map(Section::getId).collect(Collectors.toSet());
+            Set<Long> missing = uniqueSectionIds.stream()
+                    .filter(id -> !existingIds.contains(id))
+                    .collect(Collectors.toSet());
+            throw new EntityNotFoundException("One or more sections not found: " + missing);
+        }
+
+        for (Section section : sections) {
+            if (!organizationId.equals(section.getOrganizationId())) {
+                throw new BusinessException(
+                        "Section " + section.getId() + " does not belong to organization " + organizationId);
+            }
+        }
+
+        return sections.stream().map(Section::getId).toList();
+    }
+
+    private void saveEventSections(Long eventId, List<Long> sectionIds, boolean includeAllOrganizationMembers) {
+        if (includeAllOrganizationMembers || sectionIds == null || sectionIds.isEmpty()) {
+            return;
+        }
+
+        List<EventSection> entities = sectionIds.stream()
+                .map(sectionId -> {
+                    EventSection eventSection = new EventSection();
+                    eventSection.setEventId(eventId);
+                    eventSection.setSectionId(sectionId);
+                    return eventSection;
+                })
+                .toList();
+
+        eventSectionRepository.saveAll(entities);
+    }
+
     private void saveEventFiles(Long eventId, List<Long> fileIds) {
         if (fileIds == null || fileIds.isEmpty()) {
             return;
@@ -1032,11 +1107,195 @@ public class EventService {
         };
     }
 
+    private void validateCalendarPageable(Pageable pageable) {
+        if (pageable == null) {
+            throw new IllegalArgumentException("Pageable must not be null");
+        }
+        if (pageable.getPageNumber() < 0) {
+            throw new IllegalArgumentException("page must be >= 0");
+        }
+        if (pageable.getPageSize() <= 0) {
+            throw new IllegalArgumentException("size must be > 0");
+        }
+        if (pageable.getPageSize() > CALENDAR_MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("size must be <= " + CALENDAR_MAX_PAGE_SIZE);
+        }
+    }
+
+    private CalendarRange resolveCalendarRange(Instant from, Instant to) {
+        Instant now = Instant.now();
+        Instant resolvedFrom = from != null ? from : now.minus(CALENDAR_DEFAULT_PAST_WINDOW);
+        Instant resolvedTo = to != null ? to : now.plus(CALENDAR_DEFAULT_FUTURE_WINDOW);
+
+        if (!resolvedTo.isAfter(resolvedFrom)) {
+            throw new IllegalArgumentException("to must be after from");
+        }
+        if (Duration.between(resolvedFrom, resolvedTo).compareTo(CALENDAR_MAX_WINDOW) > 0) {
+            throw new IllegalArgumentException(
+                    "Date window must be <= " + CALENDAR_MAX_WINDOW.toDays() + " days");
+        }
+        return new CalendarRange(resolvedFrom, resolvedTo);
+    }
+
+    private void validateSectionBelongsToOrganization(Long organizationId, Long sectionId) {
+        Section section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new EntityNotFoundException("Section not found: " + sectionId));
+        if (!organizationId.equals(section.getOrganizationId())) {
+            throw new BusinessException("Section " + sectionId + " does not belong to organization " + organizationId);
+        }
+    }
+
+    private void validateSectionsBelongToOrganization(Long organizationId, List<Long> sectionIds) {
+        List<Section> sections = sectionRepository.findAllById(sectionIds);
+        if (sections.size() != sectionIds.size()) {
+            Set<Long> existingIds = sections.stream().map(Section::getId).collect(Collectors.toSet());
+            List<Long> missing = sectionIds.stream().filter(id -> !existingIds.contains(id)).toList();
+            throw new EntityNotFoundException("One or more sections not found: " + missing);
+        }
+        for (Section section : sections) {
+            if (!organizationId.equals(section.getOrganizationId())) {
+                throw new BusinessException(
+                        "Section " + section.getId() + " does not belong to organization " + organizationId);
+            }
+        }
+    }
+
+    private void ensureSectionCalendarAccess(Long organizationId, Long sectionId) {
+        boolean allowed = organizationPermissionChecker.isSectionMember(sectionId)
+                || organizationPermissionChecker.hasSectionPermission(sectionId, "EVENT_VIEW_SECTION_CALENDAR")
+                || organizationPermissionChecker.hasOrganizationPermission(organizationId,
+                        "EVENT_VIEW_SECTION_CALENDAR");
+        if (!allowed) {
+            throw new BusinessException("Access denied to section calendar for section " + sectionId);
+        }
+    }
+
+    private Specification<Event> buildSectionScopeSpec(List<Long> sectionIds, boolean includeOrgWide) {
+        Specification<Event> scopeSpec = EventSpecifications.hasAnySection(sectionIds);
+        if (includeOrgWide) {
+            scopeSpec = scopeSpec.or(EventSpecifications.includeAllOrganizationMembers());
+        }
+        return scopeSpec;
+    }
+
+    private EventCalendarGroupedResponseDTO toGroupedCalendarResponse(
+            Page<Event> eventsPage,
+            Pageable pageable,
+            EventCalendarScope scope,
+            EventCalendarRequestDTO request,
+            boolean includeOrgWide) {
+        List<Event> events = eventsPage.getContent();
+        if (events.isEmpty()) {
+            return EventCalendarGroupedResponseDTO.builder()
+                    .page(pageable.getPageNumber())
+                    .size(pageable.getPageSize())
+                    .totalElements(eventsPage.getTotalElements())
+                    .totalPages(eventsPage.getTotalPages())
+                    .first(eventsPage.isFirst())
+                    .last(eventsPage.isLast())
+                    .sectionGroups(List.of())
+                    .organizationWideEvents(List.of())
+                    .build();
+        }
+
+        List<Long> eventIds = events.stream().map(Event::getId).toList();
+        List<EventSection> eventSections = eventSectionRepository.findByEventIdIn(eventIds);
+
+        Map<Long, List<Long>> eventSectionsMap = eventSections.stream()
+                .collect(Collectors.groupingBy(
+                        EventSection::getEventId,
+                        Collectors.mapping(EventSection::getSectionId, Collectors.toList())));
+
+        List<Long> groupingSectionIds = resolveGroupingSectionIds(scope, request, eventSectionsMap);
+        Map<Long, List<EventCalendarDTO>> grouped = new LinkedHashMap<>();
+        for (Long sectionId : groupingSectionIds) {
+            grouped.put(sectionId, new ArrayList<>());
+        }
+
+        List<EventCalendarDTO> organizationWideEvents = new ArrayList<>();
+        for (Event event : events) {
+            EventCalendarDTO dto = toCalendarDto(event);
+            if (event.isIncludeAllOrganizationMembers() && includeOrgWide) {
+                organizationWideEvents.add(dto);
+            }
+
+            List<Long> eventSectionIds = eventSectionsMap.getOrDefault(event.getId(), List.of());
+            if (scope == EventCalendarScope.SECTION || scope == EventCalendarScope.SECTIONS) {
+                for (Long sectionId : groupingSectionIds) {
+                    if (eventSectionIds.contains(sectionId)) {
+                        grouped.computeIfAbsent(sectionId, ignored -> new ArrayList<>()).add(dto);
+                    }
+                }
+            } else {
+                for (Long sectionId : eventSectionIds) {
+                    grouped.computeIfAbsent(sectionId, ignored -> new ArrayList<>()).add(dto);
+                }
+            }
+        }
+
+        List<EventCalendarSectionGroupDTO> sectionGroups = grouped.entrySet().stream()
+                .map(entry -> EventCalendarSectionGroupDTO.builder()
+                        .sectionId(entry.getKey())
+                        .events(entry.getValue())
+                        .build())
+                .toList();
+
+        return EventCalendarGroupedResponseDTO.builder()
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
+                .totalElements(eventsPage.getTotalElements())
+                .totalPages(eventsPage.getTotalPages())
+                .first(eventsPage.isFirst())
+                .last(eventsPage.isLast())
+                .sectionGroups(sectionGroups)
+                .organizationWideEvents(organizationWideEvents)
+                .build();
+    }
+
+    private List<Long> resolveGroupingSectionIds(
+            EventCalendarScope scope,
+            EventCalendarRequestDTO request,
+            Map<Long, List<Long>> eventSectionsMap) {
+        if (scope == EventCalendarScope.SECTION) {
+            return List.of(request.getSectionId());
+        }
+        if (scope == EventCalendarScope.SECTIONS) {
+            return request.normalizedSectionIds();
+        }
+        return eventSectionsMap.values().stream()
+                .flatMap(List::stream)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private Page<EventCalendarDTO> toCalendarPage(Page<Event> eventsPage, Pageable pageable) {
+        List<EventCalendarDTO> content = eventsPage.getContent().stream()
+                .map(this::toCalendarDto)
+                .toList();
+        return new PageImpl<>(content, pageable, eventsPage.getTotalElements());
+    }
+
+    private EventCalendarDTO toCalendarDto(Event event) {
+        return EventCalendarDTO.builder()
+                .id(event.getId())
+                .organizationId(event.getOrganizationId())
+                .title(event.getTitle())
+                .eventType(event.getEventType())
+                .location(event.getLocation())
+                .startTime(event.getStartTime())
+                .endTime(event.getEndTime())
+                .build();
+    }
+
     private Set<String> sanitizeTags(List<String> rawTags) {
         return rawTags.stream()
                 .filter(tag -> tag != null && !tag.trim().isEmpty())
                 .map(tag -> tag.trim())
                 .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    private record CalendarRange(Instant from, Instant to) {
     }
 
     private EventDTO buildEventDto(Event event) {
@@ -1048,6 +1307,11 @@ public class EventService {
                 .toList();
 
         dto.setParticipantUserIds(participantIds);
+        dto.setIncludeAllOrganizationMembers(event.isIncludeAllOrganizationMembers());
+        List<Long> participantSectionIds = eventSectionRepository.findByEventId(event.getId()).stream()
+                .map(EventSection::getSectionId)
+                .toList();
+        dto.setParticipantSectionIds(participantSectionIds);
         List<EventFile> files = eventFileRepository.findByEventId(event.getId());
         List<Long> fileIds = files.stream().map(EventFile::getFileId).toList();
         dto.setFileIds(fileIds);
@@ -1087,6 +1351,7 @@ public class EventService {
 
         List<Long> eventIds = events.stream().map(Event::getId).toList();
         List<EventParticipant> participants = eventParticipantRepository.findByEventIdIn(eventIds);
+        List<EventSection> eventSections = eventSectionRepository.findByEventIdIn(eventIds);
         List<EventFile> eventFiles = eventFileRepository.findByEventIdIn(eventIds);
         List<EventSong> eventSongs = eventSongRepository.findByEventIdIn(eventIds);
 
@@ -1094,6 +1359,11 @@ public class EventService {
                 .collect(Collectors.groupingBy(
                         EventParticipant::getEventId,
                         Collectors.mapping(EventParticipant::getUserId, Collectors.toList())));
+
+        Map<Long, List<Long>> eventSectionsMap = eventSections.stream()
+                .collect(Collectors.groupingBy(
+                        EventSection::getEventId,
+                        Collectors.mapping(EventSection::getSectionId, Collectors.toList())));
 
         Map<Long, List<Long>> eventFilesMap = eventFiles.stream()
                 .collect(Collectors.groupingBy(
@@ -1109,6 +1379,9 @@ public class EventService {
 
             List<Long> participantIds = eventParticipantsMap.getOrDefault(event.getId(), List.of());
             dto.setParticipantUserIds(participantIds);
+            dto.setIncludeAllOrganizationMembers(event.isIncludeAllOrganizationMembers());
+            List<Long> participantSectionIds = eventSectionsMap.getOrDefault(event.getId(), List.of());
+            dto.setParticipantSectionIds(participantSectionIds);
 
             List<Long> fileIds = eventFilesMap.getOrDefault(event.getId(), List.of());
             dto.setFileIds(fileIds);

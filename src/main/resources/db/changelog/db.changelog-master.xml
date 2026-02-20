@@ -22,4 +22,22 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="005-add-event-sections-and-organization-scope" author="romariok">
+        <sqlFile
+            path="005-add-event-sections-and-organization-scope.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="006-add-calendar-indexes" author="romariok">
+        <sqlFile
+            path="006-add-calendar-indexes.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

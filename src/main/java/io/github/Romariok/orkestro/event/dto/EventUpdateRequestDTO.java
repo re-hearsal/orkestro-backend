@@ -1,6 +1,7 @@
 package io.github.Romariok.orkestro.event.dto;
 
 import io.github.Romariok.orkestro.event.models.enums.EventType;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -30,12 +31,14 @@ public class EventUpdateRequestDTO {
     /**
      * Полностью заменить набор участников, заданных по секциям.
      */
+    @Schema(description = "IDs of sections applicable to this event", example = "[10, 11]")
     private List<Long> participantSectionIds;
 
     /**
      * Если не null — при пересчёте участников учитывать или не учитывать
      * всех пользователей организации как участников.
      */
+    @Schema(description = "If true, event applies to whole organization and section IDs are ignored", example = "false")
     private Boolean includeAllOrganizationMembers;
 
     /**

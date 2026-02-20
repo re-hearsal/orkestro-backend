@@ -53,7 +53,7 @@ public class EventController {
                             schema = @Schema(implementation = EventDTO.class),
                             examples = @ExampleObject(
                                     name = "Пример ответа",
-                                    value = "{\"id\": 1, \"title\": \"Concert\", \"description\": \"New Year concert\", \"startTime\": \"2026-12-31T19:00:00\", \"endTime\": \"2026-12-31T23:00:00\", \"location\": \"Moscow Hall\", \"organizationId\": 1, \"createdAt\": \"2026-02-18T10:00:00\", \"updatedAt\": \"2026-02-18T10:00:00\"}"
+                                    value = "{\"id\":1,\"title\":\"Concert\",\"description\":\"New Year concert\",\"eventType\":\"CONCERT\",\"startTime\":\"2026-12-31T19:00:00Z\",\"endTime\":\"2026-12-31T23:00:00Z\",\"location\":\"Moscow Hall\",\"organizationId\":1,\"participantUserIds\":[101,102],\"participantSectionIds\":[10,11],\"includeAllOrganizationMembers\":false,\"fileIds\":[],\"songIds\":[],\"createdAt\":\"2026-02-18T10:00:00Z\"}"
                             )
                     )
             ),
@@ -122,7 +122,7 @@ public class EventController {
                             examples = {
                                     @ExampleObject(
                                             name = "Создать концерт",
-                                            value = "{\"title\": \"New Year Concert\", \"description\": \"Annual New Year concert\", \"startTime\": \"2026-12-31T19:00:00\", \"endTime\": \"2026-12-31T23:00:00\", \"location\": \"Moscow Concert Hall\"}"
+                                            value = "{\"title\":\"New Year Concert\",\"description\":\"Annual New Year concert\",\"eventType\":\"CONCERT\",\"startTime\":\"2026-12-31T19:00:00Z\",\"endTime\":\"2026-12-31T23:00:00Z\",\"location\":\"Moscow Concert Hall\",\"participantSectionIds\":[10,11],\"includeAllOrganizationMembers\":false}"
                                     )
                             }
                     )

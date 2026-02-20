@@ -7,19 +7,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
 
 import io.github.Romariok.orkestro.event.dto.EventAttendanceRowDTO;
+import io.github.Romariok.orkestro.event.dto.EventCalendarDTO;
+import io.github.Romariok.orkestro.event.dto.EventCalendarGroupedResponseDTO;
+import io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO;
+import io.github.Romariok.orkestro.event.dto.EventCalendarScope;
 import io.github.Romariok.orkestro.event.dto.EventCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventDTO;
+import io.github.Romariok.orkestro.event.dto.EventUserCalendarRequestDTO;
 import io.github.Romariok.orkestro.event.mapper.EventMapper;
 import io.github.Romariok.orkestro.event.models.Event;
 import io.github.Romariok.orkestro.event.models.EventFile;
 import io.github.Romariok.orkestro.event.models.EventParticipant;
+import io.github.Romariok.orkestro.event.models.EventSection;
 import io.github.Romariok.orkestro.event.models.enums.EventAttendanceStatus;
 import io.github.Romariok.orkestro.event.models.enums.EventParticipantSourceType;
 import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
@@ -28,6 +34,7 @@ import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
 import io.github.Romariok.orkestro.event.repository.EventFileRepository;
 import io.github.Romariok.orkestro.event.repository.EventSongRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
+import io.github.Romariok.orkestro.event.repository.EventSectionRepository;
 import io.github.Romariok.orkestro.event.service.EventService;
 import io.github.Romariok.orkestro.event.service.EventNotificationService;
 import io.github.Romariok.orkestro.config.FileLimitsProperties;
@@ -36,6 +43,7 @@ import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.security.OrganizationPermissionChecker;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.section.models.Section;
 import io.github.Romariok.orkestro.section.models.SectionUser;
@@ -52,7 +60,6 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,6 +67,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
@@ -93,10 +103,16 @@ class EventServiceTest {
         private SecurityUtils securityUtils;
 
         @Mock
+        private OrganizationPermissionChecker organizationPermissionChecker;
+
+        @Mock
         private EventFileRepository eventFileRepository;
 
         @Mock
         private EventSongRepository eventSongRepository;
+
+        @Mock
+        private EventSectionRepository eventSectionRepository;
 
         @Mock
         private FileStorageService fileStorageService;
@@ -119,6 +135,8 @@ class EventServiceTest {
         @BeforeEach
         void setup() {
                 lenient().when(fileLimitsProperties.getEventMaxFiles()).thenReturn(50);
+                lenient().when(eventSectionRepository.findByEventId(anyLong())).thenReturn(List.of());
+                lenient().when(eventSectionRepository.findByEventIdIn(anyCollection())).thenReturn(List.of());
         }
 
         @Test
@@ -227,6 +245,7 @@ class EventServiceTest {
                 assertEquals(EventType.REHEARSAL, persisted.getEventType());
                 assertEquals(start, persisted.getStartTime());
                 assertEquals(end, persisted.getEndTime());
+                assertFalse(persisted.isIncludeAllOrganizationMembers());
 
                 @SuppressWarnings("unchecked")
                 ArgumentCaptor<List<EventParticipant>> participantsCaptor = (ArgumentCaptor<List<EventParticipant>>) (ArgumentCaptor<?>) ArgumentCaptor
@@ -415,6 +434,7 @@ class EventServiceTest {
                 assertEquals(EventParticipantSourceType.ORGANIZATION, participants.get(0).getSource());
                 assertEquals(userId2, participants.get(1).getUserId());
                 assertEquals(EventParticipantSourceType.ORGANIZATION, participants.get(1).getSource());
+                verify(eventSectionRepository, never()).saveAll(anyCollection());
 
                 assertEquals("Full orchestra rehearsal", result.getTitle());
         }
@@ -557,6 +577,13 @@ class EventServiceTest {
 
                 assertEquals(userId3, pUser3.getUserId());
                 assertEquals(EventParticipantSourceType.MANUAL, pUser3.getSource());
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<EventSection>> eventSectionsCaptor = (ArgumentCaptor<List<EventSection>>) (ArgumentCaptor<?>) ArgumentCaptor
+                                .forClass(List.class);
+                verify(eventSectionRepository).saveAll(eventSectionsCaptor.capture());
+                List<EventSection> eventSections = eventSectionsCaptor.getValue();
+                assertEquals(1, eventSections.size());
+                assertEquals(sectionId, eventSections.get(0).getSectionId());
 
                 assertEquals("Section plus soloists", result.getTitle());
         }
@@ -723,11 +750,13 @@ class EventServiceTest {
         }
 
         @Test
-        void searchEventsForCurrentUserInOrganization_filtersByTitleAndTags() {
+        void getCalendarForCurrentUserInOrganization_scopeOrganization_returnsCalendarPage() {
                 Long organizationId = 1L;
                 Long userId = 10L;
+                Instant from = Instant.parse("2030-01-01T00:00:00Z");
+                Instant to = Instant.parse("2030-01-05T00:00:00Z");
+                PageRequest pageable = PageRequest.of(0, 20);
 
-                // ensure user is member of organization
                 when(securityUtils.getCurrentUserId()).thenReturn(userId);
                 OrganizationUser membership = OrganizationUser.builder()
                                 .organizationId(organizationId)
@@ -738,72 +767,88 @@ class EventServiceTest {
                 when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
                                 .thenReturn(Optional.of(membership));
 
-                // three events in organization with different titles/tags
                 Event event1 = Event.builder()
                                 .id(1L)
                                 .organizationId(organizationId)
-                                .title("Morning rehearsal")
-                                .tags(Set.of("strings", "morning"))
-                                .startTime(Instant.now())
-                                .endTime(Instant.now().plusSeconds(3600))
+                                .title("Calendar event")
+                                .eventType(EventType.REHEARSAL)
+                                .location("Hall 1")
+                                .includeAllOrganizationMembers(true)
+                                .startTime(from.plusSeconds(3600))
+                                .endTime(from.plusSeconds(7200))
                                 .createdAt(Instant.now())
                                 .build();
 
-                Event event2 = Event.builder()
+                when(eventRepository.findAll(org.mockito.ArgumentMatchers.<org.springframework.data.jpa.domain.Specification<Event>>any(), eq(pageable)))
+                                .thenReturn(new PageImpl<>(List.of(event1), pageable, 1));
+
+                EventCalendarRequestDTO request = new EventCalendarRequestDTO();
+                request.setScope(EventCalendarScope.ORGANIZATION.name());
+                request.setFrom(from);
+                request.setTo(to);
+
+                when(eventSectionRepository.findByEventIdIn(anyCollection()))
+                                .thenReturn(List.of());
+
+                EventCalendarGroupedResponseDTO result = eventService.getCalendarForCurrentUserInOrganization(
+                                organizationId, request, pageable);
+
+                assertEquals(1, result.getTotalElements());
+                assertEquals(0, result.getSectionGroups().size());
+                assertEquals(1, result.getOrganizationWideEvents().size());
+                EventCalendarDTO dto = result.getOrganizationWideEvents().get(0);
+                assertEquals(1L, dto.getId());
+                assertEquals("Calendar event", dto.getTitle());
+                assertEquals(EventType.REHEARSAL, dto.getEventType());
+                assertEquals("Hall 1", dto.getLocation());
+        }
+
+        @Test
+        void getCurrentUserCalendarInOrganization_returnsOnlyUserCalendarProjection() {
+                Long organizationId = 1L;
+                Long userId = 10L;
+                Instant from = Instant.parse("2030-01-01T00:00:00Z");
+                Instant to = Instant.parse("2030-01-05T00:00:00Z");
+                PageRequest pageable = PageRequest.of(0, 20);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+
+                Event event = Event.builder()
                                 .id(2L)
                                 .organizationId(organizationId)
-                                .title("Evening rehearsal")
-                                .tags(Set.of("strings", "evening"))
-                                .startTime(Instant.now())
-                                .endTime(Instant.now().plusSeconds(3600))
+                                .title("My event")
+                                .eventType(EventType.CONCERT)
+                                .location("Big stage")
+                                .startTime(from.plusSeconds(3600))
+                                .endTime(from.plusSeconds(7200))
                                 .createdAt(Instant.now())
                                 .build();
 
-                Event event3 = Event.builder()
-                                .id(3L)
-                                .organizationId(organizationId)
-                                .title("Morning meeting")
-                                .tags(Set.of("management", "morning"))
-                                .startTime(Instant.now())
-                                .endTime(Instant.now().plusSeconds(3600))
-                                .createdAt(Instant.now())
-                                .build();
+                when(eventRepository.findAll(org.mockito.ArgumentMatchers.<org.springframework.data.jpa.domain.Specification<Event>>any(), eq(pageable)))
+                                .thenReturn(new PageImpl<>(List.of(event), pageable, 1));
 
-                when(eventRepository.findByOrganizationId(organizationId))
-                                .thenReturn(List.of(event1, event2, event3));
+                EventUserCalendarRequestDTO request = new EventUserCalendarRequestDTO();
+                request.setFrom(from);
+                request.setTo(to);
 
-                // no participants required for search logic
-                when(eventParticipantRepository.findByEventIdIn(anyCollection())).thenReturn(List.of());
+                Page<EventCalendarDTO> result = eventService.getCurrentUserCalendarInOrganization(
+                                organizationId, request, pageable);
 
-                // mapstruct mapper stub: map events list to DTO list one-to-one
-                when(eventMapper.toDtoList(anyList())).thenAnswer(invocation -> {
-                        @SuppressWarnings("unchecked")
-                        List<Event> events = invocation.getArgument(0, List.class);
-                        return events.stream()
-                                        .map(e -> EventDTO.builder()
-                                                        .id(e.getId())
-                                                        .organizationId(e.getOrganizationId())
-                                                        .title(e.getTitle())
-                                                        .tags(e.getTags() == null ? List.of()
-                                                                        : e.getTags().stream().toList())
-                                                        .startTime(e.getStartTime())
-                                                        .endTime(e.getEndTime())
-                                                        .createdAt(e.getCreatedAt())
-                                                        .build())
-                                        .toList();
-                });
-
-                // search by title substring "rehearsal" and tag "morning"
-                List<EventDTO> result = eventService.searchEventsForCurrentUserInOrganization(
-                                organizationId, "rehearsal", List.of("morning"));
-
-                assertEquals(1, result.size());
-                EventDTO dto = result.get(0);
-                assertEquals(1L, dto.getId());
-                assertEquals("Morning rehearsal", dto.getTitle());
-                assertEquals(
-                                Set.of("strings", "morning"),
-                                dto.getTags() == null ? Set.of() : Set.copyOf(dto.getTags()));
+                assertEquals(1, result.getTotalElements());
+                assertEquals(1, result.getContent().size());
+                EventCalendarDTO dto = result.getContent().get(0);
+                assertEquals(2L, dto.getId());
+                assertEquals("My event", dto.getTitle());
+                assertEquals(EventType.CONCERT, dto.getEventType());
+                assertEquals("Big stage", dto.getLocation());
         }
 
         @Test
@@ -1104,10 +1149,11 @@ class EventServiceTest {
                 when(eventParticipantRepository.findByUserId(currentUserId))
                                 .thenReturn(List.of(participant1, participant2));
 
-                Instant start1 = Instant.parse("2026-02-15T00:00:00Z");
-                Instant end1 = Instant.parse("2026-02-16T00:00:00Z");
-                Instant start2 = Instant.parse("2027-01-03T10:00:00Z");
-                Instant end2 = Instant.parse("2027-01-04T10:00:00Z");
+                Instant now = Instant.now();
+                Instant start1 = now.plusSeconds(3600);
+                Instant end1 = now.plusSeconds(7200);
+                Instant start2 = now.plusSeconds(10800);
+                Instant end2 = now.plusSeconds(14400);
 
                 Event event1 = Event.builder()
                                 .id(eventId1)

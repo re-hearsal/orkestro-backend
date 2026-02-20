@@ -79,6 +79,9 @@ public class Event {
     @Column(name = "remind_before_minutes")
     private Integer remindBeforeMinutes;
 
+    @Column(name = "include_all_organization_members", nullable = false)
+    private boolean includeAllOrganizationMembers;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

@@ -1,6 +1,7 @@
 package io.github.Romariok.orkestro.event.dto;
 
 import io.github.Romariok.orkestro.event.models.enums.EventType;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -28,6 +29,11 @@ public class EventDTO {
     private List<String> tags;
 
     private List<Long> participantUserIds;
+
+    private List<Long> participantSectionIds;
+
+    @Schema(description = "Whether this event applies to all organization members")
+    private Boolean includeAllOrganizationMembers;
 
     private List<Long> fileIds;
 
