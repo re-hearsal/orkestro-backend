@@ -532,6 +532,22 @@ public class EventService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
+            + "or @organizationPermissionChecker.hasOrganizationPermission("
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MARK_ATTENDANCE')")
+    public String exportEventAttendanceMatrixAsCsv(Long organizationId, Long eventId) {
+        List<EventAttendanceRowDTO> rows = getEventAttendanceTable(organizationId, eventId);
+        StringBuilder sb = new StringBuilder();
+        sb.append("name,rsvp_status,attendance_status\n");
+        for (EventAttendanceRowDTO row : rows) {
+            sb.append(escapeCsv(row.getName())).append(',');
+            sb.append(row.getRsvpStatus() != null ? row.getRsvpStatus().name() : "").append(',');
+            sb.append(row.getAttendanceStatus() != null ? row.getAttendanceStatus().name() : "").append('\n');
+        }
+        return sb.toString();
+    }
+
+    @Transactional(readOnly = true)
     public EventDTO getEventForCurrentUser(Long organizationId, Long eventId) {
         Event event = eventRepository
                 .findById(eventId)

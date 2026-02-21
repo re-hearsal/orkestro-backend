@@ -6,8 +6,13 @@ import io.github.Romariok.orkestro.event.service.EventService;
 import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -78,5 +83,31 @@ public class EventAttendanceController {
             @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
             @Parameter(description = "ID события", required = true) @PathVariable @Positive Long eventId) {
         return ResponseEntity.ok(eventService.getEventAttendanceTable(organizationId, eventId));
+    }
+
+    @Operation(
+            summary = "Выгрузить матрицу посещаемости в CSV",
+            description = "Возвращает CSV-файл с матрицей посещаемости для всех участников события."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "CSV-файл сформирован", content = @Content(mediaType = "text/csv", schema = @Schema(type = "string"))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Событие не найдено", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping(value = "/{eventId}/attendance/matrix.csv", produces = "text/csv")
+    public ResponseEntity<ByteArrayResource> exportAttendanceMatrixCsv(
+            @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID события", required = true) @PathVariable @Positive Long eventId) {
+        String csv = eventService.exportEventAttendanceMatrixAsCsv(organizationId, eventId);
+        ByteArrayResource resource = new ByteArrayResource(csv.getBytes(StandardCharsets.UTF_8));
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename("event-attendance-matrix.csv").build().toString())
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(resource);
     }
 }
