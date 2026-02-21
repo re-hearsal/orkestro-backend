@@ -35,6 +35,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
 
 @RestController
 @Validated
@@ -361,5 +362,24 @@ public class SongController {
             @Parameter(description = "Параметры пагинации")
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(repertoireService.searchSongs(organizationId, query, pageable));
+    }
+
+    @Operation(
+            summary = "Получить все уникальные тэги репертуара",
+            description = "Возвращает отсортированный список уникальных тэгов всех песен организации."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Список тэгов получен"),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Организация не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/tags")
+    public ResponseEntity<List<String>> getSongTags(
+            @Parameter(description = "ID организации", required = true)
+            @PathVariable @Positive Long organizationId) {
+        return ResponseEntity.ok(repertoireService.getOrganizationSongTags(organizationId));
     }
 }

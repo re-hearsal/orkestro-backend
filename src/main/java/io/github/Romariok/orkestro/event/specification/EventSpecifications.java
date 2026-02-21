@@ -5,6 +5,8 @@ import io.github.Romariok.orkestro.event.models.EventParticipant;
 import io.github.Romariok.orkestro.event.models.EventSection;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
 import org.springframework.data.jpa.domain.Specification;
 
 public final class EventSpecifications {
@@ -65,6 +67,43 @@ public final class EventSpecifications {
             subquery.where(
                     cb.equal(participantRoot.get("eventId"), root.get("id")),
                     cb.equal(participantRoot.get("userId"), userId));
+            return cb.exists(subquery);
+        };
+    }
+
+    public static Specification<Event> titleContains(String title) {
+        return (root, query, cb) -> {
+            if (title == null || title.isBlank()) {
+                return cb.conjunction();
+            }
+            String likePattern = "%" + title.trim().toLowerCase(Locale.ROOT) + "%";
+            return cb.like(cb.lower(root.get("title")), likePattern);
+        };
+    }
+
+    public static Specification<Event> hasAnyTag(Collection<String> tags) {
+        return (root, query, cb) -> {
+            if (tags == null || tags.isEmpty()) {
+                return cb.conjunction();
+            }
+
+            List<String> normalizedTags = tags.stream()
+                    .filter(tag -> tag != null && !tag.isBlank())
+                    .map(tag -> tag.trim().toLowerCase(Locale.ROOT))
+                    .distinct()
+                    .toList();
+
+            if (normalizedTags.isEmpty()) {
+                return cb.conjunction();
+            }
+
+            var subquery = query.subquery(Long.class);
+            var eventRoot = subquery.from(Event.class);
+            var tagsJoin = eventRoot.join("tags");
+            subquery.select(eventRoot.get("id"));
+            subquery.where(
+                    cb.equal(eventRoot.get("id"), root.get("id")),
+                    cb.lower(tagsJoin.as(String.class)).in(normalizedTags));
             return cb.exists(subquery);
         };
     }

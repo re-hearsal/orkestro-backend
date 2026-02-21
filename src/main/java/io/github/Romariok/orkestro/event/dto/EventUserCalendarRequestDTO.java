@@ -2,6 +2,8 @@ package io.github.Romariok.orkestro.event.dto;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
 import jakarta.validation.constraints.AssertTrue;
 import lombok.Data;
 
@@ -11,6 +13,28 @@ public class EventUserCalendarRequestDTO {
 
     private Instant from;
     private Instant to;
+    private String title;
+    private List<String> tags;
+
+    public String normalizedTitle() {
+        if (title == null) {
+            return null;
+        }
+        String normalized = title.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    public List<String> normalizedTags() {
+        if (tags == null) {
+            return List.of();
+        }
+        return tags.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(tag -> !tag.isEmpty())
+                .distinct()
+                .toList();
+    }
 
     @AssertTrue(message = "to must be after from")
     public boolean isDateOrderValid() {

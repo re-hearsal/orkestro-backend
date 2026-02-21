@@ -61,7 +61,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -588,7 +587,9 @@ public class EventService {
                 || calendarRequest.getIncludeOrgWide();
 
         Specification<Event> spec = Specification.where(EventSpecifications.organizationEquals(organizationId))
-                .and(EventSpecifications.intersectsDateRange(range.from(), range.to()));
+                .and(EventSpecifications.intersectsDateRange(range.from(), range.to()))
+                .and(EventSpecifications.titleContains(calendarRequest.normalizedTitle()))
+                .and(EventSpecifications.hasAnyTag(calendarRequest.normalizedTags()));
 
         switch (scope) {
             case ORGANIZATION -> {
@@ -615,7 +616,7 @@ public class EventService {
     }
 
     @Transactional(readOnly = true)
-    public Page<EventCalendarDTO> getCurrentUserCalendarInOrganization(
+    public EventCalendarGroupedResponseDTO getCurrentUserCalendarInOrganization(
             Long organizationId, EventUserCalendarRequestDTO request, Pageable pageable) {
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(organizationId, currentUserId);
@@ -625,10 +626,24 @@ public class EventService {
         CalendarRange range = resolveCalendarRange(calendarRequest.getFrom(), calendarRequest.getTo());
         Specification<Event> spec = Specification.where(EventSpecifications.organizationEquals(organizationId))
                 .and(EventSpecifications.intersectsDateRange(range.from(), range.to()))
-                .and(EventSpecifications.hasParticipantUser(currentUserId));
+                .and(EventSpecifications.hasParticipantUser(currentUserId))
+                .and(EventSpecifications.titleContains(calendarRequest.normalizedTitle()))
+                .and(EventSpecifications.hasAnyTag(calendarRequest.normalizedTags()));
 
         Page<Event> eventsPage = eventRepository.findAll(spec, pageable);
-        return toCalendarPage(eventsPage, pageable);
+        return toGroupedCalendarResponse(
+                eventsPage,
+                pageable,
+                EventCalendarScope.ORGANIZATION,
+                new EventCalendarRequestDTO(),
+                true);
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getOrganizationEventTags(Long organizationId) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(organizationId, currentUserId);
+        return eventRepository.findDistinctTagsByOrganizationId(organizationId);
     }
 
     /**
@@ -1289,13 +1304,6 @@ public class EventService {
                 .toList();
     }
 
-    private Page<EventCalendarDTO> toCalendarPage(Page<Event> eventsPage, Pageable pageable) {
-        List<EventCalendarDTO> content = eventsPage.getContent().stream()
-                .map(this::toCalendarDto)
-                .toList();
-        return new PageImpl<>(content, pageable, eventsPage.getTotalElements());
-    }
-
     private EventCalendarDTO toCalendarDto(Event event) {
         return EventCalendarDTO.builder()
                 .id(event.getId())
@@ -1303,6 +1311,7 @@ public class EventService {
                 .title(event.getTitle())
                 .eventType(event.getEventType())
                 .location(event.getLocation())
+                .tags(event.getTags() != null ? new ArrayList<>(event.getTags()) : List.of())
                 .startTime(event.getStartTime())
                 .endTime(event.getEndTime())
                 .build();

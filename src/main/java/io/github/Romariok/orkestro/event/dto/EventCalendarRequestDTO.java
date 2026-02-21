@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
@@ -20,6 +21,8 @@ public class EventCalendarRequestDTO {
     private Instant from;
     private Instant to;
     private Boolean includeOrgWide;
+    private String title;
+    private List<String> tags;
 
     public EventCalendarScope scopeAsEnum() {
         if (scope == null || scope.isBlank()) {
@@ -38,6 +41,26 @@ public class EventCalendarRequestDTO {
         }
         return sectionIds.stream()
                 .filter(id -> id != null)
+                .distinct()
+                .toList();
+    }
+
+    public String normalizedTitle() {
+        if (title == null) {
+            return null;
+        }
+        String normalized = title.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    public List<String> normalizedTags() {
+        if (tags == null) {
+            return List.of();
+        }
+        return tags.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(tag -> !tag.isEmpty())
                 .distinct()
                 .toList();
     }

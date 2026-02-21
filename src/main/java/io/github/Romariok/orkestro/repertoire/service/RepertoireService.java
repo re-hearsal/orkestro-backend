@@ -257,6 +257,13 @@ public class RepertoireService {
       return songsPage.map(this::buildSongDto);
    }
 
+   @Transactional(readOnly = true)
+   @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMember(#organizationId)")
+   public List<String> getOrganizationSongTags(Long organizationId) {
+      requireOrganizationExists(organizationId);
+      return songRepository.findDistinctTagsByOrganizationId(organizationId);
+   }
+
    private Pageable mapSongSort(Pageable pageable) {
       if (pageable == null) {
          return PageRequest.of(0, 20);

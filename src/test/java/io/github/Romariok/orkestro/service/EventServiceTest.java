@@ -67,7 +67,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.mock.web.MockMultipartFile;
@@ -834,21 +833,50 @@ class EventServiceTest {
 
                 when(eventRepository.findAll(org.mockito.ArgumentMatchers.<org.springframework.data.jpa.domain.Specification<Event>>any(), eq(pageable)))
                                 .thenReturn(new PageImpl<>(List.of(event), pageable, 1));
+                EventSection eventSection = new EventSection();
+                eventSection.setEventId(2L);
+                eventSection.setSectionId(100L);
+                when(eventSectionRepository.findByEventIdIn(anyCollection())).thenReturn(List.of(eventSection));
 
                 EventUserCalendarRequestDTO request = new EventUserCalendarRequestDTO();
                 request.setFrom(from);
                 request.setTo(to);
 
-                Page<EventCalendarDTO> result = eventService.getCurrentUserCalendarInOrganization(
+                EventCalendarGroupedResponseDTO result = eventService.getCurrentUserCalendarInOrganization(
                                 organizationId, request, pageable);
 
                 assertEquals(1, result.getTotalElements());
-                assertEquals(1, result.getContent().size());
-                EventCalendarDTO dto = result.getContent().get(0);
+                assertEquals(1, result.getSectionGroups().size());
+                assertEquals(0, result.getOrganizationWideEvents().size());
+                assertEquals(100L, result.getSectionGroups().get(0).getSectionId());
+                assertEquals(1, result.getSectionGroups().get(0).getEvents().size());
+                EventCalendarDTO dto = result.getSectionGroups().get(0).getEvents().get(0);
                 assertEquals(2L, dto.getId());
                 assertEquals("My event", dto.getTitle());
                 assertEquals(EventType.CONCERT, dto.getEventType());
                 assertEquals("Big stage", dto.getLocation());
+        }
+
+        @Test
+        void getOrganizationEventTags_returnsUniqueSortedTags() {
+                Long organizationId = 1L;
+                Long userId = 10L;
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+                when(eventRepository.findDistinctTagsByOrganizationId(organizationId))
+                                .thenReturn(List.of("concert", "rehearsal"));
+
+                List<String> tags = eventService.getOrganizationEventTags(organizationId);
+
+                assertEquals(List.of("concert", "rehearsal"), tags);
         }
 
         @Test

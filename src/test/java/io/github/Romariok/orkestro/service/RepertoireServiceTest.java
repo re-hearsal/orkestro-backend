@@ -631,4 +631,14 @@ class RepertoireServiceTest {
       assertEquals(1L, result.getContent().getFirst().getId());
       assertEquals(2L, result.getContent().get(1).getId());
    }
+
+   @Test
+   void getOrganizationSongTags_returnsUniqueSortedTags() {
+      when(songRepository.findDistinctTagsByOrganizationId(1L))
+            .thenReturn(List.of("classic", "warmup"));
+
+      List<String> tags = repertoireService.getOrganizationSongTags(1L);
+
+      assertEquals(List.of("classic", "warmup"), tags);
+   }
 }

@@ -1,7 +1,6 @@
 package io.github.Romariok.orkestro.event.controller;
 
 import io.github.Romariok.orkestro.event.dto.EventDTO;
-import io.github.Romariok.orkestro.event.dto.EventCalendarDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarGroupedResponseDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventUserCalendarRequestDTO;
@@ -10,7 +9,6 @@ import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +26,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
 
 @RestController
 @Validated
@@ -59,10 +58,10 @@ public class EventQueryController {
 
     @Operation(
             summary = "Получить календарь событий организации",
-            description = "Возвращает страницу событий для календарного отображения с фильтрацией по scope."
+            description = "Возвращает страницу событий для календарного отображения с фильтрацией по scope, названию и тэгам."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Календарь получен", content = @Content(schema = @Schema(implementation = Page.class))),
+            @ApiResponse(responseCode = "200", description = "Календарь получен", content = @Content(schema = @Schema(implementation = EventCalendarGroupedResponseDTO.class))),
             @ApiResponse(responseCode = "400", description = "Ошибка валидации параметров", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
@@ -79,10 +78,10 @@ public class EventQueryController {
 
     @Operation(
             summary = "Получить календарь текущего пользователя",
-            description = "Возвращает страницу событий календаря, в которых текущий пользователь является участником."
+            description = "Возвращает страницу событий календаря, в которых текущий пользователь является участником, с фильтрацией по названию и тэгам."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Календарь получен", content = @Content(schema = @Schema(implementation = Page.class))),
+            @ApiResponse(responseCode = "200", description = "Календарь получен", content = @Content(schema = @Schema(implementation = EventCalendarGroupedResponseDTO.class))),
             @ApiResponse(responseCode = "400", description = "Ошибка валидации параметров", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
             @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
@@ -90,11 +89,28 @@ public class EventQueryController {
     })
     @SecurityRequirement(name = "Bearer Authentication")
     @GetMapping("/calendar/me")
-    public ResponseEntity<Page<EventCalendarDTO>> getCurrentUserCalendar(
+    public ResponseEntity<EventCalendarGroupedResponseDTO> getCurrentUserCalendar(
             @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
             @Parameter(description = "Параметры календаря текущего пользователя")
             @Valid @ModelAttribute EventUserCalendarRequestDTO request,
             @Parameter(description = "Параметры пагинации") @PageableDefault(size = 50, sort = "startTime") Pageable pageable) {
         return ResponseEntity.ok(eventService.getCurrentUserCalendarInOrganization(organizationId, request, pageable));
+    }
+
+    @Operation(
+            summary = "Получить все уникальные тэги событий",
+            description = "Возвращает отсортированный список уникальных тэгов всех событий организации."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Список тэгов получен"),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/tags")
+    public ResponseEntity<List<String>> getEventTags(
+            @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId) {
+        return ResponseEntity.ok(eventService.getOrganizationEventTags(organizationId));
     }
 }
