@@ -1,0 +1,1 @@
+ALTER TYPE link_type_type ADD VALUE IF NOT EXISTS 'VK';

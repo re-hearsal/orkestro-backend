@@ -40,4 +40,13 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="007-add-vk-link-type" author="romariok">
+        <sqlFile
+            path="007-add-vk-link-type.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>
