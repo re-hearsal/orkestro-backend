@@ -74,6 +74,7 @@ public class TaskService {
     private final FileReferenceService fileReferenceService;
     private final FileRollbackHelper fileRollbackHelper;
     private final FileLimitsProperties fileLimitsProperties;
+    private final TaskAccessEvaluator taskAccessEvaluator;
 
     /**
      * Создать задачу в организации.
@@ -167,12 +168,11 @@ public class TaskService {
 
     /**
      * Обновить параметры задачи (кроме статуса).
-     * Доступно только обладателям TASK_MANAGE в контексте организации задачи.
+     * Доступно пользователю, имеющему доступ к задаче.
      */
     @Transactional
-    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission("
-            + "@taskRepository.findById(#taskId).orElse(null)?.organizationId, 'TASK_MANAGE')")
-    public TaskDTO updateTask(Long taskId, TaskUpdateRequestDTO request) {
+    @PreAuthorize("@organizationPermissionChecker.hasTaskAcces(#taskId)")
+    public TaskDTO updateTask(Long organizationId, Long taskId, TaskUpdateRequestDTO request) {
         if (request == null) {
             throw new IllegalArgumentException("Request must not be null");
         }
@@ -180,6 +180,7 @@ public class TaskService {
         Task task = taskRepository
                 .findById(taskId)
                 .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+        validateTaskOrganization(task, organizationId);
 
         if (request.getTitle() != null) {
             String title = request.getTitle().trim();
@@ -238,12 +239,11 @@ public class TaskService {
 
     /**
      * Изменить статус задачи.
-     * Доступно только обладателям TASK_MANAGE в контексте организации задачи.
+     * Доступно пользователю, имеющему доступ к задаче.
      */
     @Transactional
-    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission("
-            + "@taskRepository.findById(#taskId).orElse(null)?.organizationId, 'TASK_MANAGE')")
-    public TaskDTO updateTaskStatus(Long taskId, TaskStatus newStatus) {
+    @PreAuthorize("@organizationPermissionChecker.hasTaskAcces(#taskId)")
+    public TaskDTO updateTaskStatus(Long organizationId, Long taskId, TaskStatus newStatus) {
         if (newStatus == null) {
             throw new IllegalArgumentException("New status must not be null");
         }
@@ -251,6 +251,7 @@ public class TaskService {
         Task task = taskRepository
                 .findById(taskId)
                 .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+        validateTaskOrganization(task, organizationId);
 
         if (task.getStatus() == newStatus) {
             return buildTaskDto(task);
@@ -319,7 +320,7 @@ public class TaskService {
             taskRolesMap.put(taskId, visibilityRoles.stream().map(TaskVisibilityRole::getRoleId).toList());
         }
 
-        if (!hasTaskAccess(userId, task, getUserRoleIds(userId), taskRolesMap)) {
+        if (!taskAccessEvaluator.hasTaskAccess(userId, task, getUserRoleIds(userId), taskRolesMap)) {
             throw new BusinessException("User does not have access to task: " + taskId);
         }
 
@@ -373,7 +374,7 @@ public class TaskService {
             taskRolesMap.put(taskId, visibilityRoles.stream().map(TaskVisibilityRole::getRoleId).toList());
         }
 
-        if (!hasTaskAccess(userId, task, getUserRoleIds(userId), taskRolesMap)) {
+        if (!taskAccessEvaluator.hasTaskAccess(userId, task, getUserRoleIds(userId), taskRolesMap)) {
             throw new BusinessException("User does not have access to task: " + taskId);
         }
 
@@ -413,25 +414,11 @@ public class TaskService {
 
         List<TaskDTO> result = new ArrayList<>();
         for (Task task : tasks) {
-            if (hasTaskAccess(userId, task, userRoleIds, taskRolesMap)) {
+            if (taskAccessEvaluator.hasTaskAccess(userId, task, userRoleIds, taskRolesMap)) {
                 result.add(buildTaskDto(task));
             }
         }
         return result;
-    }
-
-    private boolean hasTaskAccess(
-            Long userId, Task task, Set<Long> userRoleIds, Map<Long, List<Long>> taskRolesMap) {
-        boolean isAuthorOrAssignee = (task.getAuthorUserId() != null && task.getAuthorUserId().equals(userId))
-                || (task.getAssigneeUserId() != null && task.getAssigneeUserId().equals(userId));
-        if (isAuthorOrAssignee || task.getVisibility() == TaskVisibility.ALL_MEMBERS) {
-            return true;
-        }
-
-        List<Long> allowedRoleIds = taskRolesMap.get(task.getId());
-        return allowedRoleIds != null
-                && !userRoleIds.isEmpty()
-                && allowedRoleIds.stream().anyMatch(userRoleIds::contains);
     }
 
     private Set<Long> getUserRoleIds(Long userId) {

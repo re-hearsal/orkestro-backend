@@ -28,6 +28,7 @@ import io.github.Romariok.orkestro.task.repository.TaskCommentRepository;
 import io.github.Romariok.orkestro.task.repository.TaskFileRepository;
 import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.task.repository.TaskVisibilityRoleRepository;
+import io.github.Romariok.orkestro.task.service.TaskAccessEvaluator;
 import io.github.Romariok.orkestro.task.service.TaskService;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
@@ -43,7 +44,9 @@ import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -107,12 +110,34 @@ class TaskServiceTest {
         @Mock
         private FileLimitsProperties fileLimitsProperties;
 
+        @Mock
+        private TaskAccessEvaluator taskAccessEvaluator;
+
         @InjectMocks
         private TaskService taskService;
 
         @BeforeEach
         void setup() {
                 lenient().when(fileLimitsProperties.getTaskMaxFiles()).thenReturn(50);
+                lenient().when(taskAccessEvaluator.hasTaskAccess(anyLong(), any(), any(), any())).thenAnswer(invocation -> {
+                        Long userId = invocation.getArgument(0);
+                        Task task = invocation.getArgument(1);
+                        Set<Long> userRoleIds = invocation.getArgument(2);
+                        Map<Long, List<Long>> taskRolesMap = invocation.getArgument(3);
+
+                        boolean isAuthorOrAssignee = (task.getAuthorUserId() != null
+                                        && task.getAuthorUserId().equals(userId))
+                                        || (task.getAssigneeUserId() != null
+                                                        && task.getAssigneeUserId().equals(userId));
+                        if (isAuthorOrAssignee || task.getVisibility() == TaskVisibility.ALL_MEMBERS) {
+                                return true;
+                        }
+
+                        List<Long> allowedRoleIds = taskRolesMap.get(task.getId());
+                        return allowedRoleIds != null
+                                        && !userRoleIds.isEmpty()
+                                        && allowedRoleIds.stream().anyMatch(userRoleIds::contains);
+                });
         }
 
         @Test
@@ -221,11 +246,12 @@ class TaskServiceTest {
 
         @Test
         void updateTaskStatus_setsClosedAtForDone() {
+                Long organizationId = 1L;
                 Long taskId = 100L;
 
                 Task existing = Task.builder()
                                 .id(taskId)
-                                .organizationId(1L)
+                                .organizationId(organizationId)
                                 .title("Title")
                                 .status(TaskStatus.OPEN)
                                 .createdAt(Instant.now())
@@ -250,7 +276,7 @@ class TaskServiceTest {
                 when(taskCommentRepository.findByTaskId(anyLong())).thenReturn(List.of());
                 when(taskVisibilityRoleRepository.findByTaskId(anyLong())).thenReturn(List.of());
 
-                TaskDTO result = taskService.updateTaskStatus(taskId, TaskStatus.DONE);
+                TaskDTO result = taskService.updateTaskStatus(organizationId, taskId, TaskStatus.DONE);
 
                 assertEquals(TaskStatus.DONE, result.getStatus());
                 verify(taskRepository).save(existing);

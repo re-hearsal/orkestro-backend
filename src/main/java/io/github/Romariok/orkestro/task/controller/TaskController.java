@@ -3,6 +3,8 @@ package io.github.Romariok.orkestro.task.controller;
 import io.github.Romariok.orkestro.task.dto.TaskCreateRequestDTO;
 import io.github.Romariok.orkestro.task.dto.TaskDTO;
 import io.github.Romariok.orkestro.task.dto.TaskFileAttachRequestDTO;
+import io.github.Romariok.orkestro.task.dto.TaskStatusUpdateRequestDTO;
+import io.github.Romariok.orkestro.task.dto.TaskUpdateRequestDTO;
 import io.github.Romariok.orkestro.task.dto.TaskVisibilityUpdateRequestDTO;
 import io.github.Romariok.orkestro.task.service.TaskService;
 import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
@@ -19,6 +21,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -47,7 +50,7 @@ public class TaskController {
     @Operation(
             summary = "Создать задачу",
             description = "Создает новую задачу в организации. Задача может быть назначена конкретному пользователю. " +
-                    "Поддерживается видимость: ALL_MEMBERS (доступна всем участникам), ROLE_RESTRICTED (только назначенном определенным ролям). " +
+                    "Поддерживается видимость: ALL_MEMBERS (доступна всем участникам), ROLE_RESTRICTED (только назначенным ролям). " +
                     "Можно прикрепить до 50 файлов при создании."
     )
     @ApiResponses({
@@ -158,11 +161,11 @@ public class TaskController {
                             examples = {
                                     @ExampleObject(
                                             name = "Открытая задача без файлов",
-                                            value = "{\"title\": \"Prepare concert\", \"description\": \"Prepare equipment for upcoming concert\", \"visibility\": \"OPEN\"}"
+                                            value = "{\"title\": \"Prepare concert\", \"description\": \"Prepare equipment for upcoming concert\", \"visibility\": \"ALL_MEMBERS\"}"
                                     ),
                                     @ExampleObject(
                                             name = "Задача с исполнителем",
-                                            value = "{\"title\": \"Sound check\", \"description\": \"Do sound check before event\", \"assigneeUserId\": 5, \"visibility\": \"ASSIGNED\"}"
+                                            value = "{\"title\": \"Sound check\", \"description\": \"Do sound check before event\", \"assigneeUserId\": 5, \"visibility\": \"ALL_MEMBERS\"}"
                                     ),
                                     @ExampleObject(
                                             name = "Задача с файлами",
@@ -256,8 +259,138 @@ public class TaskController {
     }
 
     @Operation(
+            summary = "Обновить данные задачи",
+            description = "Обновляет данные задачи (кроме статуса): title, description, assigneeUserId, visibility, visibilityRoleIds, fileIds."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Задача успешно обновлена",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = TaskDTO.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Ошибка валидации или бизнес-правила",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Не аутентифицирован",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Нет доступа к задаче",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Задача не найдена",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Внутренняя ошибка сервера",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            )
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PutMapping("/{taskId}")
+    public ResponseEntity<TaskDTO> updateTask(
+            @Parameter(description = "ID организации", required = true, example = "1")
+            @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID задачи", required = true, example = "1")
+            @PathVariable @Positive Long taskId,
+            @Valid @RequestBody TaskUpdateRequestDTO request) {
+        return ResponseEntity.ok(taskService.updateTask(organizationId, taskId, request));
+    }
+
+    @Operation(
+            summary = "Изменить статус задачи",
+            description = "Изменяет только статус задачи. Допустимые значения: OPEN, IN_PROGRESS, DONE, CANCELLED."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Статус успешно обновлен",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = TaskDTO.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Ошибка валидации",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Не аутентифицирован",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Нет доступа к задаче",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Задача не найдена",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Внутренняя ошибка сервера",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiErrorResponse.class)
+                    )
+            )
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PatchMapping("/{taskId}/status")
+    public ResponseEntity<TaskDTO> updateTaskStatus(
+            @Parameter(description = "ID организации", required = true, example = "1")
+            @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID задачи", required = true, example = "1")
+            @PathVariable @Positive Long taskId,
+            @Valid @RequestBody TaskStatusUpdateRequestDTO request) {
+        return ResponseEntity.ok(taskService.updateTaskStatus(organizationId, taskId, request.getStatus()));
+    }
+
+    @Operation(
             summary = "Получить закрытые задачи",
-            description = "Возвращает страницу закрытых задач, доступных текущему пользователю в организации."
+            description = "Возвращает страницу завершенных и отмененных задач, доступных текущему пользователю в организации."
     )
     @ApiResponses({
             @ApiResponse(

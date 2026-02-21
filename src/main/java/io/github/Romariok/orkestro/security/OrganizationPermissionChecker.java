@@ -5,6 +5,11 @@ import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserSta
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
+import io.github.Romariok.orkestro.task.models.Task;
+import io.github.Romariok.orkestro.task.models.TaskVisibilityRole;
+import io.github.Romariok.orkestro.task.repository.TaskRepository;
+import io.github.Romariok.orkestro.task.repository.TaskVisibilityRoleRepository;
+import io.github.Romariok.orkestro.task.service.TaskAccessEvaluator;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
@@ -12,6 +17,9 @@ import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +34,9 @@ public class OrganizationPermissionChecker {
    private final OrganizationRepository organizationRepository;
    private final SectionUserRepository sectionUserRepository;
    private final SectionRepository sectionRepository;
+   private final TaskRepository taskRepository;
+   private final TaskVisibilityRoleRepository taskVisibilityRoleRepository;
+   private final TaskAccessEvaluator taskAccessEvaluator;
 
    public boolean hasOrganizationPermission(Long organizationId, String permissionCode) {
       return hasPermission(RoleScopeType.ORGANIZATION, organizationId, permissionCode);
@@ -68,6 +79,41 @@ public class OrganizationPermissionChecker {
 
    public boolean hasSectionPermission(Long sectionId, String permissionCode) {
       return hasPermission(RoleScopeType.SECTION, sectionId, permissionCode);
+   }
+
+   public boolean hasTaskAcces(Long taskId) {
+      if (taskId == null || taskId <= 0) {
+         return false;
+      }
+
+      Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+
+      Long userId;
+      try {
+         userId = securityUtils.getCurrentUserId();
+      } catch (SecurityException ex) {
+         return false;
+      }
+
+      boolean isAcceptedMember = organizationUserRepository
+            .findByOrganizationIdAndUserId(task.getOrganizationId(), userId)
+            .filter(ou -> ou.getStatus() == OrganizationUserStatusType.ACCEPTED)
+            .isPresent();
+      if (!isAcceptedMember) {
+         return false;
+      }
+
+      Set<Long> userRoleIds = userRoleRepository.findRolesByUserId(userId).stream()
+            .map(Role::getId)
+            .collect(Collectors.toSet());
+      if (userRoleIds.isEmpty()) {
+         return false;
+      }
+
+      List<TaskVisibilityRole> allowedRoles = taskVisibilityRoleRepository.findByTaskId(taskId);
+      List<Long> allowedRoleIds = allowedRoles.stream().map(TaskVisibilityRole::getRoleId).toList();
+      return taskAccessEvaluator.hasTaskAccess(userId, task, userRoleIds, Map.of(taskId, allowedRoleIds));
    }
 
    private boolean hasPermission(RoleScopeType scope, Long contextId, String permissionCode) {
