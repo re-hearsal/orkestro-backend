@@ -47,7 +47,7 @@ public class TaskController {
     @Operation(
             summary = "Создать задачу",
             description = "Создает новую задачу в организации. Задача может быть назначена конкретному пользователю. " +
-                    "Поддерживается видимость: OPEN (доступна всем участникам), ASSIGNED (только назначенному), CLOSED (скрыта). " +
+                    "Поддерживается видимость: ALL_MEMBERS (доступна всем участникам), ROLE_RESTRICTED (только назначенном определенным ролям). " +
                     "Можно прикрепить до 50 файлов при создании."
     )
     @ApiResponses({
@@ -178,7 +178,7 @@ public class TaskController {
 
     @Operation(
             summary = "Обновить видимость задачи",
-            description = "Изменяет видимость задачи. Возможные значения: OPEN, ASSIGNED, CLOSED."
+            description = "Изменяет видимость задачи. Возможные значения: ALL_MEMBERS, ROLE_RESTRICTED."
     )
     @ApiResponses({
             @ApiResponse(
@@ -246,8 +246,8 @@ public class TaskController {
                     required = true,
                     content = @Content(
                             examples = @ExampleObject(
-                                    name = "Изменить на OPEN",
-                                    value = "{\"visibility\": \"OPEN\"}"
+                                    name = "Изменить на ALL_MEMBERS",
+                                    value = "{\"visibility\": \"ALL_MEMBERS\"}"
                             )
                     )
             )
@@ -257,7 +257,7 @@ public class TaskController {
 
     @Operation(
             summary = "Получить закрытые задачи",
-            description = "Возвращает страницу закрытых задач (visibility = CLOSED), доступных текущему пользователю в организации."
+            description = "Возвращает страницу закрытых задач, доступных текущему пользователю в организации."
     )
     @ApiResponses({
             @ApiResponse(
@@ -450,7 +450,7 @@ public class TaskController {
 
     @Operation(
             summary = "Получить доступные задачи",
-            description = "Возвращает страницу задач, доступных текущему пользователю (OPEN или ASSIGNED)."
+            description = "Возвращает страницу задач, доступных текущему пользователю."
     )
     @ApiResponses({
             @ApiResponse(

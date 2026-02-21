@@ -342,7 +342,7 @@ public class SongController {
 
     @Operation(
             summary = "Поиск песен (с пагинацией)",
-            description = "Возвращает страницу песен репертуара организации с возможностью поиска по названию или исполнителю."
+            description = "Возвращает страницу песен репертуара организации с возможностью поиска по названию или исполнителю и фильтрацией по тэгам."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Список песен получен", content = @Content(schema = @Schema(implementation = Page.class))),

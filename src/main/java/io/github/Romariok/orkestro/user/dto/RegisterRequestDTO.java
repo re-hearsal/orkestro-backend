@@ -4,6 +4,7 @@ import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -41,8 +42,10 @@ public class RegisterRequestDTO {
    private String location;
 
    @PastOrPresent(message = "Birth date must not be in the future")
+   @NotNull
    private LocalDate birthDate;
 
+   @NotNull
    private UserLanguageType preferredLanguage;
 
    private MultipartFile avatar;
