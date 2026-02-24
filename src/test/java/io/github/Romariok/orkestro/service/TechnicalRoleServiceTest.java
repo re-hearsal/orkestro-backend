@@ -388,4 +388,120 @@ class TechnicalRoleServiceTest {
                 assertEquals(userId, id.getUserId());
                 assertEquals(roleId, id.getRoleId());
         }
+
+        @Test
+        void deleteOrganizationRole_success_deletesRolePermissionsAndRole() {
+                Long organizationId = 100L;
+                Long roleId = 10L;
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .system(false)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+                when(userRoleRepository.existsByRoleId(roleId)).thenReturn(false);
+
+                technicalRoleService.deleteOrganizationRole(organizationId, roleId);
+
+                verify(rolePermissionRepository).deleteByRoleId(roleId);
+                verify(roleRepository).delete(role);
+        }
+
+        @Test
+        void deleteOrganizationRole_systemRole_throwsBusinessException() {
+                Long organizationId = 100L;
+                Long roleId = 10L;
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .system(true)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+
+                assertThrows(BusinessException.class,
+                                () -> technicalRoleService.deleteOrganizationRole(organizationId, roleId));
+
+                verify(rolePermissionRepository, never()).deleteByRoleId(roleId);
+                verify(roleRepository, never()).delete(any(Role.class));
+        }
+
+        @Test
+        void deleteOrganizationRole_assignedToUsers_throwsBusinessException() {
+                Long organizationId = 100L;
+                Long roleId = 10L;
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .system(false)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+                when(userRoleRepository.existsByRoleId(roleId)).thenReturn(true);
+
+                assertThrows(BusinessException.class,
+                                () -> technicalRoleService.deleteOrganizationRole(organizationId, roleId));
+
+                verify(rolePermissionRepository, never()).deleteByRoleId(roleId);
+                verify(roleRepository, never()).delete(any(Role.class));
+        }
+
+        @Test
+        void deleteSectionRole_success_deletesRolePermissionsAndRole() {
+                Long sectionId = 5L;
+                Long roleId = 20L;
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .system(false)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+                when(userRoleRepository.existsByRoleId(roleId)).thenReturn(false);
+
+                technicalRoleService.deleteSectionRole(sectionId, roleId);
+
+                verify(rolePermissionRepository).deleteByRoleId(roleId);
+                verify(roleRepository).delete(role);
+        }
+
+        @Test
+        void deleteSectionRole_systemRole_throwsBusinessException() {
+                Long sectionId = 5L;
+                Long roleId = 20L;
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .system(true)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+
+                assertThrows(BusinessException.class,
+                                () -> technicalRoleService.deleteSectionRole(sectionId, roleId));
+
+                verify(rolePermissionRepository, never()).deleteByRoleId(roleId);
+                verify(roleRepository, never()).delete(any(Role.class));
+        }
+
+        @Test
+        void deleteSectionRole_assignedToUsers_throwsBusinessException() {
+                Long sectionId = 5L;
+                Long roleId = 20L;
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .system(false)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+                when(userRoleRepository.existsByRoleId(roleId)).thenReturn(true);
+
+                assertThrows(BusinessException.class,
+                                () -> technicalRoleService.deleteSectionRole(sectionId, roleId));
+
+                verify(rolePermissionRepository, never()).deleteByRoleId(roleId);
+                verify(roleRepository, never()).delete(any(Role.class));
+        }
 }

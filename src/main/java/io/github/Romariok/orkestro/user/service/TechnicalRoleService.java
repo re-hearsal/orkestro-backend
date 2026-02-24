@@ -174,6 +174,56 @@ public class TechnicalRoleService {
     }
 
     @Transactional
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_TECH_ROLE_MANAGE')")
+    public void deleteOrganizationRole(Long organizationId, Long roleId) {
+        Role role = roleRepository
+                .findById(roleId)
+                .orElseThrow(() -> new EntityNotFoundException("Role not found: " + roleId));
+
+        if (role.getScope() != RoleScopeType.ORGANIZATION || role.getOrganizationId() == null
+                || !role.getOrganizationId().equals(organizationId)) {
+            throw new BusinessException("Role " + roleId + " does not belong to organization " + organizationId);
+        }
+
+        if (role.isSystem()) {
+            throw new BusinessException("System role cannot be deleted");
+        }
+
+        if (userRoleRepository.existsByRoleId(roleId)) {
+            throw new BusinessException(
+                    "Role is assigned to users. Remove this role from all users before deleting it");
+        }
+
+        rolePermissionRepository.deleteByRoleId(roleId);
+        roleRepository.delete(role);
+    }
+
+    @Transactional
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_TECH_ROLE_MANAGE')")
+    public void deleteSectionRole(Long sectionId, Long roleId) {
+        Role role = roleRepository
+                .findById(roleId)
+                .orElseThrow(() -> new EntityNotFoundException("Role not found: " + roleId));
+
+        if (role.getScope() != RoleScopeType.SECTION || role.getSectionId() == null
+                || !role.getSectionId().equals(sectionId)) {
+            throw new BusinessException("Role " + roleId + " does not belong to section " + sectionId);
+        }
+
+        if (role.isSystem()) {
+            throw new BusinessException("System role cannot be deleted");
+        }
+
+        if (userRoleRepository.existsByRoleId(roleId)) {
+            throw new BusinessException(
+                    "Role is assigned to users. Remove this role from all users before deleting it");
+        }
+
+        rolePermissionRepository.deleteByRoleId(roleId);
+        roleRepository.delete(role);
+    }
+
+    @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_ASSIGN_TECH_ROLE')")
     public void assignOrganizationRoleToUser(Long organizationId, Long userId, Long roleId) {
         assignOrganizationRoleToUserInternal(organizationId, userId, roleId);

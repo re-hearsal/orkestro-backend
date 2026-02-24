@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -72,6 +73,27 @@ public class SectionTechnicalRoleController {
           @Valid @RequestBody TechnicalRoleCreateRequestDTO request) {
       TechnicalRoleDTO created = technicalRoleService.createSectionRole(sectionId, request);
       return ResponseEntity.status(HttpStatus.CREATED).body(created);
+   }
+
+   @Operation(
+           summary = "Удалить техническую роль секции",
+           description = "Удаляет техническую роль секции, если она не системная и никому не назначена."
+   )
+   @ApiResponses({
+           @ApiResponse(responseCode = "204", description = "Роль удалена"),
+           @ApiResponse(responseCode = "400", description = "Нельзя удалить системную роль или роль, назначенную пользователям", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "404", description = "Секция или роль не найдены", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+   })
+   @SecurityRequirement(name = "Bearer Authentication")
+   @DeleteMapping("/{roleId}")
+   public ResponseEntity<Void> deleteSectionRole(
+         @Parameter(description = "ID секции", required = true) @PathVariable @Positive Long sectionId,
+         @Parameter(description = "ID роли", required = true) @PathVariable @Positive Long roleId) {
+      technicalRoleService.deleteSectionRole(sectionId, roleId);
+      return ResponseEntity.noContent().build();
    }
 }
 
