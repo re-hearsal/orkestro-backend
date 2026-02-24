@@ -49,4 +49,13 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="008-add-organization-join-description" author="romariok">
+        <sqlFile
+            path="008-add-organization-join-description.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

@@ -5,6 +5,7 @@ import io.github.Romariok.orkestro.organization.dto.OrganizationDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberAddRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationJoinRequestDTO;
+import io.github.Romariok.orkestro.organization.dto.OrganizationJoinCreateRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationUpdateRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationVisibilityUpdateRequestDTO;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
@@ -354,7 +355,7 @@ public class OrganizationController {
 
     @Operation(
             summary = "Присоединиться к публичной организации",
-            description = "Отправляет запрос на присоединение к публичной организации."
+            description = "Отправляет запрос на присоединение к публичной организации с описанием (до 1000 символов)."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Запрос отправлен", content = @Content),
@@ -368,8 +369,14 @@ public class OrganizationController {
     @PostMapping("/{organizationId}/join")
     public ResponseEntity<Void> joinPublicOrganization(
             @Parameter(description = "ID организации", required = true)
-            @PathVariable @Positive Long organizationId) {
-        organizationUserService.requestToJoinPublicOrganization(organizationId);
+            @PathVariable @Positive Long organizationId,
+            @Parameter(
+                    description = "Данные заявки на вступление",
+                    required = true,
+                    content = @Content(examples = @ExampleObject(
+                            value = "{\"description\": \"Играю на трубе 4 года, хочу участвовать в репетициях по выходным.\"}")))
+            @Valid @RequestBody OrganizationJoinCreateRequestDTO request) {
+        organizationUserService.requestToJoinPublicOrganization(organizationId, request.getDescription());
         return ResponseEntity.noContent().build();
     }
 

@@ -15,6 +15,7 @@ public class OrganizationJoinRequestDTO {
    private Long userId;
    private OrganizationUserStatusType status;
    private Instant joinedAt;
+   private String description;
 
    public static OrganizationJoinRequestDTO fromEntity(OrganizationUser ou) {
       if (ou == null) {
@@ -23,7 +24,8 @@ public class OrganizationJoinRequestDTO {
       return new OrganizationJoinRequestDTO(
             ou.getUserId(),
             ou.getStatus(),
-            ou.getJoinedAt());
+            ou.getJoinedAt(),
+            ou.getDescription());
    }
 }
 

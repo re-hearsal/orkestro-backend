@@ -45,7 +45,7 @@ public class OrganizationUserService {
       private final OrganizationMemberMapper organizationMemberMapper;
 
       @Transactional
-      public void requestToJoinPublicOrganization(Long organizationId) {
+      public void requestToJoinPublicOrganization(Long organizationId, String description) {
             var organization = organizationRepository.findById(organizationId)
                         .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
 
@@ -65,6 +65,7 @@ public class OrganizationUserService {
                   // REJECTED -> allow re-apply
                   ou.setStatus(OrganizationUserStatusType.PENDING);
                   ou.setJoinedAt(Instant.now());
+                  ou.setDescription(description);
                   organizationUserRepository.save(ou);
                   return;
             }
@@ -74,6 +75,7 @@ public class OrganizationUserService {
                         .userId(currentUserId)
                         .status(OrganizationUserStatusType.PENDING)
                         .joinedAt(Instant.now())
+                        .description(description)
                         .build();
             organizationUserRepository.save(ou);
       }

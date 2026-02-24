@@ -53,4 +53,7 @@ public class OrganizationUser {
    @CreationTimestamp
    @Column(name = "joined_at", nullable = false)
    private Instant joinedAt;
+
+   @Column(name = "description", length = 1000)
+   private String description;
 }

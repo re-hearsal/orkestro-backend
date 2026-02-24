@@ -292,7 +292,7 @@ class OrganizationUserServiceTest {
             when(organizationRepository.findById(1L)).thenReturn(Optional.empty());
 
             assertThrows(EntityNotFoundException.class,
-                        () -> organizationUserService.requestToJoinPublicOrganization(1L));
+                        () -> organizationUserService.requestToJoinPublicOrganization(1L, "test description"));
       }
 
       @Test
@@ -304,7 +304,7 @@ class OrganizationUserServiceTest {
             when(organizationRepository.findById(1L)).thenReturn(Optional.of(org));
 
             assertThrows(BusinessException.class,
-                        () -> organizationUserService.requestToJoinPublicOrganization(1L));
+                        () -> organizationUserService.requestToJoinPublicOrganization(1L, "test description"));
       }
 
       @Test
@@ -321,7 +321,8 @@ class OrganizationUserServiceTest {
             when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, currentUserId))
                         .thenReturn(Optional.empty());
 
-            organizationUserService.requestToJoinPublicOrganization(orgId);
+            String description = "Join request description";
+            organizationUserService.requestToJoinPublicOrganization(orgId, description);
 
             ArgumentCaptor<OrganizationUser> captor = ArgumentCaptor.forClass(OrganizationUser.class);
             verify(organizationUserRepository).save(captor.capture());
@@ -329,6 +330,7 @@ class OrganizationUserServiceTest {
             assertEquals(orgId, saved.getOrganizationId());
             assertEquals(currentUserId, saved.getUserId());
             assertEquals(OrganizationUserStatusType.PENDING, saved.getStatus());
+            assertEquals(description, saved.getDescription());
       }
 
       @Test
@@ -351,7 +353,7 @@ class OrganizationUserServiceTest {
             when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, currentUserId))
                         .thenReturn(Optional.of(existing));
 
-            organizationUserService.requestToJoinPublicOrganization(orgId);
+            organizationUserService.requestToJoinPublicOrganization(orgId, "Join request description");
 
             verify(organizationUserRepository, never()).save(any());
       }
