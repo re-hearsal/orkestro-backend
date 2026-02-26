@@ -58,4 +58,13 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="009-add-song-description-limit" author="romariok">
+        <sqlFile
+            path="009-add-song-description-limit.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

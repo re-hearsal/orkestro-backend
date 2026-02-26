@@ -59,7 +59,7 @@ public class SongController {
                             schema = @Schema(implementation = SongDTO.class),
                             examples = @ExampleObject(
                                     name = "Пример ответа",
-                                    value = "{\"id\": 1, \"title\": \"Bohemian Rhapsody\", \"artist\": \"Queen\", \"genre\": \"Rock\", \"bpm\": 72, \"durationSeconds\": 354, \"key\": \"Bb Major\", \"organizationId\": 1, \"fileId\": null}"
+                                    value = "{\"id\": 1, \"organizationId\": 1, \"title\": \"Bohemian Rhapsody\", \"composer\": \"Freddie Mercury\", \"durationSeconds\": 354, \"description\": \"A six-minute suite with distinct sections.\", \"videoUrl\": \"https://example.com/video\", \"instrumentation\": [{\"instrumentId\": 2, \"count\": 2}], \"tags\": [\"classic\", \"rock\"], \"sheetFileIds\": [101], \"audioFileIds\": [102]}"
                             )
                     )
             ),
@@ -124,7 +124,7 @@ public class SongController {
                             examples = {
                                     @ExampleObject(
                                             name = "Создать песню",
-                                            value = "{\"title\": \"Bohemian Rhapsody\", \"artist\": \"Queen\", \"genre\": \"Rock\", \"bpm\": 72, \"durationSeconds\": 354, \"key\": \"Bb Major\"}"
+                                            value = "{\"title\": \"Bohemian Rhapsody\", \"composer\": \"Freddie Mercury\", \"durationSeconds\": 354, \"description\": \"A six-minute suite with distinct sections.\", \"videoUrl\": \"https://example.com/video\", \"instrumentation\": [{\"instrumentId\": 2, \"count\": 2}], \"tags\": [\"classic\", \"rock\"]}"
                                     )
                             }
                     )
@@ -284,12 +284,12 @@ public class SongController {
                     content = @Content(
                             examples = {
                                     @ExampleObject(
-                                            name = "Обновить BPM",
-                                            value = "{\"bpm\": 80}"
+                                            name = "Обновить описание",
+                                            value = "{\"description\": \"Updated description up to 3000 characters.\"}"
                                     ),
                                     @ExampleObject(
                                             name = "Обновить несколько полей",
-                                            value = "{\"title\": \"New Title\", \"artist\": \"New Artist\", \"bpm\": 100}"
+                                            value = "{\"title\": \"New Title\", \"composer\": \"New Composer\", \"description\": \"Updated description up to 3000 characters.\"}"
                                     )
                             }
                     )

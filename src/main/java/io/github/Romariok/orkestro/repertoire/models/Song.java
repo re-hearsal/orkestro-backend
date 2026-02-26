@@ -44,7 +44,7 @@ public class Song {
    @Column(name = "duration_seconds")
    private Integer durationSeconds;
 
-   @Column(name = "description")
+   @Column(name = "description", length = 3000)
    private String description;
 
    @Column(name = "video_url")
