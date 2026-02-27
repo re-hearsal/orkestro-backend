@@ -89,6 +89,35 @@ public class EventNotificationService {
         }
     }
 
+    public void sendEventCommentNotifications(
+            Event event, Collection<Long> participantUserIds, String authorName, String commentText) {
+        if (participantUserIds == null || participantUserIds.isEmpty()) {
+            return;
+        }
+
+        Set<Long> uniqueIds = new HashSet<>(participantUserIds);
+        List<User> users = userRepository.findAllById(uniqueIds);
+        if (users.isEmpty()) {
+            return;
+        }
+
+        String organizationName = organizationRepository.findById(event.getOrganizationId())
+                .map(Organization::getName)
+                .orElse(null);
+
+        for (User user : users) {
+            try {
+                sendCommentToUser(event, organizationName, user, authorName, commentText);
+            } catch (Exception e) {
+                log.error(
+                        "Failed to send event comment notification for event {} to user {}",
+                        event.getId(),
+                        user.getId(),
+                        e);
+            }
+        }
+    }
+
     private void sendCreatedNotificationToUser(Event event, String organizationName, User user) {
         UserLanguageType language = resolveLanguage(user);
         String resolvedOrganizationName = resolveOrganizationName(organizationName, language);
@@ -134,6 +163,47 @@ public class EventNotificationService {
         String title = event.getTitle() != null ? event.getTitle() : defaultTitle(language);
         String startTime = event.getStartTime() != null ? event.getStartTime().toString() : defaultStartTime(language);
         return getMessage("notification.event.reminder.text", locale, title, organizationName, startTime);
+    }
+
+    private String buildCommentText(
+            Event event,
+            String organizationName,
+            UserLanguageType language,
+            String authorName,
+            String commentText) {
+        Locale locale = toLocale(language);
+        String title = event.getTitle() != null ? event.getTitle() : defaultTitle(language);
+        String resolvedAuthorName = authorName != null && !authorName.isBlank()
+                ? authorName
+                : getMessage("notification.event.comment.author.fallback", locale);
+        String resolvedCommentText = commentText != null && !commentText.isBlank()
+                ? commentText
+                : getMessage("notification.event.comment.text.fallback", locale);
+        return getMessage(
+                "notification.event.comment.text",
+                locale,
+                title,
+                organizationName,
+                resolvedAuthorName,
+                resolvedCommentText);
+    }
+
+    private void sendCommentToUser(
+            Event event, String organizationName, User user, String authorName, String commentText) {
+        UserLanguageType language = resolveLanguage(user);
+        String resolvedOrganizationName = resolveOrganizationName(organizationName, language);
+        String text = buildCommentText(event, resolvedOrganizationName, language, authorName, commentText);
+        NotificationChannelType channel = user.getNotificationChannel();
+
+        if (channel == NotificationChannelType.TELEGRAM && user.getTelegramUserId() != null) {
+            boolean telegramOk = telegramEventNotificationService.sendEventCommentNotification(
+                    event, resolvedOrganizationName, user, text);
+            if (!telegramOk) {
+                emailEventNotificationService.sendEventCommentNotification(event, resolvedOrganizationName, user, text);
+            }
+        } else {
+            emailEventNotificationService.sendEventCommentNotification(event, resolvedOrganizationName, user, text);
+        }
     }
 
     private UserLanguageType resolveLanguage(User user) {

@@ -54,16 +54,20 @@ public class EmailNotificationListener {
                     messageSource.getMessage("notification.email.template.label.organization", null, locale));
             templateModel.put("eventLabel",
                     messageSource.getMessage("notification.email.template.label.event", null, locale));
-            templateModel.put("attendButtonLabel",
-                    messageSource.getMessage("notification.email.template.button.attend", null, locale));
-            templateModel.put("absentButtonLabel",
-                    messageSource.getMessage("notification.email.template.button.absent", null, locale));
-            templateModel.put(
-                    "attendUrl",
-                    buildRsvpUrl(message.eventId(), message.userId(), true));
-            templateModel.put(
-                    "absentUrl",
-                    buildRsvpUrl(message.eventId(), message.userId(), false));
+            boolean includeRsvpForm = message.includeRsvpForm() == null || message.includeRsvpForm();
+            templateModel.put("includeRsvpForm", includeRsvpForm);
+            if (includeRsvpForm) {
+                templateModel.put("attendButtonLabel",
+                        messageSource.getMessage("notification.email.template.button.attend", null, locale));
+                templateModel.put("absentButtonLabel",
+                        messageSource.getMessage("notification.email.template.button.absent", null, locale));
+                templateModel.put(
+                        "attendUrl",
+                        buildRsvpUrl(message.eventId(), message.userId(), true));
+                templateModel.put(
+                        "absentUrl",
+                        buildRsvpUrl(message.eventId(), message.userId(), false));
+            }
 
             jcaEmailService.sendTemplateMessage(
                     message.to(),

@@ -50,7 +50,8 @@ public class EmailEventNotificationService implements EventNotificationSender {
                     subject,
                     text,
                     organizationName,
-                    eventTitle);
+                    eventTitle,
+                    true);
             String payload = objectMapper.writeValueAsString(message);
             rabbitTemplate.convertAndSend(emailQueueName, payload);
             return true;
@@ -59,6 +60,41 @@ public class EmailEventNotificationService implements EventNotificationSender {
             return false;
         } catch (Exception e) {
             log.error("Failed to publish email notification to queue {} for user {}", emailQueueName, user.getId(), e);
+            return false;
+        }
+    }
+
+    public boolean sendEventCommentNotification(Event event, String organizationName, User user, String text) {
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            log.warn("Email notification skipped for user {}: email is blank", user.getId());
+            return false;
+        }
+
+        try {
+            UserLanguageType language = user.getPreferredLanguage() == null ? UserLanguageType.RU : user.getPreferredLanguage();
+            Locale locale = language == UserLanguageType.EN ? Locale.ENGLISH : Locale.forLanguageTag("ru");
+            String eventTitle = event.getTitle() != null
+                    ? event.getTitle()
+                    : messageSource.getMessage("notification.event.title.untitled", null, locale);
+            String subject = messageSource.getMessage("notification.event.email.subject.comment",
+                    new Object[] { eventTitle }, locale);
+            EmailNotificationMessage message = new EmailNotificationMessage(
+                    user.getId(),
+                    event.getId(),
+                    user.getEmail(),
+                    subject,
+                    text,
+                    organizationName,
+                    eventTitle,
+                    false);
+            String payload = objectMapper.writeValueAsString(message);
+            rabbitTemplate.convertAndSend(emailQueueName, payload);
+            return true;
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize email comment notification payload for user {}", user.getId(), e);
+            return false;
+        } catch (Exception e) {
+            log.error("Failed to publish email comment notification to queue {} for user {}", emailQueueName, user.getId(), e);
             return false;
         }
     }

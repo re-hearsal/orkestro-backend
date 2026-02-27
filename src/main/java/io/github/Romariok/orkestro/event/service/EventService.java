@@ -6,11 +6,16 @@ import io.github.Romariok.orkestro.event.dto.EventCalendarGroupedResponseDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarScope;
 import io.github.Romariok.orkestro.event.dto.EventCalendarSectionGroupDTO;
+import io.github.Romariok.orkestro.event.dto.EventCommentCreateRequestDTO;
+import io.github.Romariok.orkestro.event.dto.EventCommentDTO;
+import io.github.Romariok.orkestro.event.dto.EventCommentsByEventDTO;
+import io.github.Romariok.orkestro.event.dto.EventCommentsByEventPageDTO;
 import io.github.Romariok.orkestro.event.dto.EventUserCalendarRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventDTO;
 import io.github.Romariok.orkestro.event.dto.EventUpdateRequestDTO;
 import io.github.Romariok.orkestro.event.mapper.EventMapper;
+import io.github.Romariok.orkestro.event.models.EventComment;
 import io.github.Romariok.orkestro.event.models.Event;
 import io.github.Romariok.orkestro.event.models.EventFile;
 import io.github.Romariok.orkestro.event.models.EventParticipant;
@@ -21,6 +26,7 @@ import io.github.Romariok.orkestro.event.models.enums.EventParticipantSourceType
 import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
 import io.github.Romariok.orkestro.event.repository.EventFileRepository;
 import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
+import io.github.Romariok.orkestro.event.repository.EventCommentRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
 import io.github.Romariok.orkestro.event.repository.EventSectionRepository;
 import io.github.Romariok.orkestro.event.repository.EventSongRepository;
@@ -55,11 +61,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -69,10 +77,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class EventService {
 
     private final EventRepository eventRepository;
+    private final EventCommentRepository eventCommentRepository;
     private final EventParticipantRepository eventParticipantRepository;
     private final EventFileRepository eventFileRepository;
     private final EventSongRepository eventSongRepository;
@@ -96,6 +106,8 @@ public class EventService {
     private static final Duration CALENDAR_DEFAULT_PAST_WINDOW = Duration.ofDays(7);
     private static final Duration CALENDAR_DEFAULT_FUTURE_WINDOW = Duration.ofDays(42);
     private static final Duration CALENDAR_MAX_WINDOW = Duration.ofDays(92);
+    private static final int EVENT_COMMENTS_MAX_PER_EVENT = 10;
+    private static final int EVENT_COMMENTS_MAX_LENGTH = 3000;
 
     @Transactional
     public EventDTO createEventInOrganization(Long organizationId, EventCreateRequestDTO request) {
@@ -546,6 +558,92 @@ public class EventService {
         return sb.toString();
     }
 
+    @Transactional
+    public EventCommentDTO createEventComment(
+            Long organizationId, Long eventId, EventCommentCreateRequestDTO request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request must not be null");
+        }
+        String rawText = request.getText();
+        if (rawText == null || rawText.trim().isEmpty()) {
+            throw new IllegalArgumentException("Comment text must not be blank");
+        }
+        String normalizedText = rawText.trim();
+        if (normalizedText.length() > EVENT_COMMENTS_MAX_LENGTH) {
+            throw new IllegalArgumentException("Comment text length must be <= " + EVENT_COMMENTS_MAX_LENGTH);
+        }
+
+        Event event = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
+
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(event.getOrganizationId(), currentUserId);
+        ensureCanWriteEventComment(event, currentUserId);
+
+        long existingCount = eventCommentRepository.countByEventId(eventId);
+        if (existingCount >= EVENT_COMMENTS_MAX_PER_EVENT) {
+            throw new BusinessException("Event comments limit reached (" + EVENT_COMMENTS_MAX_PER_EVENT + ")");
+        }
+
+        EventComment saved = eventCommentRepository.save(EventComment.builder()
+                .eventId(eventId)
+                .authorUserId(currentUserId)
+                .text(normalizedText)
+                .build());
+
+        String authorName = userRepository.findById(currentUserId).map(User::getName).orElse(null);
+        notifyCommentParticipants(event, currentUserId, authorName, normalizedText);
+        return EventCommentDTO.builder()
+                .id(saved.getId())
+                .authorUserId(saved.getAuthorUserId())
+                .authorName(authorName)
+                .text(saved.getText())
+                .createdAt(saved.getCreatedAt())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public EventCommentsByEventPageDTO getEventCommentsByEventIds(
+            Long organizationId, List<Long> eventIds, Pageable pageable) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(organizationId, currentUserId);
+        validateCalendarPageable(pageable);
+
+        if (eventIds == null || eventIds.isEmpty()) {
+            throw new IllegalArgumentException("eventIds must not be empty");
+        }
+
+        List<Long> normalizedEventIds = eventIds.stream()
+                .filter(id -> id != null && id > 0)
+                .collect(Collectors.collectingAndThen(Collectors.toCollection(LinkedHashSet::new), ArrayList::new));
+        if (normalizedEventIds.isEmpty()) {
+            throw new IllegalArgumentException("eventIds must contain at least one positive id");
+        }
+
+        int fromIndex = pageable.getPageNumber() * pageable.getPageSize();
+        int toIndex = Math.min(fromIndex + pageable.getPageSize(), normalizedEventIds.size());
+        List<Long> pageEventIds = fromIndex >= normalizedEventIds.size()
+                ? List.of()
+                : normalizedEventIds.subList(fromIndex, toIndex);
+
+        List<EventCommentsByEventDTO> content = pageEventIds.isEmpty()
+                ? List.of()
+                : buildEventCommentsGroups(organizationId, pageEventIds);
+
+        int totalPages = (int) Math.ceil((double) normalizedEventIds.size() / pageable.getPageSize());
+        return EventCommentsByEventPageDTO.builder()
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
+                .totalElements(normalizedEventIds.size())
+                .totalPages(totalPages)
+                .first(pageable.getPageNumber() == 0)
+                .last(pageable.getPageNumber() >= Math.max(totalPages - 1, 0))
+                .content(content)
+                .build();
+    }
+
     @Transactional(readOnly = true)
     public EventDTO getEventForCurrentUser(Long organizationId, Long eventId) {
         Event event = eventRepository
@@ -829,6 +927,77 @@ public class EventService {
                 .filter(ou -> ou.getStatus() == OrganizationUserStatusType.ACCEPTED)
                 .orElseThrow(() -> new BusinessException(
                         "User " + userId + " is not an accepted member of organization " + organizationId));
+    }
+
+    private void ensureCanWriteEventComment(Event event, Long currentUserId) {
+        boolean isCreator = currentUserId != null && currentUserId.equals(event.getCreatorUserId());
+        boolean hasPermission = organizationPermissionChecker.hasOrganizationPermission(
+                event.getOrganizationId(), "EVENT_WRITE_COMMENT");
+        if (!isCreator && !hasPermission) {
+            throw new BusinessException("User is not allowed to write comments for event " + event.getId());
+        }
+    }
+
+    private void notifyCommentParticipants(Event event, Long authorUserId, String authorName, String commentText) {
+        try {
+            List<Long> recipientUserIds = eventParticipantRepository.findByEventId(event.getId()).stream()
+                    .map(EventParticipant::getUserId)
+                    .filter(userId -> !userId.equals(authorUserId))
+                    .distinct()
+                    .toList();
+            if (recipientUserIds.isEmpty()) {
+                return;
+            }
+            eventNotificationService.sendEventCommentNotifications(event, recipientUserIds, authorName, commentText);
+        } catch (Exception ex) {
+            log.error(
+                    "Failed to notify participants about comment for event {} by user {}",
+                    event.getId(),
+                    authorUserId,
+                    ex);
+        }
+    }
+
+    private List<EventCommentsByEventDTO> buildEventCommentsGroups(Long organizationId, List<Long> eventIds) {
+        List<Event> events = eventRepository.findAllById(eventIds);
+        if (events.size() != eventIds.size()) {
+            throw new EntityNotFoundException("One or more events not found for ids: " + eventIds);
+        }
+        for (Event event : events) {
+            validateEventOrganization(event, organizationId);
+        }
+
+        List<EventComment> comments = eventCommentRepository.findByEventIdInOrderByCreatedAtDesc(eventIds);
+        Set<Long> authorUserIds = comments.stream()
+                .map(EventComment::getAuthorUserId)
+                .collect(Collectors.toSet());
+        Map<Long, String> userNamesById = userRepository.findAllById(authorUserIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getName));
+
+        Map<Long, List<EventCommentDTO>> commentsByEventId = comments.stream()
+                .collect(Collectors.groupingBy(
+                        EventComment::getEventId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(
+                                c -> EventCommentDTO.builder()
+                                        .id(c.getId())
+                                        .authorUserId(c.getAuthorUserId())
+                                        .authorName(userNamesById.get(c.getAuthorUserId()))
+                                        .text(c.getText())
+                                        .createdAt(c.getCreatedAt())
+                                        .build(),
+                                Collectors.toList())));
+
+        return eventIds.stream()
+                .map(eventId -> {
+                    List<EventCommentDTO> eventComments = commentsByEventId.getOrDefault(eventId, List.of());
+                    return EventCommentsByEventDTO.builder()
+                            .eventId(eventId)
+                            .commentsCount(eventComments.size())
+                            .comments(eventComments)
+                            .build();
+                })
+                .toList();
     }
 
     private void validateEventOrganization(Event event, Long organizationId) {

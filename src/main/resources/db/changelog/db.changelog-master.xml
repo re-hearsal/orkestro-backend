@@ -67,4 +67,22 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="010-add-event-write-comment-permission" author="romariok">
+        <sqlFile
+            path="010-add-event-write-comment-permission.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="011-add-event-comments" author="romariok">
+        <sqlFile
+            path="011-add-event-comments.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

@@ -69,4 +69,33 @@ public class TelegramEventNotificationService implements EventNotificationSender
             return false;
         }
     }
+
+    public boolean sendEventCommentNotification(Event event, String organizationName, User user, String text) {
+        Long telegramUserId = user.getTelegramUserId();
+        if (telegramUserId == null) {
+            return false;
+        }
+
+        try {
+            String locale = user.getPreferredLanguage() == UserLanguageType.EN ? "en" : "ru";
+            Map<String, Object> payload = Map.of(
+                    "telegram_user_id", telegramUserId,
+                    "text", text,
+                    "locale", locale);
+
+            String json = objectMapper.writeValueAsString(payload);
+            rabbitTemplate.convertAndSend(telegramBotMessageQueueName, json);
+            return true;
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize Telegram event comment message for user {}", user.getId(), e);
+            return false;
+        } catch (Exception e) {
+            log.error(
+                    "Failed to send Telegram event comment message to queue {} for user {}",
+                    telegramBotMessageQueueName,
+                    user.getId(),
+                    e);
+            return false;
+        }
+    }
 }

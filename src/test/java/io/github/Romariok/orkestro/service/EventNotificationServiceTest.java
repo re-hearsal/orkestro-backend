@@ -167,4 +167,53 @@ class EventNotificationServiceTest {
                                                 org.mockito.ArgumentMatchers.argThat(
                                                                 text -> text != null && text.contains("Reminder about the event")));
         }
+
+        @Test
+        void sendEventCommentNotifications_telegramPreferred_usesCommentChannelMethod() {
+                Event event = Event.builder()
+                                .id(1L)
+                                .organizationId(1L)
+                                .title("Concert")
+                                .startTime(Instant.now())
+                                .createdAt(Instant.now())
+                                .build();
+
+                Long userId = 42L;
+                Long telegramUserId = 1000L;
+
+                User user = User.builder()
+                                .id(userId)
+                                .username("user")
+                                .telegramUserId(telegramUserId)
+                                .notificationChannel(NotificationChannelType.TELEGRAM)
+                                .preferredLanguage(UserLanguageType.EN)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .profileImageFileId(1L)
+                                .build();
+
+                Organization organization = Organization.builder()
+                                .id(1L)
+                                .name("Orchestra")
+                                .location("City")
+                                .profileImageFileId(1L)
+                                .build();
+
+                when(userRepository.findAllById(anyCollection())).thenReturn(List.of(user));
+                when(organizationRepository.findById(1L)).thenReturn(Optional.of(organization));
+                when(messageSource.getMessage(anyString(), org.mockito.ArgumentMatchers.<Object[]>any(), any(Locale.class)))
+                                .thenReturn("New comment");
+                when(telegramEventNotificationService
+                                .sendEventCommentNotification(eq(event), eq("Orchestra"), eq(user), any()))
+                                .thenReturn(true);
+
+                eventNotificationService.sendEventCommentNotifications(event, List.of(userId), "Author", "Comment body");
+
+                verify(telegramEventNotificationService)
+                                .sendEventCommentNotification(eq(event), eq("Orchestra"), eq(user),
+                                                org.mockito.ArgumentMatchers.argThat(
+                                                                text -> text != null && text.contains("New comment")));
+                verify(emailEventNotificationService, never())
+                                .sendEventCommentNotification(any(Event.class), any(), any(User.class), any());
+        }
 }

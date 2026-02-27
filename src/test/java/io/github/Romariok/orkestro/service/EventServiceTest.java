@@ -18,10 +18,14 @@ import io.github.Romariok.orkestro.event.dto.EventCalendarDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarGroupedResponseDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarScope;
+import io.github.Romariok.orkestro.event.dto.EventCommentCreateRequestDTO;
+import io.github.Romariok.orkestro.event.dto.EventCommentDTO;
+import io.github.Romariok.orkestro.event.dto.EventCommentsByEventPageDTO;
 import io.github.Romariok.orkestro.event.dto.EventCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventDTO;
 import io.github.Romariok.orkestro.event.dto.EventUserCalendarRequestDTO;
 import io.github.Romariok.orkestro.event.mapper.EventMapper;
+import io.github.Romariok.orkestro.event.models.EventComment;
 import io.github.Romariok.orkestro.event.models.Event;
 import io.github.Romariok.orkestro.event.models.EventFile;
 import io.github.Romariok.orkestro.event.models.EventParticipant;
@@ -31,6 +35,7 @@ import io.github.Romariok.orkestro.event.models.enums.EventParticipantSourceType
 import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
 import io.github.Romariok.orkestro.event.models.enums.EventType;
 import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
+import io.github.Romariok.orkestro.event.repository.EventCommentRepository;
 import io.github.Romariok.orkestro.event.repository.EventFileRepository;
 import io.github.Romariok.orkestro.event.repository.EventSongRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
@@ -68,6 +73,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -76,6 +82,9 @@ class EventServiceTest {
 
         @Mock
         private EventRepository eventRepository;
+
+        @Mock
+        private EventCommentRepository eventCommentRepository;
 
         @Mock
         private EventParticipantRepository eventParticipantRepository;
@@ -1494,5 +1503,249 @@ class EventServiceTest {
 
                 verify(eventFileRepository).deleteByEventIdAndFileId(eventId, fileId);
                 verify(fileStorageService, never()).delete(fileId);
+        }
+
+        @Test
+        void createEventComment_success_forCreator() {
+                Long organizationId = 1L;
+                Long eventId = 10L;
+                Long creatorUserId = 99L;
+                Event event = Event.builder().id(eventId).organizationId(organizationId).creatorUserId(creatorUserId).build();
+                EventCommentCreateRequestDTO request = EventCommentCreateRequestDTO.builder().text("  Progress is good  ").build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(creatorUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, creatorUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId)
+                                                .userId(creatorUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED)
+                                                .joinedAt(Instant.now())
+                                                .build()));
+                when(eventCommentRepository.countByEventId(eventId)).thenReturn(0L);
+                when(eventCommentRepository.save(any(EventComment.class))).thenAnswer(invocation -> {
+                        EventComment comment = invocation.getArgument(0);
+                        comment.setId(1L);
+                        comment.setCreatedAt(Instant.parse("2026-02-27T10:00:00Z"));
+                        return comment;
+                });
+                when(userRepository.findById(creatorUserId))
+                                .thenReturn(Optional.of(User.builder().id(creatorUserId).name("Creator").build()));
+
+                EventCommentDTO result = eventService.createEventComment(organizationId, eventId, request);
+
+                assertEquals(1L, result.getId());
+                assertEquals("Progress is good", result.getText());
+                assertEquals("Creator", result.getAuthorName());
+        }
+
+        @Test
+        void createEventComment_success_forUserWithPermission() {
+                Long organizationId = 1L;
+                Long eventId = 10L;
+                Long currentUserId = 100L;
+                Event event = Event.builder().id(eventId).organizationId(organizationId).creatorUserId(99L).build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId)
+                                                .userId(currentUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED)
+                                                .joinedAt(Instant.now())
+                                                .build()));
+                when(organizationPermissionChecker.hasOrganizationPermission(organizationId, "EVENT_WRITE_COMMENT"))
+                                .thenReturn(true);
+                when(eventCommentRepository.countByEventId(eventId)).thenReturn(1L);
+                when(eventCommentRepository.save(any(EventComment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+                eventService.createEventComment(
+                                organizationId, eventId, EventCommentCreateRequestDTO.builder().text("ok").build());
+
+                verify(eventCommentRepository).save(any(EventComment.class));
+        }
+
+        @Test
+        void createEventComment_withoutPermissionAndNotCreator_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long eventId = 10L;
+                Long currentUserId = 100L;
+                Event event = Event.builder().id(eventId).organizationId(organizationId).creatorUserId(99L).build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId)
+                                                .userId(currentUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED)
+                                                .joinedAt(Instant.now())
+                                                .build()));
+                when(organizationPermissionChecker.hasOrganizationPermission(organizationId, "EVENT_WRITE_COMMENT"))
+                                .thenReturn(false);
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> eventService.createEventComment(
+                                                organizationId, eventId, EventCommentCreateRequestDTO.builder().text("Denied").build()));
+                verify(eventCommentRepository, never()).save(any());
+        }
+
+        @Test
+        void createEventComment_limitReached_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long eventId = 10L;
+                Long creatorUserId = 99L;
+                Event event = Event.builder().id(eventId).organizationId(organizationId).creatorUserId(creatorUserId).build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(creatorUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, creatorUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId)
+                                                .userId(creatorUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED)
+                                                .joinedAt(Instant.now())
+                                                .build()));
+                when(eventCommentRepository.countByEventId(eventId)).thenReturn(10L);
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> eventService.createEventComment(
+                                                organizationId, eventId, EventCommentCreateRequestDTO.builder().text("11th").build()));
+        }
+
+        @Test
+        void createEventComment_notifiesAllParticipantsExceptAuthor() {
+                Long organizationId = 1L;
+                Long eventId = 10L;
+                Long authorUserId = 99L;
+                Long participant1 = 100L;
+                Long participant2 = 101L;
+                Event event = Event.builder().id(eventId).organizationId(organizationId).creatorUserId(authorUserId).build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(authorUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, authorUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId)
+                                                .userId(authorUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED)
+                                                .joinedAt(Instant.now())
+                                                .build()));
+                when(eventCommentRepository.countByEventId(eventId)).thenReturn(0L);
+                when(eventCommentRepository.save(any(EventComment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+                when(userRepository.findById(authorUserId))
+                                .thenReturn(Optional.of(User.builder().id(authorUserId).name("Author").build()));
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of(
+                                EventParticipant.builder().eventId(eventId).userId(authorUserId).build(),
+                                EventParticipant.builder().eventId(eventId).userId(participant1).build(),
+                                EventParticipant.builder().eventId(eventId).userId(participant2).build()));
+
+                eventService.createEventComment(
+                                organizationId, eventId, EventCommentCreateRequestDTO.builder().text("Comment").build());
+
+                verify(eventNotificationService).sendEventCommentNotifications(
+                                eq(event), eq(List.of(participant1, participant2)), eq("Author"), eq("Comment"));
+        }
+
+        @Test
+        void createEventComment_notificationFailure_doesNotBreakCommentCreation() {
+                Long organizationId = 1L;
+                Long eventId = 10L;
+                Long authorUserId = 99L;
+                Event event = Event.builder().id(eventId).organizationId(organizationId).creatorUserId(authorUserId).build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(authorUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, authorUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId)
+                                                .userId(authorUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED)
+                                                .joinedAt(Instant.now())
+                                                .build()));
+                when(eventCommentRepository.countByEventId(eventId)).thenReturn(0L);
+                when(eventCommentRepository.save(any(EventComment.class))).thenAnswer(invocation -> {
+                        EventComment c = invocation.getArgument(0);
+                        c.setId(123L);
+                        return c;
+                });
+                when(userRepository.findById(authorUserId))
+                                .thenReturn(Optional.of(User.builder().id(authorUserId).name("Author").build()));
+                when(eventParticipantRepository.findByEventId(eventId))
+                                .thenReturn(List.of(EventParticipant.builder().eventId(eventId).userId(100L).build()));
+                org.mockito.Mockito.doThrow(new RuntimeException("notification transport down"))
+                                .when(eventNotificationService)
+                                .sendEventCommentNotifications(eq(event), anyCollection(), eq("Author"), eq("Comment"));
+
+                EventCommentDTO result = eventService.createEventComment(
+                                organizationId, eventId, EventCommentCreateRequestDTO.builder().text("Comment").build());
+
+                assertEquals(123L, result.getId());
+                assertEquals("Comment", result.getText());
+        }
+
+        @Test
+        void getEventCommentsByEventIds_returnsGroupedByEventsPage() {
+                Long organizationId = 1L;
+                Long currentUserId = 99L;
+                List<Long> eventIds = List.of(11L, 12L, 13L);
+                Pageable pageable = PageRequest.of(0, 2);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId)
+                                                .userId(currentUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED)
+                                                .joinedAt(Instant.now())
+                                                .build()));
+
+                Event e11 = Event.builder().id(11L).organizationId(organizationId).build();
+                Event e12 = Event.builder().id(12L).organizationId(organizationId).build();
+                when(eventRepository.findAllById(List.of(11L, 12L))).thenReturn(List.of(e11, e12));
+
+                EventComment c1 = EventComment.builder().id(1L).eventId(11L).authorUserId(500L).text("A").createdAt(Instant.now()).build();
+                EventComment c2 = EventComment.builder().id(2L).eventId(11L).authorUserId(501L).text("B").createdAt(Instant.now()).build();
+                when(eventCommentRepository.findByEventIdInOrderByCreatedAtDesc(List.of(11L, 12L))).thenReturn(List.of(c1, c2));
+                when(userRepository.findAllById(anyCollection()))
+                                .thenReturn(List.of(
+                                                User.builder().id(500L).name("U500").build(),
+                                                User.builder().id(501L).name("U501").build()));
+
+                EventCommentsByEventPageDTO result = eventService.getEventCommentsByEventIds(organizationId, eventIds, pageable);
+
+                assertEquals(3, result.getTotalElements());
+                assertEquals(2, result.getTotalPages());
+                assertEquals(2, result.getContent().size());
+                assertEquals(11L, result.getContent().get(0).getEventId());
+                assertEquals(2, result.getContent().get(0).getCommentsCount());
+                assertEquals(12L, result.getContent().get(1).getEventId());
+                assertEquals(0, result.getContent().get(1).getCommentsCount());
+        }
+
+        @Test
+        void getEventCommentsByEventIds_wrongOrganization_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long currentUserId = 99L;
+                Pageable pageable = PageRequest.of(0, 20);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId)
+                                                .userId(currentUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED)
+                                                .joinedAt(Instant.now())
+                                                .build()));
+
+                Event foreignEvent = Event.builder().id(99L).organizationId(5L).build();
+                when(eventRepository.findAllById(List.of(99L))).thenReturn(List.of(foreignEvent));
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> eventService.getEventCommentsByEventIds(organizationId, List.of(99L), pageable));
         }
 }
