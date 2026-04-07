@@ -20,7 +20,6 @@ import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
-import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
@@ -53,9 +52,6 @@ class OrganizationUserServiceTest {
 
       @Mock
       private UserRoleRepository userRoleRepository;
-
-      @Mock
-      private UserRepository userRepository;
 
       @Mock
       private SecurityUtils securityUtils;
@@ -341,25 +337,6 @@ class OrganizationUserServiceTest {
             organizationUserService.requestToJoinOrganization(orgId, "Join request description");
 
             verify(organizationUserRepository, never()).save(any());
-      }
-
-      @Test
-      void addUserToOrganization_newMember_savesAcceptedAndAssignsCoLeaderIfSecondAccepted() {
-            Long orgId = 1L;
-            Long userId = 10L;
-
-            when(organizationRepository.existsById(orgId)).thenReturn(true);
-            when(userRepository.existsById(userId)).thenReturn(true);
-            when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId))
-                        .thenReturn(Optional.empty());
-
-            organizationUserService.addUserToOrganization(orgId, userId);
-
-            ArgumentCaptor<OrganizationUser> ouCaptor = ArgumentCaptor.forClass(OrganizationUser.class);
-            verify(organizationUserRepository).save(ouCaptor.capture());
-            assertEquals(OrganizationUserStatusType.ACCEPTED, ouCaptor.getValue().getStatus());
-
-            verify(organizationService).syncOrganizationLeadershipRoles(orgId);
       }
 
       @Test

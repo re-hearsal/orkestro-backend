@@ -2,7 +2,6 @@ package io.github.Romariok.orkestro.organization.controller;
 
 import io.github.Romariok.orkestro.organization.dto.OrganizationCreateRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationDTO;
-import io.github.Romariok.orkestro.organization.dto.OrganizationMemberAddRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationJoinRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationJoinCreateRequestDTO;
@@ -173,24 +172,6 @@ public class OrganizationController {
                         @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
                         @Parameter(description = "Данные заявки на вступление", required = true, content = @Content(examples = @ExampleObject(value = "{\"description\": \"Играю на трубе 4 года, хочу участвовать в репетициях по выходным.\"}"))) @Valid @RequestBody OrganizationJoinCreateRequestDTO request) {
                 organizationUserService.requestToJoinOrganization(organizationId, request.getDescription());
-                return ResponseEntity.noContent().build();
-        }
-
-        @Operation(summary = "Добавить участника", description = "Добавляет пользователя в организацию. Доступно для администраторов.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "204", description = "Участник добавлен", content = @Content),
-                        @ApiResponse(responseCode = "400", description = "Ошибка валидации", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
-                        @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
-                        @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
-                        @ApiResponse(responseCode = "404", description = "Организация или пользователь не найдены", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
-                        @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
-        })
-        @SecurityRequirement(name = "Bearer Authentication")
-        @PostMapping("/{organizationId}/members")
-        public ResponseEntity<Void> addMember(
-                        @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
-                        @Parameter(description = "ID пользователя", required = true, content = @Content(examples = @ExampleObject(value = "{\"userId\": 5}"))) @Valid @RequestBody OrganizationMemberAddRequestDTO request) {
-                organizationUserService.addUserToOrganization(organizationId, request.getUserId());
                 return ResponseEntity.noContent().build();
         }
 

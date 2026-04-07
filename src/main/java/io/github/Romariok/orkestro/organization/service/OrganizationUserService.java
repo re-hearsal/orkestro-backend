@@ -12,7 +12,6 @@ import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.UserRoleId;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
-import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
@@ -39,7 +38,6 @@ public class OrganizationUserService {
       private final OrganizationService organizationService;
       private final RoleRepository roleRepository;
       private final UserRoleRepository userRoleRepository;
-      private final UserRepository userRepository;
       private final SecurityUtils securityUtils;
       private final OrganizationMemberMapper organizationMemberMapper;
 
@@ -73,43 +71,6 @@ public class OrganizationUserService {
                         .description(description)
                         .build();
             organizationUserRepository.save(ou);
-      }
-
-      @Transactional
-      @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_MEMBER_INVITE')")
-      public void addUserToOrganization(Long organizationId, Long userId) {
-            if (userId == null || userId <= 0) {
-                  throw new IllegalArgumentException("userId must be positive");
-            }
-
-            if (!organizationRepository.existsById(organizationId)) {
-                  throw new EntityNotFoundException("Organization not found: " + organizationId);
-            }
-
-            if (!userRepository.existsById(userId)) {
-                  throw new EntityNotFoundException("User not found: " + userId);
-            }
-
-            OrganizationUser ou = organizationUserRepository
-                        .findByOrganizationIdAndUserId(organizationId, userId)
-                        .orElse(null);
-
-            if (ou != null && ou.getStatus() == OrganizationUserStatusType.ACCEPTED) {
-                  return;
-            }
-
-            if (ou == null) {
-                  ou = OrganizationUser.builder()
-                              .organizationId(organizationId)
-                              .userId(userId)
-                              .joinedAt(Instant.now())
-                              .build();
-            }
-
-            ou.setStatus(OrganizationUserStatusType.ACCEPTED);
-            organizationUserRepository.save(ou);
-
-            organizationService.syncOrganizationLeadershipRoles(organizationId);
       }
 
       @Transactional(readOnly = true)

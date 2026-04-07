@@ -214,13 +214,9 @@ class OrganizationServiceTest {
                         .thenReturn(Optional.of(orgCoLeaderRole));
             when(userRoleRepository.findByRoleId(20L)).thenReturn(List.of());
 
-            when(organizationInviteRepository.findById(1L)).thenReturn(Optional.empty());
-            when(organizationInviteRepository.save(any(OrganizationInvite.class)))
-                        .thenAnswer(invocation -> invocation.getArgument(0));
-
-            when(organizationInviteRepository.findById(1L)).thenReturn(Optional.empty());
-            when(organizationInviteRepository.save(any(OrganizationInvite.class)))
-                        .thenAnswer(invocation -> invocation.getArgument(0));
+			when(organizationInviteRepository.findById(1L)).thenReturn(Optional.empty());
+			when(organizationInviteRepository.save(any(OrganizationInvite.class)))
+						.thenAnswer(invocation -> invocation.getArgument(0));
 
             OrganizationDTO result = organizationService.createOrganization(request);
 
