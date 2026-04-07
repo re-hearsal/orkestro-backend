@@ -1,8 +1,6 @@
 package io.github.Romariok.orkestro.organization.repository;
 
 import io.github.Romariok.orkestro.organization.models.Organization;
-import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
-
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,16 +11,7 @@ import org.springframework.stereotype.Repository;
 public interface OrganizationRepository extends JpaRepository<Organization, Long> {
    boolean existsByProfileImageFileId(Long profileImageFileId);
 
-   List<Organization> findByVisibilityLevel(VisibilityLevelType visibilityLevel);
+   List<Organization> findByNameContainingIgnoreCase(String name);
 
-   List<Organization> findByVisibilityLevelAndNameContainingIgnoreCase(
-         VisibilityLevelType visibilityLevel,
-         String name);
-
-   Page<Organization> findByVisibilityLevel(VisibilityLevelType visibilityLevel, Pageable pageable);
-
-   Page<Organization> findByVisibilityLevelAndNameContainingIgnoreCase(
-         VisibilityLevelType visibilityLevel,
-         String name,
-         Pageable pageable);
+   Page<Organization> findByNameContainingIgnoreCase(String name, Pageable pageable);
 }

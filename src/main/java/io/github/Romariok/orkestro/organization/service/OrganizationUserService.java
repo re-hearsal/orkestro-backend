@@ -2,7 +2,6 @@ package io.github.Romariok.orkestro.organization.service;
 
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
-import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
 import io.github.Romariok.orkestro.organization.mapper.OrganizationMemberMapper;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
@@ -45,13 +44,9 @@ public class OrganizationUserService {
       private final OrganizationMemberMapper organizationMemberMapper;
 
       @Transactional
-      public void requestToJoinPublicOrganization(Long organizationId, String description) {
-            var organization = organizationRepository.findById(organizationId)
+      public void requestToJoinOrganization(Long organizationId, String description) {
+            organizationRepository.findById(organizationId)
                         .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
-
-            if (organization.getVisibilityLevel() != VisibilityLevelType.PUBLIC) {
-                  throw new BusinessException("Organization " + organizationId + " is not PUBLIC");
-            }
 
             Long currentUserId = securityUtils.getCurrentUserId();
 
@@ -140,7 +135,8 @@ public class OrganizationUserService {
             Pageable mappedPageable = mapOrganizationMemberSort(pageable);
 
             Specification<OrganizationUser> spec = Specification.where(
-                        OrganizationUserSpecifications.isOrganizationMember(organizationId, OrganizationUserStatusType.ACCEPTED))
+                        OrganizationUserSpecifications.isOrganizationMember(organizationId,
+                                    OrganizationUserStatusType.ACCEPTED))
                         .and(OrganizationUserSpecifications.userNameOrUsernameContainsIgnoreCase(query))
                         .and(OrganizationUserSpecifications.userHasAnyOrganizationRole(organizationId, roleIds))
                         .and(OrganizationUserSpecifications.userHasAnyInstrument(instrumentIds));
@@ -226,18 +222,20 @@ public class OrganizationUserService {
                                     "User " + userId + " is not a member of organization " + organizationId));
 
             List<OrganizationUser> members = organizationUserRepository
-                        .findByOrganizationIdAndStatusOrderByJoinedAtAsc(organizationId, OrganizationUserStatusType.ACCEPTED);
+                        .findByOrganizationIdAndStatusOrderByJoinedAtAsc(organizationId,
+                                    OrganizationUserStatusType.ACCEPTED);
             int memberCount = members.size();
 
             if (memberCount > 0) {
                   boolean isLeader = roleRepository.findByScopeAndOrganizationIdAndName(
-                                    RoleScopeType.ORGANIZATION, organizationId, "Leader")
+                              RoleScopeType.ORGANIZATION, organizationId, "Leader")
                               .map(role -> userRoleRepository.existsById(
                                           UserRoleId.builder().userId(userId).roleId(role.getId()).build()))
                               .orElse(false);
 
                   boolean isCoLeader = roleRepository
-                              .findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, organizationId, "Co-leader")
+                              .findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, organizationId,
+                                          "Co-leader")
                               .map(role -> userRoleRepository.existsById(
                                           UserRoleId.builder().userId(userId).roleId(role.getId()).build()))
                               .orElse(false);

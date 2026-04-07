@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -38,9 +37,6 @@ public class OrganizationCreateRequestDTO {
    private String description;
 
    private MultipartFile profileImage;
-
-   @NotNull
-   private VisibilityLevelType visibilityLevel;
 
    @Size(max = 100)
    private List<@Valid @NotNull OrganizationLinkDTO> links;

@@ -10,7 +10,6 @@ import static org.mockito.Mockito.when;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
 import io.github.Romariok.orkestro.organization.models.Organization;
-import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.service.OrganizationService;
@@ -288,33 +287,20 @@ class OrganizationUserServiceTest {
       }
 
       @Test
-      void requestToJoinPublicOrganization_notFound_throwsEntityNotFound() {
+      void requestToJoinOrganization_notFound_throwsEntityNotFound() {
             when(organizationRepository.findById(1L)).thenReturn(Optional.empty());
 
             assertThrows(EntityNotFoundException.class,
-                        () -> organizationUserService.requestToJoinPublicOrganization(1L, "test description"));
+                        () -> organizationUserService.requestToJoinOrganization(1L, "test description"));
       }
 
       @Test
-      void requestToJoinPublicOrganization_privateOrg_throwsBusinessException() {
-            Organization org = Organization.builder()
-                        .id(1L)
-                        .visibilityLevel(VisibilityLevelType.PRIVATE)
-                        .build();
-            when(organizationRepository.findById(1L)).thenReturn(Optional.of(org));
-
-            assertThrows(BusinessException.class,
-                        () -> organizationUserService.requestToJoinPublicOrganization(1L, "test description"));
-      }
-
-      @Test
-      void requestToJoinPublicOrganization_newRequest_savesPending() {
+      void requestToJoinOrganization_newRequest_savesPending() {
             Long orgId = 1L;
             Long currentUserId = 10L;
 
             Organization org = Organization.builder()
                         .id(orgId)
-                        .visibilityLevel(VisibilityLevelType.PUBLIC)
                         .build();
             when(organizationRepository.findById(orgId)).thenReturn(Optional.of(org));
             when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
@@ -322,7 +308,7 @@ class OrganizationUserServiceTest {
                         .thenReturn(Optional.empty());
 
             String description = "Join request description";
-            organizationUserService.requestToJoinPublicOrganization(orgId, description);
+            organizationUserService.requestToJoinOrganization(orgId, description);
 
             ArgumentCaptor<OrganizationUser> captor = ArgumentCaptor.forClass(OrganizationUser.class);
             verify(organizationUserRepository).save(captor.capture());
@@ -334,13 +320,12 @@ class OrganizationUserServiceTest {
       }
 
       @Test
-      void requestToJoinPublicOrganization_alreadyPending_isIdempotent() {
+      void requestToJoinOrganization_alreadyPending_isIdempotent() {
             Long orgId = 1L;
             Long currentUserId = 10L;
 
             Organization org = Organization.builder()
                         .id(orgId)
-                        .visibilityLevel(VisibilityLevelType.PUBLIC)
                         .build();
             when(organizationRepository.findById(orgId)).thenReturn(Optional.of(org));
             when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
@@ -353,7 +338,7 @@ class OrganizationUserServiceTest {
             when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, currentUserId))
                         .thenReturn(Optional.of(existing));
 
-            organizationUserService.requestToJoinPublicOrganization(orgId, "Join request description");
+            organizationUserService.requestToJoinOrganization(orgId, "Join request description");
 
             verify(organizationUserRepository, never()).save(any());
       }

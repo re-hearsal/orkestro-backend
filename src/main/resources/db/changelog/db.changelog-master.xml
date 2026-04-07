@@ -13,4 +13,13 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="002-remove-org-visibility" author="romariok">
+        <sqlFile
+            path="002-remove-org-visibility.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

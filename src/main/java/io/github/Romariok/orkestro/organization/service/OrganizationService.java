@@ -10,7 +10,6 @@ import io.github.Romariok.orkestro.organization.models.OrganizationInvite;
 import io.github.Romariok.orkestro.organization.models.OrganizationLink;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
-import io.github.Romariok.orkestro.organization.models.enums.VisibilityLevelType;
 import io.github.Romariok.orkestro.organization.repository.OrganizationInviteRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationLinkRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
@@ -91,7 +90,6 @@ public class OrganizationService {
                .description(normalizedDescription)
                .profileImageFileId(file != null ? file.getId() : null)
                .createdAt(Instant.now())
-               .visibilityLevel(request.getVisibilityLevel())
                .build();
 
          Organization saved = organizationRepository.save(organization);
@@ -112,11 +110,7 @@ public class OrganizationService {
          ensureOrganizationBaseRoles(saved.getId());
          syncOrganizationLeadershipRoles(saved.getId());
 
-         // если организация создаётся сразу приватной — генерируем пригласительную
-         // ссылку
-         if (saved.getVisibilityLevel() == VisibilityLevelType.PRIVATE) {
-            createOrRegenerateInvite(saved.getId(), creatorId);
-         }
+         createOrRegenerateInvite(saved.getId(), creatorId);
 
          return buildOrganizationDto(saved);
       } catch (RuntimeException ex) {
@@ -138,7 +132,7 @@ public class OrganizationService {
    }
 
    /**
-    * Обновить параметры организации (кроме уровня видимости).
+    * Обновить параметры организации.
     */
    @Transactional
    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_EDIT')")
@@ -258,44 +252,14 @@ public class OrganizationService {
 
 
    /**
-    * Установить уровень видимости организации.
-    */
-   @Transactional
-   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_SET_VISIBILITY')")
-   public OrganizationDTO setVisibility(Long organizationId, VisibilityLevelType visibilityLevel) {
-      Organization organization = organizationRepository.findById(organizationId)
-            .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
-
-      VisibilityLevelType previousLevel = organization.getVisibilityLevel();
-      organization.setVisibilityLevel(visibilityLevel);
-      Organization saved = organizationRepository.save(organization);
-
-      if (visibilityLevel == VisibilityLevelType.PRIVATE && previousLevel == VisibilityLevelType.PUBLIC) {
-         Long currentUserId = securityUtils.getCurrentUserId();
-         createOrRegenerateInvite(organizationId, currentUserId);
-      }
-
-      if (visibilityLevel == VisibilityLevelType.PUBLIC && previousLevel == VisibilityLevelType.PRIVATE) {
-         organizationInviteRepository.deleteById(organizationId);
-      }
-
-      return buildOrganizationDto(saved);
-   }
-
-   /**
-    * Явно перегенерировать пригласительную ссылку для приватной организации.
+    * Явно перегенерировать пригласительную ссылку для организации.
     * Доступно только обладателям права ORG_MEMBER_INVITE в контексте организации.
     */
    @Transactional
    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_MEMBER_INVITE')")
    public String regenerateInviteLink(Long organizationId) {
-      Organization organization = organizationRepository.findById(organizationId)
+      organizationRepository.findById(organizationId)
             .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
-
-      if (organization.getVisibilityLevel() != VisibilityLevelType.PRIVATE) {
-         throw new io.github.Romariok.orkestro.utils.exception.BusinessException(
-               "Invite links are available only for PRIVATE organizations");
-      }
 
       Long currentUserId = securityUtils.getCurrentUserId();
       OrganizationInvite invite = createOrRegenerateInvite(organizationId, currentUserId);
@@ -303,8 +267,8 @@ public class OrganizationService {
    }
 
    /**
-    * Поиск публичных организаций по названию.
-    * Пустой или null запрос возвращает все публичные организации.
+    * Поиск организаций по названию.
+    * Пустой или null запрос возвращает все организации.
     */
    @Transactional(readOnly = true)
    public List<OrganizationDTO> searchPublicOrganizationsByName(String nameQuery) {
@@ -312,11 +276,9 @@ public class OrganizationService {
 
       List<Organization> organizations;
       if (normalized == null || normalized.isBlank()) {
-         organizations = organizationRepository.findByVisibilityLevel(VisibilityLevelType.PUBLIC);
+         organizations = organizationRepository.findAll();
       } else {
-         organizations = organizationRepository.findByVisibilityLevelAndNameContainingIgnoreCase(
-               VisibilityLevelType.PUBLIC,
-               normalized);
+         organizations = organizationRepository.findByNameContainingIgnoreCase(normalized);
       }
 
       return organizations.stream()
@@ -331,12 +293,9 @@ public class OrganizationService {
 
       Page<Organization> organizations;
       if (normalized == null || normalized.isBlank()) {
-         organizations = organizationRepository.findByVisibilityLevel(VisibilityLevelType.PUBLIC, pageable);
+         organizations = organizationRepository.findAll(pageable);
       } else {
-         organizations = organizationRepository.findByVisibilityLevelAndNameContainingIgnoreCase(
-               VisibilityLevelType.PUBLIC,
-               normalized,
-               pageable);
+         organizations = organizationRepository.findByNameContainingIgnoreCase(normalized, pageable);
       }
 
       return organizations.map(this::buildOrganizationDto);
