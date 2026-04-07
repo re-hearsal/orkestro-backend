@@ -4,7 +4,7 @@ CREATE TYPE visibility_level_type AS ENUM ('PUBLIC', 'PRIVATE');
 
 CREATE TYPE file_type_type AS ENUM ('PDF', 'PHOTO', 'AUDIO', 'VIDEO', 'OTHER');
 
-CREATE TYPE link_type_type AS ENUM ('WEBSITE', 'YOUTUBE', 'INSTAGRAM', 'FACEBOOK', 'TELEGRAM', 'OTHER');
+CREATE TYPE link_type_type AS ENUM ('WEBSITE', 'YOUTUBE', 'INSTAGRAM', 'FACEBOOK', 'TELEGRAM', 'VK', 'OTHER');
 
 CREATE TYPE organization_user_status_type AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
 
@@ -22,6 +22,8 @@ CREATE TYPE task_visibility_type AS ENUM ('ALL_MEMBERS', 'ROLE_RESTRICTED');
 
 CREATE TYPE role_scope_type AS ENUM ('ORGANIZATION', 'SECTION');
 
+CREATE TYPE user_language_type AS ENUM ('RU', 'EN');
+
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
     username TEXT NOT NULL,
@@ -34,7 +36,8 @@ CREATE TABLE users (
     notification_channel_id notification_channel_type NOT NULL DEFAULT 'EMAIL',
     location TEXT,
     birth_date DATE,
-    profile_image_file_id BIGINT
+    profile_image_file_id BIGINT,
+    preferred_language user_language_type NOT NULL DEFAULT 'RU'
 );
 
 CREATE TABLE file (
@@ -58,8 +61,7 @@ CREATE TABLE instrument (
 
 INSERT INTO
     instrument (name, icon_key)
-VALUES
-    ('Conductor', 'conductor'),
+VALUES ('Conductor', 'conductor'),
     -- Strings
     ('Violin', 'violin'),
     ('Viola', 'viola'),
@@ -70,23 +72,47 @@ VALUES
     ('Alto flute', 'alto-flute'),
     ('Piccolo', 'piccolo'),
     ('Oboe', 'oboe'),
-    ('English horn', 'english-horn'),
+    (
+        'English horn',
+        'english-horn'
+    ),
     ('Clarinet', 'clarinet'),
-    ('Bass clarinet', 'bass-clarinet'),
+    (
+        'Bass clarinet',
+        'bass-clarinet'
+    ),
     ('Bassoon', 'bassoon'),
-    ('Contrabassoon', 'contrabassoon'),
+    (
+        'Contrabassoon',
+        'contrabassoon'
+    ),
     -- Saxophones
-    ('Soprano saxophone', 'soprano-saxophone'),
-    ('Alto saxophone', 'alto-saxophone'),
-    ('Tenor saxophone', 'tenor-saxophone'),
-    ('Baritone saxophone', 'baritone-saxophone'),
+    (
+        'Soprano saxophone',
+        'soprano-saxophone'
+    ),
+    (
+        'Alto saxophone',
+        'alto-saxophone'
+    ),
+    (
+        'Tenor saxophone',
+        'tenor-saxophone'
+    ),
+    (
+        'Baritone saxophone',
+        'baritone-saxophone'
+    ),
     -- Brass
     ('Trumpet', 'trumpet'),
     ('Cornet', 'cornet'),
     ('Flugelhorn', 'flugelhorn'),
     ('French horn', 'french-horn'),
     ('Trombone', 'trombone'),
-    ('Bass trombone', 'bass-trombone'),
+    (
+        'Bass trombone',
+        'bass-trombone'
+    ),
     ('Tuba', 'tuba'),
     ('Euphonium', 'euphonium'),
     -- Percussion
@@ -97,20 +123,32 @@ VALUES
     ('Xylophone', 'xylophone'),
     ('Marimba', 'marimba'),
     ('Vibraphone', 'vibraphone'),
-    ('Glockenspiel', 'glockenspiel'),
-    ('Tubular bells', 'tubular-bells'),
+    (
+        'Glockenspiel',
+        'glockenspiel'
+    ),
+    (
+        'Tubular bells',
+        'tubular-bells'
+    ),
     -- Keyboards and plucked
     ('Piano', 'piano'),
     ('Harpsichord', 'harpsichord'),
     ('Organ', 'organ'),
     ('Harp', 'harp'),
     ('Guitar', 'guitar'),
-    ('Electric guitar', 'electric-guitar'),
+    (
+        'Electric guitar',
+        'electric-guitar'
+    ),
     ('Bass guitar', 'bass-guitar'),
     ('Synthesizer', 'synthesizer'),
     ('Accordion', 'accordion'),
     -- Choir / voices
-    ('Choir soprano', 'choir-soprano'),
+    (
+        'Choir soprano',
+        'choir-soprano'
+    ),
     ('Choir alto', 'choir-alto'),
     ('Choir tenor', 'choir-tenor'),
     ('Choir bass', 'choir-bass');
@@ -152,6 +190,7 @@ CREATE TABLE organization_users (
     user_id BIGINT NOT NULL,
     status organization_user_status_type NOT NULL,
     joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    description VARCHAR(1000),
     PRIMARY KEY (organization_id, user_id),
     FOREIGN KEY (organization_id) REFERENCES organization (id),
     FOREIGN KEY (user_id) REFERENCES users (id)
@@ -196,7 +235,7 @@ CREATE TABLE song (
     title TEXT NOT NULL,
     composer TEXT,
     duration_seconds INT,
-    description TEXT,
+    description TEXT CHECK (description IS NULL OR char_length(description) <= 3000),
     video_url TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (organization_id) REFERENCES organization (id),
@@ -297,6 +336,7 @@ CREATE TABLE events (
     end_time TIMESTAMP NOT NULL,
     send_rsvp BOOLEAN NOT NULL DEFAULT FALSE,
     remind_before_minutes INT,
+    include_all_organization_members BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (organization_id) REFERENCES organization (id),
     FOREIGN KEY (creator_user_id) REFERENCES users (id),
@@ -362,6 +402,26 @@ CREATE TABLE event_participant_songs (
     )
 );
 
+CREATE TABLE event_sections (
+    event_id BIGINT NOT NULL,
+    section_id BIGINT NOT NULL,
+    PRIMARY KEY (event_id, section_id),
+    FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE,
+    FOREIGN KEY (section_id) REFERENCES sections (id)
+);
+
+CREATE TABLE event_comment (
+    id BIGSERIAL PRIMARY KEY,
+    event_id BIGINT NOT NULL,
+    author_user_id BIGINT NOT NULL,
+    text TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE,
+    FOREIGN KEY (author_user_id) REFERENCES users (id),
+    CHECK (length(trim(text)) > 0),
+    CHECK (length(text) <= 3000)
+);
+
 CREATE TABLE task (
     id BIGSERIAL PRIMARY KEY,
     organization_id BIGINT NOT NULL,
@@ -412,6 +472,17 @@ CREATE UNIQUE INDEX ux_users_telegram_user_id ON users (telegram_user_id);
 ALTER TABLE users
 ADD CONSTRAINT fk_users_profile_image_file FOREIGN KEY (profile_image_file_id) REFERENCES file (id);
 
+CREATE INDEX idx_events_org_start_id ON events (organization_id, start_time, id);
+
+CREATE INDEX idx_events_org_end_id ON events (organization_id, end_time, id);
+
+CREATE INDEX idx_event_sections_section_event ON event_sections (section_id, event_id);
+
+CREATE INDEX idx_event_participants_user_event ON event_participants (user_id, event_id);
+
+CREATE INDEX idx_event_comment_event_id_created_at
+    ON event_comment (event_id, created_at DESC);
+
 INSERT INTO
     permission (code, description)
 VALUES (
@@ -425,10 +496,6 @@ VALUES (
     (
         'ORG_SET_VISIBILITY',
         'Set and change visibility level (PUBLIC / PRIVATE)'
-    ),
-    (
-        'ORG_MEMBER_INVITE',
-        'Invite/add users to organization'
     ),
     (
         'ORG_MEMBER_REMOVE',
@@ -506,7 +573,27 @@ VALUES (
         'EVENT_DELETION',
         'Delete events'
     ),
-    ('TASK_MANAGE', 'Create tasks');
+    ('TASK_MANAGE', 'Create tasks'),
+    (
+        'ORG_WRITE_INFO',
+        'Write information messages to organization'
+    ),
+    (
+        'ORG_FUND_MANIPULATION',
+        'Manipulate organization fund'
+    ),
+    (
+        'SECTION_WRITE_INFO',
+        'Write information messages to section'
+    ),
+    (
+        'EVENT_MANAGE_DESCRIPTIONS',
+        'Manage event descriptions'
+    ),
+    (
+        'EVENT_WRITE_COMMENT',
+        'Write comments on events'
+    );
 
 -- Basic system roles at organization level (templates)
 INSERT INTO
@@ -541,7 +628,6 @@ VALUES
     (1, 'ORG_DELETE'),
     (1, 'ORG_EDIT'),
     (1, 'ORG_SET_VISIBILITY'),
-    (1, 'ORG_MEMBER_INVITE'),
     (1, 'ORG_MEMBER_REMOVE'),
     (1, 'ORG_JOIN_REQUEST_VIEW'),
     (1, 'ORG_JOIN_REQUEST_MANAGE'),
@@ -558,10 +644,13 @@ VALUES
     ),
     (1, 'EVENT_MARK_ATTENDANCE'),
     (1, 'EVENT_DELETION'),
+    (1, 'EVENT_MANAGE_DESCRIPTIONS'),
     (1, 'TASK_MANAGE'),
+    (1, 'ORG_WRITE_INFO'),
+    (1, 'ORG_FUND_MANIPULATION'),
+    (1, 'EVENT_WRITE_COMMENT'),
     -- Co-leader: reduced permission set
     (2, 'ORG_EDIT'),
-    (2, 'ORG_MEMBER_INVITE'),
     (2, 'ORG_JOIN_REQUEST_VIEW'),
     (2, 'ORG_JOIN_REQUEST_MANAGE'),
     (2, 'ORG_ASSIGN_TECH_ROLE'),
@@ -576,7 +665,11 @@ VALUES
     ),
     (2, 'EVENT_MARK_ATTENDANCE'),
     (2, 'EVENT_DELETION'),
-    (2, 'TASK_MANAGE');
+    (2, 'EVENT_MANAGE_DESCRIPTIONS'),
+    (2, 'TASK_MANAGE'),
+    (2, 'ORG_WRITE_INFO'),
+    (2, 'ORG_FUND_MANIPULATION'),
+    (2, 'EVENT_WRITE_COMMENT');
 
 -- Basic system roles at section level (templates)
 INSERT INTO
@@ -614,7 +707,9 @@ VALUES
     (3, 'SECTION_MEMBER_REMOVE'),
     (3, 'SECTION_ASSIGN_TECH_ROLE'),
     (3, 'SECTION_TECH_ROLE_MANAGE'),
+    (3, 'SECTION_WRITE_INFO'),
     -- Section Co-leader: reduced section permission set
     (4, 'SECTION_EDIT'),
     (4, 'SECTION_MEMBER_ADD'),
-    (4, 'SECTION_ASSIGN_TECH_ROLE');
+    (4, 'SECTION_ASSIGN_TECH_ROLE'),
+    (4, 'SECTION_WRITE_INFO');
