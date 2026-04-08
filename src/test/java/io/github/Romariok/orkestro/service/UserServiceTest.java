@@ -271,40 +271,6 @@ class UserServiceTest {
         }
 
         @Test
-        void updateNotificationChannel_telegram_throwsBusinessException() {
-                Long userId = 1L;
-                User user = User.builder().id(userId).notificationChannel(NotificationChannelType.EMAIL).build();
-                when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-
-                assertThrows(
-                                BusinessException.class,
-                                () -> userService.updateNotificationChannel(userId, NotificationChannelType.TELEGRAM));
-
-                verify(userRepository, never()).save(org.mockito.Mockito.any(User.class));
-        }
-
-        @Test
-        void updateNotificationChannel_email_clearsTelegramUserIdAndSaves() {
-                Long userId = 1L;
-                User user = User.builder()
-                                .id(userId)
-                                .notificationChannel(NotificationChannelType.TELEGRAM)
-                                .telegramUserId(123456789L)
-                                .updatedAt(Instant.parse("2020-01-01T00:00:00Z"))
-                                .build();
-                when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-                when(userRepository.save(org.mockito.Mockito.any(User.class)))
-                                .thenAnswer(invocation -> invocation.getArgument(0));
-
-                User result = userService.updateNotificationChannel(userId, NotificationChannelType.EMAIL);
-
-                assertEquals(NotificationChannelType.EMAIL, result.getNotificationChannel());
-                assertEquals(null, result.getTelegramUserId());
-                assertTrue(result.getUpdatedAt() != null);
-                verify(userRepository).save(user);
-        }
-
-        @Test
         void updateProfileImage_nonImageFile_throwsBusinessException() {
                 Long userId = 1L;
                 User user = User.builder().id(userId).build();

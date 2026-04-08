@@ -11,7 +11,9 @@ import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,19 +39,9 @@ public class EventRsvpListener {
     @Value("${orkestro.telegram.bot-message-queue-name:telegram_bot_messages}")
     private String telegramBotMessageQueueName;
 
-    @Value("${orkestro.telegram.contract.type.event-rsvp:event.rsvp}")
-    private String eventRsvpType;
-
-    @Value("${orkestro.telegram.contract.status.ok:OK}")
-    private String statusOk;
-
-    @Value("${orkestro.telegram.contract.status.error:ERROR}")
-    private String statusError;
-
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record EventRsvpMessage(
             @JsonProperty("request_id") String requestId,
-            @JsonProperty("type") String type,
             @JsonProperty("telegram_user_id") Long telegramUserId,
             @JsonProperty("event_id") Long eventId,
             @JsonProperty("decision") String decision) {
@@ -72,8 +64,6 @@ public class EventRsvpListener {
         }
 
         String requestId = message.requestId();
-        String defaultType = (eventRsvpType == null || eventRsvpType.isBlank()) ? "event.rsvp" : eventRsvpType;
-        String type = message.type() == null || message.type().isBlank() ? defaultType : message.type();
         Long telegramUserId = message.telegramUserId();
         Long eventId = message.eventId();
         String decision = message.decision();
@@ -83,12 +73,12 @@ public class EventRsvpListener {
             sendResultToTelegram(
                     telegramUserId,
                     requestId,
-                    type,
-                    (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
+                    Locale.forLanguageTag("ru"),
                     getMessage("notification.telegram.rsvp.invalid-request", Locale.forLanguageTag("ru")));
             return;
         }
 
+        Optional<User> userOpt = Optional.empty();
         try {
             EventRsvpStatus newStatus = mapDecisionToStatus(decision);
             if (newStatus == null) {
@@ -97,38 +87,37 @@ public class EventRsvpListener {
                 sendResultToTelegram(
                         telegramUserId,
                         requestId,
-                        type,
-                        (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
+                        Locale.forLanguageTag("ru"),
                         getMessage("notification.telegram.rsvp.unknown-decision", Locale.forLanguageTag("ru")));
                 return;
             }
 
-            Optional<User> userOpt = userRepository.findByTelegramUserId(telegramUserId);
+            userOpt = userRepository.findByTelegramUserId(telegramUserId);
             if (userOpt.isEmpty()) {
                 log.warn("User not found for telegram_user_id={} when processing RSVP for event_id={}", telegramUserId,
                         eventId);
                 sendResultToTelegram(
                         telegramUserId,
                         requestId,
-                        type,
-                        (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
+                        Locale.forLanguageTag("ru"),
                         getMessage("notification.telegram.rsvp.user-not-found", Locale.forLanguageTag("ru")));
                 return;
             }
 
-            Long userId = userOpt.get().getId();
+            User user = userOpt.get();
+            Long userId = user.getId();
             Optional<EventParticipant> participantOpt = eventParticipantRepository.findByEventIdAndUserId(eventId, userId);
             if (participantOpt.isEmpty()) {
                 log.warn(
                         "EventParticipant not found for event_id={} and user_id={} when processing RSVP",
                         eventId,
                         userId);
+                Locale locale = resolveLocale(user);
                 sendResultToTelegram(
                         telegramUserId,
                         requestId,
-                        type,
-                        (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                        getMessage("notification.telegram.rsvp.participant-not-found", resolveLocale(userOpt.get())));
+                        locale,
+                        getMessage("notification.telegram.rsvp.participant-not-found", locale));
                 return;
             }
 
@@ -137,51 +126,41 @@ public class EventRsvpListener {
             participant.setRsvpAt(Instant.now());
             eventParticipantRepository.save(participant);
 
-            log.info(
-                    "Updated RSVP for event_id={} and user_id={} to {}",
-                    eventId,
-                    userId,
-                    newStatus);
+            log.info("Updated RSVP for event_id={} and user_id={} to {}", eventId, userId, newStatus);
 
+            Locale locale = resolveLocale(user);
             sendResultToTelegram(
                     telegramUserId,
                     requestId,
-                    type,
-                    (statusOk == null || statusOk.isBlank()) ? "OK" : statusOk,
-                    getMessage("notification.telegram.rsvp.success", resolveLocale(userOpt.get())));
+                    locale,
+                    getMessage("notification.telegram.rsvp.success", locale));
         } catch (Exception ex) {
             log.error("Failed to handle RSVP message for telegram_user_id={} event_id={}", telegramUserId, eventId, ex);
+            Locale locale = userOpt.map(this::resolveLocale).orElse(Locale.forLanguageTag("ru"));
             sendResultToTelegram(
                     telegramUserId,
                     requestId,
-                    type,
-                    (statusError == null || statusError.isBlank()) ? "ERROR" : statusError,
-                    getMessage("notification.telegram.rsvp.server-error", Locale.forLanguageTag("ru")));
+                    locale,
+                    getMessage("notification.telegram.rsvp.server-error", locale));
         }
     }
 
     private void sendResultToTelegram(
             Long telegramUserId,
             String requestId,
-            String type,
-            String status,
+            Locale locale,
             String text) {
         if (telegramUserId == null) {
             log.warn("Cannot send Telegram RSVP result: telegramUserId is null");
             return;
         }
         try {
-            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            Map<String, Object> payload = new HashMap<>();
             payload.put("telegram_user_id", telegramUserId);
             payload.put("text", text);
+            payload.put("locale", locale.getLanguage().equals("en") ? "en" : "ru");
             if (requestId != null) {
                 payload.put("request_id", requestId);
-            }
-            if (type != null) {
-                payload.put("type", type);
-            }
-            if (status != null) {
-                payload.put("status", status);
             }
             String json = objectMapper.writeValueAsString(payload);
             rabbitTemplate.convertAndSend(telegramBotMessageQueueName, json);

@@ -4,12 +4,13 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ public class TelegramNotificationListener {
 
    private final UserRepository userRepository;
    private final UserTelegramLinkTokenService tokenService;
+   private final UserTelegramLinkService userTelegramLinkService;
    private final RabbitTemplate rabbitTemplate;
    private final ObjectMapper objectMapper;
    private final MessageSource messageSource;
@@ -35,17 +37,9 @@ public class TelegramNotificationListener {
    @Value("${orkestro.telegram.bot-message-queue-name:telegram_bot_messages}")
    private String telegramBotMessageQueueName;
 
-   @Value("${orkestro.telegram.contract.type.telegram-link:telegram.link}")
-   private String telegramLinkType;
-
-   private static final String STATUS_OK = "OK";
-
-   private static final String STATUS_ERROR = "ERROR";
-
    @JsonIgnoreProperties(ignoreUnknown = true)
    public record TelegramRegistrationMessage(
          @JsonProperty("request_id") String requestId,
-         @JsonProperty("type") String type,
          @JsonProperty("token") String token,
          @JsonProperty("telegram_user_id") Long telegramUserId) {
    }
@@ -67,8 +61,6 @@ public class TelegramNotificationListener {
       }
 
       String requestId = message.requestId();
-      String defaultType = (telegramLinkType == null || telegramLinkType.isBlank()) ? "telegram.link" : telegramLinkType;
-      String type = message.type() == null || message.type().isBlank() ? defaultType : message.type();
       Long telegramUserId = message.telegramUserId();
       String token = message.token();
 
@@ -77,12 +69,12 @@ public class TelegramNotificationListener {
          sendResultToTelegram(
                telegramUserId,
                requestId,
-               type,
-               STATUS_ERROR,
+               Locale.forLanguageTag("ru"),
                getMessage("notification.telegram.link.invalid-request", Locale.forLanguageTag("ru")));
          return;
       }
 
+      Long userId = null;
       try {
          UserTelegramLinkTokenService.ParsedTelegramLinkToken parsedToken;
          try {
@@ -92,59 +84,55 @@ public class TelegramNotificationListener {
             sendResultToTelegram(
                   telegramUserId,
                   requestId,
-                  type,
-                  STATUS_ERROR,
+                  Locale.forLanguageTag("ru"),
                   getMessage("notification.telegram.link.token-not-found", Locale.forLanguageTag("ru")));
             return;
          }
 
-         Long userId = parsedToken.userId();
+         userId = parsedToken.userId();
+         final Long resolvedUserId = userId;
 
          Optional<User> existingByTelegram = userRepository.findByTelegramUserId(telegramUserId);
-         if (existingByTelegram.isPresent() && !existingByTelegram.get().getId().equals(userId)) {
+         if (existingByTelegram.isPresent() && !existingByTelegram.get().getId().equals(resolvedUserId)) {
             log.warn("Telegram user id={} is already linked to another user id={}", telegramUserId,
                   existingByTelegram.get().getId());
+            Locale locale = resolveLocaleByUserId(resolvedUserId);
             sendResultToTelegram(
                   telegramUserId,
                   requestId,
-                  type,
-                  STATUS_ERROR,
-                  getMessage("notification.telegram.link.telegram-already-linked", resolveLocaleByUserId(userId)));
+                  locale,
+                  getMessage("notification.telegram.link.telegram-already-linked", locale));
             return;
          }
 
-         User user = userRepository.findById(userId)
-               .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+         userTelegramLinkService.linkTelegram(resolvedUserId, telegramUserId);
 
-         user.setTelegramUserId(telegramUserId);
-         user.setNotificationChannel(NotificationChannelType.TELEGRAM);
-         userRepository.save(user);
+         User user = userRepository.findById(resolvedUserId)
+               .orElseThrow(() -> new EntityNotFoundException("User not found: " + resolvedUserId));
 
-         log.info("Enabled TELEGRAM notifications for user id={} (telegram_user_id={})",
-               user.getId(), telegramUserId);
+         log.info("Enabled TELEGRAM notifications for user id={} (telegram_user_id={})", userId, telegramUserId);
 
+         Locale locale = resolveLocale(user);
          sendResultToTelegram(
                telegramUserId,
                requestId,
-               type,
-               STATUS_OK,
-               getMessage("notification.telegram.link.success", resolveLocale(user)));
+               locale,
+               getMessage("notification.telegram.link.success", locale));
       } catch (Exception ex) {
          log.error("Failed to handle Telegram registration request", ex);
+         Locale locale = resolveLocaleByUserId(userId);
          sendResultToTelegram(
                telegramUserId,
                requestId,
-               type,
-               STATUS_ERROR,
-               getMessage("notification.telegram.link.server-error", Locale.forLanguageTag("ru")));
+               locale,
+               getMessage("notification.telegram.link.server-error", locale));
       }
    }
 
    private void sendResultToTelegram(
          Long telegramUserId,
          String requestId,
-         String type,
-         String status,
+         Locale locale,
          String text) {
       if (telegramUserId == null) {
          log.warn("Cannot send Telegram result message: telegramUserId is null");
@@ -152,17 +140,12 @@ public class TelegramNotificationListener {
       }
 
       try {
-         java.util.Map<String, Object> payload = new java.util.HashMap<>();
+         Map<String, Object> payload = new HashMap<>();
          payload.put("telegram_user_id", telegramUserId);
          payload.put("text", text);
+         payload.put("locale", locale.getLanguage().equals("en") ? "en" : "ru");
          if (requestId != null) {
             payload.put("request_id", requestId);
-         }
-         if (type != null) {
-            payload.put("type", type);
-         }
-         if (status != null) {
-            payload.put("status", status);
          }
          String json = objectMapper.writeValueAsString(payload);
          rabbitTemplate.convertAndSend(telegramBotMessageQueueName, json);

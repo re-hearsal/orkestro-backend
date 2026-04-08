@@ -22,4 +22,13 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="003-add-vk-channel" author="romariok">
+        <sqlFile
+            path="003-add-vk-channel.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

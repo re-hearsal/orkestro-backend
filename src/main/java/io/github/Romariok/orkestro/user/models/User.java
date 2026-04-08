@@ -68,6 +68,9 @@ public class User implements UserDetails {
    @Column(name = "telegram_user_id")
    private Long telegramUserId;
 
+   @Column(name = "vk_user_id")
+   private Long vkUserId;
+
    @Enumerated(EnumType.STRING)
    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
    @ColumnDefault("'EMAIL'")

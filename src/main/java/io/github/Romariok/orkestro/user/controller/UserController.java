@@ -5,10 +5,11 @@ import io.github.Romariok.orkestro.user.dto.CurrentUserResponseDTO;
 import io.github.Romariok.orkestro.user.dto.MusicalRoleDTO;
 import io.github.Romariok.orkestro.user.dto.MusicalRoleUpdateRequestDTO;
 import io.github.Romariok.orkestro.user.dto.TelegramLinkTokenResponseDTO;
-import io.github.Romariok.orkestro.user.dto.UserNotificationChannelUpdateRequestDTO;
+import io.github.Romariok.orkestro.user.dto.VkLinkTokenResponseDTO;
 import io.github.Romariok.orkestro.user.service.MusicalRoleService;
 import io.github.Romariok.orkestro.user.service.UserService;
 import io.github.Romariok.orkestro.user.service.UserTelegramLinkService;
+import io.github.Romariok.orkestro.user.service.UserVkLinkService;
 import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -40,13 +41,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @Validated
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/users")
+@RequestMapping("/api/v1/users/me")
 @Tag(name = "Users", description = "API для управления пользователями и их профилями")
 public class UserController {
 
     private final SecurityUtils securityUtils;
     private final MusicalRoleService musicalRoleService;
     private final UserTelegramLinkService userTelegramLinkService;
+    private final UserVkLinkService userVkLinkService;
     private final UserService userService;
 
     @Operation(
@@ -105,7 +107,7 @@ public class UserController {
             )
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @GetMapping("/me")
+    @GetMapping
     public ResponseEntity<CurrentUserResponseDTO> getCurrentUserProfile() {
         return ResponseEntity.ok(userService.getCurrentUserProfile());
     }
@@ -160,7 +162,7 @@ public class UserController {
             )
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @GetMapping("/me/musical-roles")
+    @GetMapping("/musical-roles")
     public ResponseEntity<List<MusicalRoleDTO>> getMyMusicalRoles() {
         Long currentUserId = securityUtils.getCurrentUserId();
         return ResponseEntity.ok(musicalRoleService.getUserMusicalRoles(currentUserId));
@@ -226,7 +228,7 @@ public class UserController {
             )
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @PostMapping("/me/musical-roles")
+    @PostMapping("/musical-roles")
     public ResponseEntity<Void> setMyInstruments(
             @Parameter(
                     description = "Список ID инструментов для установки",
@@ -310,7 +312,7 @@ public class UserController {
             )
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @PostMapping("/me/musical-roles/{instrumentId}")
+    @PostMapping("/musical-roles/{instrumentId}")
     public ResponseEntity<Void> addMyInstrument(
             @Parameter(
                     description = "ID добавляемого инструмента",
@@ -372,7 +374,7 @@ public class UserController {
             )
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @DeleteMapping("/me/musical-roles/{instrumentId}")
+    @DeleteMapping("/musical-roles/{instrumentId}")
     public ResponseEntity<Void> removeMyInstrument(
             @Parameter(
                     description = "ID удаляемого инструмента",
@@ -443,106 +445,27 @@ public class UserController {
             )
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @PostMapping("/me/telegram/link-token")
+    @PostMapping("/telegram/link-token")
     public ResponseEntity<TelegramLinkTokenResponseDTO> createTelegramLinkToken() {
         String token = userTelegramLinkService.createLinkTokenForCurrentUser();
         return ResponseEntity.ok(new TelegramLinkTokenResponseDTO(token));
     }
 
     @Operation(
-            summary = "Обновить канал уведомлений",
-            description = "Изменяет предпочтительный канал для получения уведомлений. " +
-                    "Доступные каналы: EMAIL, TELEGRAM. " +
-                    "Важно: для установки TELEGRAM необходимо сначала получить токен через endpoint `/me/telegram/link-token` " +
-                    "и завершить привязку в Telegram боте. Прямая установка TELEGRAM через этот endpoint вызовет ошибку."
+            summary = "Отвязать аккаунт Telegram",
+            description = "Отвязывает аккаунт Telegram от текущего пользователя. " +
+                    "Канал уведомлений сбрасывается на EMAIL."
     )
     @ApiResponses({
-            @ApiResponse(
-                    responseCode = "204",
-                    description = "Канал уведомлений успешно обновлен",
-                    content = @Content
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Ошибка валидации / Нарушение бизнес-правил",
-                    content = @Content(
-                            mediaType = MediaType.APPLICATION_JSON_VALUE,
-                            schema = @Schema(implementation = ApiErrorResponse.class),
-                            examples = {
-                                    @ExampleObject(
-                                            name = "Попытка установить TELEGRAM напрямую",
-                                            value = "{\"timestamp\": \"2026-02-18T10:00:00Z\", \"status\": 400, \"error\": \"Business rule violation\", \"message\": \"Cannot set Telegram notification channel directly. Use '/me/telegram/link-token' query instead\", \"path\": \"/api/v1/users/me/notification-channel\", \"details\": []}"
-                                    ),
-                                    @ExampleObject(
-                                            name = "Канал не указан",
-                                            value = "{\"timestamp\": \"2026-02-18T10:00:00Z\", \"status\": 400, \"error\": \"Validation failed\", \"message\": \"notificationChannel: must not be null\", \"path\": \"/api/v1/users/me/notification-channel\", \"details\": [\"notificationChannel: must not be null\"]}"
-                                    ),
-                                    @ExampleObject(
-                                            name = "Некорректное значение канала",
-                                            value = "{\"timestamp\": \"2026-02-18T10:00:00Z\", \"status\": 400, \"error\": \"Validation failed\", \"message\": \"notificationChannel: must not be null\", \"path\": \"/api/v1/users/me/notification-channel\", \"details\": [\"notificationChannel: must be one of [EMAIL, TELEGRAM]\"]}"
-                                    )
-                            }
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "Не аутентифицирован",
-                    content = @Content(
-                            mediaType = MediaType.APPLICATION_JSON_VALUE,
-                            schema = @Schema(implementation = ApiErrorResponse.class),
-                            examples = @ExampleObject(
-                                    name = "Требуется авторизация",
-                                    value = "{\"timestamp\": \"2026-02-18T10:00:00Z\", \"status\": 401, \"error\": \"Authentication failed\", \"message\": \"Bad credentials\", \"path\": \"/api/v1/users/me/notification-channel\", \"details\": []}"
-                            )
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Пользователь не найден",
-                    content = @Content(
-                            mediaType = MediaType.APPLICATION_JSON_VALUE,
-                            schema = @Schema(implementation = ApiErrorResponse.class),
-                            examples = @ExampleObject(
-                                    name = "Профиль не найден",
-                                    value = "{\"timestamp\": \"2026-02-18T10:00:00Z\", \"status\": 404, \"error\": \"Entity not found\", \"message\": \"User not found: 999\", \"path\": \"/api/v1/users/me/notification-channel\", \"details\": []}"
-                            )
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "Внутренняя ошибка сервера",
-                    content = @Content(
-                            mediaType = MediaType.APPLICATION_JSON_VALUE,
-                            schema = @Schema(implementation = ApiErrorResponse.class),
-                            examples = @ExampleObject(
-                                    name = "Ошибка сервера",
-                                    value = "{\"timestamp\": \"2026-02-18T10:00:00Z\", \"status\": 500, \"error\": \"Unexpected error\", \"message\": \"Internal server error\", \"path\": \"/api/v1/users/me/notification-channel\", \"details\": []}"
-                            )
-                    )
-            )
+            @ApiResponse(responseCode = "204", description = "Аккаунт успешно отвязан", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Пользователь не найден", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @PatchMapping("/me/notification-channel")
-    public ResponseEntity<Void> updateCurrentUserNotificationChannel(
-            @Parameter(
-                    description = "Новый канал уведомлений",
-                    required = true,
-                    content = @Content(
-                            schema = @Schema(implementation = UserNotificationChannelUpdateRequestDTO.class),
-                            examples = {
-                                    @ExampleObject(
-                                            name = "Установить Email",
-                                            value = "{\"notificationChannel\": \"EMAIL\"}"
-                                    ),
-                                    @ExampleObject(
-                                            name = "Установить Telegram (только после привязки)",
-                                            value = "{\"notificationChannel\": \"TELEGRAM\"}"
-                                    )
-                            }
-                    )
-            )
-            @Valid @RequestBody UserNotificationChannelUpdateRequestDTO request) {
-        userService.updateCurrentUserNotificationChannel(request.getNotificationChannel());
+    @DeleteMapping("/telegram/link")
+    public ResponseEntity<Void> unlinkTelegram() {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        userTelegramLinkService.unlinkTelegram(currentUserId);
         return ResponseEntity.noContent().build();
     }
 
@@ -631,7 +554,7 @@ public class UserController {
             )
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @PatchMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PatchMapping(value = "/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Void> updateCurrentUserProfileImage(
             @Parameter(
                     description = "Изображение профиля (JPEG, PNG, GIF, WEBP)",
@@ -692,9 +615,54 @@ public class UserController {
             )
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @DeleteMapping("/me/profile-image")
+    @DeleteMapping("/profile-image")
     public ResponseEntity<Void> deleteCurrentUserProfileImage() {
         userService.deleteCurrentUserProfileImage();
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "Создать токен для привязки ВКонтакте",
+            description = "Генерирует одноразовый токен для привязки аккаунта ВКонтакте. " +
+                    "Токен передаётся боту ВКонтакте, который отправляет его в очередь RabbitMQ."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Токен успешно создан",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = VkLinkTokenResponseDTO.class),
+                            examples = @ExampleObject(
+                                    name = "Пример ответа",
+                                    value = "{\"token\": \"vk_token_example\"}"
+                            )
+                    )
+            ),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Пользователь не найден", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/vk/link-token")
+    public ResponseEntity<VkLinkTokenResponseDTO> createVkLinkToken() {
+        String token = userVkLinkService.generateLinkTokenForCurrentUser();
+        return ResponseEntity.ok(new VkLinkTokenResponseDTO(token));
+    }
+
+    @Operation(
+            summary = "Отвязать аккаунт ВКонтакте",
+            description = "Отвязывает аккаунт ВКонтакте от текущего пользователя. " +
+                    "Канал уведомлений сбрасывается на EMAIL."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Аккаунт успешно отвязан", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Пользователь не найден", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/vk/link")
+    public ResponseEntity<Void> unlinkVk() {
+        userVkLinkService.unlinkVk(securityUtils.getCurrentUserId());
         return ResponseEntity.noContent().build();
     }
 }

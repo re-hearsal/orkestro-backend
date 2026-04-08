@@ -9,10 +9,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.service.TelegramNotificationListener;
+import io.github.Romariok.orkestro.user.service.UserTelegramLinkService;
 import io.github.Romariok.orkestro.user.service.UserTelegramLinkTokenService;
 
 import java.lang.reflect.Field;
@@ -20,7 +20,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,6 +36,9 @@ class TelegramNotificationListenerTest {
 
       @Mock
       private UserTelegramLinkTokenService tokenService;
+
+      @Mock
+      private UserTelegramLinkService userTelegramLinkService;
 
       @Mock
       private RabbitTemplate rabbitTemplate;
@@ -183,15 +185,8 @@ class TelegramNotificationListenerTest {
 
             listener.handleTelegramRegistration(amqp);
 
-            // Проверяем, что пользователь обновлён и сохранён
-            ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-            verify(userRepository).save(userCaptor.capture());
-            User savedUser = userCaptor.getValue();
-
-            // Проверяем, что канал уведомлений и telegram_user_id проставлены
-            org.junit.jupiter.api.Assertions.assertEquals(NotificationChannelType.TELEGRAM,
-                        savedUser.getNotificationChannel());
-            org.junit.jupiter.api.Assertions.assertEquals(telegramUserId, savedUser.getTelegramUserId());
+            // Проверяем, что linkTelegram вызван с правильными параметрами
+            verify(userTelegramLinkService).linkTelegram(userId, telegramUserId);
 
             // И что в брокер отправлено сообщение об успешной привязке
             verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), anyString());
@@ -226,7 +221,7 @@ class TelegramNotificationListenerTest {
 
             assertDoesNotThrow(() -> listener.handleTelegramRegistration(amqp));
 
-            // Несмотря на падение брокера, данные пользователя должны быть сохранены
-            verify(userRepository).save(any(User.class));
+            // Несмотря на падение брокера, linkTelegram должен быть вызван
+            verify(userTelegramLinkService).linkTelegram(userId, telegramUserId);
       }
 }

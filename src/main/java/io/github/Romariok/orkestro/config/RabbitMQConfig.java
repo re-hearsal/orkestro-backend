@@ -31,4 +31,16 @@ public class RabbitMQConfig {
          @Value("${orkestro.email.queue-name:email_notifications}") String queueName) {
       return new Queue(queueName, true);
    }
+
+   @Bean
+   public Queue vkNotificationQueue(
+         @Value("${orkestro.vk.bot-message-queue-name:vk_notification_queue}") String queueName) {
+      return new Queue(queueName, true);
+   }
+
+   @Bean
+   public Queue vkRegistrationQueue(
+         @Value("${orkestro.vk.queue-name:vk_notification_registrations}") String queueName) {
+      return new Queue(queueName, true);
+   }
 }

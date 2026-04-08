@@ -17,11 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 
-/**
- * Отправка уведомлений участникам события:
- * - о создании мероприятия;
- * - о предстоящем мероприятии (напоминания).
- */
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -30,6 +26,7 @@ public class EventNotificationService {
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
     private final TelegramEventNotificationService telegramEventNotificationService;
+    private final VkEventNotificationService vkEventNotificationService;
     private final EmailEventNotificationService emailEventNotificationService;
     private final MessageSource messageSource;
 
@@ -130,6 +127,11 @@ public class EventNotificationService {
             if (!telegramOk) {
                 emailEventNotificationService.sendEventCreatedNotification(event, resolvedOrganizationName, user, text);
             }
+        } else if (channel == NotificationChannelType.VK && user.getVkUserId() != null) {
+            boolean vkOk = vkEventNotificationService.sendEventCreatedNotification(event, resolvedOrganizationName, user, text);
+            if (!vkOk) {
+                emailEventNotificationService.sendEventCreatedNotification(event, resolvedOrganizationName, user, text);
+            }
         } else {
             emailEventNotificationService.sendEventCreatedNotification(event, resolvedOrganizationName, user, text);
         }
@@ -145,6 +147,11 @@ public class EventNotificationService {
             boolean telegramOk = telegramEventNotificationService.sendEventCreatedNotification(event, resolvedOrganizationName,
                     user, text);
             if (!telegramOk) {
+                emailEventNotificationService.sendEventCreatedNotification(event, resolvedOrganizationName, user, text);
+            }
+        } else if (channel == NotificationChannelType.VK && user.getVkUserId() != null) {
+            boolean vkOk = vkEventNotificationService.sendEventCreatedNotification(event, resolvedOrganizationName, user, text);
+            if (!vkOk) {
                 emailEventNotificationService.sendEventCreatedNotification(event, resolvedOrganizationName, user, text);
             }
         } else {
@@ -199,6 +206,11 @@ public class EventNotificationService {
             boolean telegramOk = telegramEventNotificationService.sendEventCommentNotification(
                     event, resolvedOrganizationName, user, text);
             if (!telegramOk) {
+                emailEventNotificationService.sendEventCommentNotification(event, resolvedOrganizationName, user, text);
+            }
+        } else if (channel == NotificationChannelType.VK && user.getVkUserId() != null) {
+            boolean vkOk = vkEventNotificationService.sendEventCommentNotification(event, resolvedOrganizationName, user, text);
+            if (!vkOk) {
                 emailEventNotificationService.sendEventCommentNotification(event, resolvedOrganizationName, user, text);
             }
         } else {

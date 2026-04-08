@@ -20,6 +20,8 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
   Optional<User> findByTelegramUserId(Long telegramUserId);
 
+  Optional<User> findByVkUserId(Long vkUserId);
+
   List<User> findByNameContainingIgnoreCase(String name);
 
   @Query("""

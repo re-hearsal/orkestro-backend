@@ -13,9 +13,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 
-/**
- * Produces event notifications to RabbitMQ for asynchronous email sending.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor

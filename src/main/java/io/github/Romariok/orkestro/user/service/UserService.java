@@ -1,6 +1,5 @@
 package io.github.Romariok.orkestro.user.service;
 
-import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.dto.CurrentUserResponseDTO;
 import io.github.Romariok.orkestro.user.dto.UserProfileUpdateRequestDTO;
@@ -180,28 +179,6 @@ public class UserService implements UserDetailsService {
       }
 
       return userRepository.findByNameAndRoleIds(normalizedName, roleIds);
-   }
-
-   @Transactional
-   public User updateNotificationChannel(Long userId, NotificationChannelType channel) {
-      User user = userRepository.findById(userId)
-            .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
-      if (channel.equals(NotificationChannelType.TELEGRAM)) {
-         throw new BusinessException("Cannot set Telegram notification channel directly. Use '/me/telegram/link-token' query instead");
-      }
-      user.setNotificationChannel(channel);
-      if (channel == NotificationChannelType.EMAIL) {
-         user.setTelegramUserId(null);
-      }
-
-      user.setUpdatedAt(Instant.now());
-      return userRepository.save(user);
-   }
-
-   @Transactional
-   public User updateCurrentUserNotificationChannel(NotificationChannelType channel) {
-      Long currentUserId = securityUtils.getCurrentUserId();
-      return updateNotificationChannel(currentUserId, channel);
    }
 
    @Transactional
