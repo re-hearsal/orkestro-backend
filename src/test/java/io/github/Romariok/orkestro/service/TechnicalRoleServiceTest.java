@@ -82,7 +82,8 @@ class TechnicalRoleServiceTest {
                 dto.setId(10L);
 
                 when(technicalRoleDao.findUserRoles(userId)).thenReturn(List.of(role));
-                when(technicalRoleMapper.toDtoList(List.of(role))).thenReturn(List.of(dto));
+                when(technicalRoleMapper.toDto(role)).thenReturn(dto);
+                when(rolePermissionRepository.findPermissionsByRoleId(10L)).thenReturn(List.of());
 
                 List<TechnicalRoleDTO> result = technicalRoleService.getUserRoles(userId);
 

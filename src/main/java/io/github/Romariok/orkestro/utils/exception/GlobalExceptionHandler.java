@@ -45,6 +45,17 @@ public class GlobalExceptionHandler {
                         Collections.emptyList());
       }
 
+      @ExceptionHandler(SectionDepthExceededException.class)
+      public ResponseEntity<ApiErrorResponse> handleSectionDepthExceeded(
+                  SectionDepthExceededException ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.valueOf(422),
+                        "Section depth limit exceeded",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
       @ExceptionHandler(InternalServiceException.class)
       public ResponseEntity<ApiErrorResponse> handleInternalServiceException(
                   InternalServiceException ex, HttpServletRequest request) {

@@ -15,4 +15,6 @@ public interface EventSectionRepository extends JpaRepository<EventSection, Even
     List<EventSection> findByEventIdIn(Collection<Long> eventIds);
 
     void deleteByEventId(Long eventId);
+
+    void deleteBySectionId(Long sectionId);
 }

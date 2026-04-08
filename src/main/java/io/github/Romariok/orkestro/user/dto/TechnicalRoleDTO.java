@@ -1,6 +1,7 @@
 package io.github.Romariok.orkestro.user.dto;
 
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,4 +17,5 @@ public class TechnicalRoleDTO {
     private Long sectionId;
     private String name;
     private boolean system;
+    private List<String> permissionCodes;
 }

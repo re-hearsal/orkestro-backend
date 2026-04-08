@@ -24,6 +24,7 @@ import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.section.service.SectionService;
 import io.github.Romariok.orkestro.task.models.Task;
+import io.github.Romariok.orkestro.event.repository.EventSectionRepository;
 import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.UserRole;
@@ -33,6 +34,7 @@ import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.exception.SectionDepthExceededException;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -72,6 +74,9 @@ class SectionServiceTest {
 
         @Mock
         private TaskRepository taskRepository;
+
+        @Mock
+        private EventSectionRepository eventSectionRepository;
 
         @Mock
         private SectionMapper sectionMapper;
@@ -865,6 +870,102 @@ class SectionServiceTest {
                                 sectionId, "   ", List.of(), List.of(), PageRequest.of(0, 20));
 
                 assertEquals(1, result.getTotalElements());
+        }
+
+        @Test
+        void createSectionInSection_depthExceeds10_throwsSectionDepthExceededException() {
+                Section[] chain = new Section[10];
+                for (int i = 0; i < 10; i++) {
+                        chain[i] = new Section();
+                        chain[i].setId((long) (i + 1));
+                        chain[i].setOrganizationId(1L);
+                        chain[i].setParentSectionId(i == 0 ? null : (long) i);
+                }
+                Long parentId = 10L;
+                when(sectionRepository.findById(parentId)).thenReturn(Optional.of(chain[9]));
+                for (int i = 8; i >= 0; i--) {
+                        when(sectionRepository.findById((long) (i + 1))).thenReturn(Optional.of(chain[i]));
+                }
+
+                SectionCreateRequestDTO request = new SectionCreateRequestDTO("Child", "desc");
+
+                assertThrows(
+                                SectionDepthExceededException.class,
+                                () -> sectionService.createSectionInSection(parentId, request));
+
+                verify(sectionRepository, never()).save(any());
+        }
+
+        @Test
+        void createSectionInSection_depth9_succeeds() {
+                Section[] chain = new Section[9];
+                for (int i = 0; i < 9; i++) {
+                        chain[i] = new Section();
+                        chain[i].setId((long) (i + 1));
+                        chain[i].setOrganizationId(1L);
+                        chain[i].setParentSectionId(i == 0 ? null : (long) i);
+                }
+                Long parentId = 9L;
+                when(sectionRepository.findById(parentId)).thenReturn(Optional.of(chain[8]));
+                for (int i = 7; i >= 0; i--) {
+                        when(sectionRepository.findById((long) (i + 1))).thenReturn(Optional.of(chain[i]));
+                }
+
+                when(sectionRepository.existsByOrganizationIdAndParentSectionIdAndName(1L, parentId, "NewSection"))
+                                .thenReturn(false);
+
+                Section saved = new Section();
+                saved.setId(100L);
+                saved.setName("NewSection");
+                saved.setOrganizationId(1L);
+                saved.setParentSectionId(parentId);
+                when(sectionRepository.save(any(Section.class))).thenReturn(saved);
+
+                when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, 100L)).thenReturn(List.of());
+                when(roleRepository.findByScopeAndSystemTrue(RoleScopeType.SECTION)).thenReturn(List.of());
+                when(securityUtils.getCurrentUserId()).thenReturn(200L);
+                when(sectionUserRepository.findBySectionIdAndUserId(100L, 200L)).thenReturn(Optional.empty());
+                when(sectionRepository.existsById(100L)).thenReturn(true);
+                SectionUser creator = new SectionUser();
+                creator.setSectionId(100L);
+                creator.setUserId(200L);
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(100L)).thenReturn(List.of(creator));
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, 100L, "Leader"))
+                                .thenReturn(Optional.empty());
+                when(roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, 100L, "Co-leader"))
+                                .thenReturn(Optional.empty());
+                when(sectionMapper.toDto(saved))
+                                .thenReturn(new SectionDTO(100L, "NewSection", null, 1L, parentId));
+
+                SectionDTO result = sectionService.createSectionInSection(parentId,
+                                new SectionCreateRequestDTO("NewSection", null));
+
+                assertEquals(100L, result.getId());
+                verify(sectionRepository).save(any(Section.class));
+        }
+
+        @Test
+        void leaveCurrentSection_lastMember_deletesEventSectionRows() {
+                Long sectionId = 10L;
+                Long currentUserId = 100L;
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                SectionUser member = new SectionUser();
+                member.setSectionId(sectionId);
+                member.setUserId(currentUserId);
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(sectionId)).thenReturn(List.of(member));
+                when(sectionRepository.findByParentSectionId(sectionId)).thenReturn(List.of());
+                when(roleRepository.findByScopeAndSectionIdIn(eq(RoleScopeType.SECTION), any()))
+                                .thenReturn(List.of());
+                when(sectionUserRepository.countBySectionId(sectionId)).thenReturn(0L);
+                when(taskRepository.findBySectionId(sectionId)).thenReturn(List.of());
+                when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId)).thenReturn(List.of());
+
+                sectionService.leaveCurrentSection(sectionId);
+
+                verify(eventSectionRepository).deleteBySectionId(sectionId);
+                verify(sectionRepository).deleteAllById(List.of(sectionId));
         }
 
         @Test

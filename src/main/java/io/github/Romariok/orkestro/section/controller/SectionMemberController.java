@@ -77,6 +77,26 @@ public class SectionMemberController {
    }
 
     @Operation(
+            summary = "Покинуть секцию",
+            description = "Текущий аутентифицированный пользователь покидает секцию. Лидер не может покинуть секцию, пока есть другие участники."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Секция покинута", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Нарушение бизнес-правил (лидер не может покинуть секцию)", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Секция не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> leaveSection(
+            @Parameter(description = "ID секции", required = true) @PathVariable @Positive Long sectionId) {
+        sectionService.leaveCurrentSection(sectionId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
             summary = "Поиск участников секции",
             description = "Возвращает страницу участников секции с возможностью фильтрации по имени, ролям и инструментам."
     )

@@ -16,6 +16,7 @@ import io.github.Romariok.orkestro.section.models.SectionUser;
 import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.section.specification.SectionUserSpecifications;
+import io.github.Romariok.orkestro.event.repository.EventSectionRepository;
 import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
@@ -28,6 +29,7 @@ import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.exception.SectionDepthExceededException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,15 +56,12 @@ public class SectionService {
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
     private final TaskRepository taskRepository;
+    private final EventSectionRepository eventSectionRepository;
     private final SectionMapper sectionMapper;
     private final SectionMemberMapper sectionMemberMapper;
     private final RolePermissionRepository rolePermissionRepository;
     private final SecurityUtils securityUtils;
 
-    /**
-     * Creates a top-level section within an organization.
-     * Available to any accepted organization member.
-     */
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMember(#organizationId)")
     public SectionDTO createSectionInOrganization(Long organizationId, SectionCreateRequestDTO request) {
@@ -93,10 +92,6 @@ public class SectionService {
         return sectionMapper.toDto(saved);
     }
 
-    /**
-     * Creates a section inside another section.
-     * Available to any member of the parent section.
-     */
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.isSectionMember(#parentSectionId)")
     public SectionDTO createSectionInSection(Long parentSectionId, SectionCreateRequestDTO request) {
@@ -106,6 +101,8 @@ public class SectionService {
 
         Section parent = sectionRepository.findById(parentSectionId)
                 .orElseThrow(() -> new EntityNotFoundException("Section not found: " + parentSectionId));
+
+        checkSectionDepth(parent);
 
         String normalizedName = request.getName().trim();
 
@@ -125,6 +122,21 @@ public class SectionService {
         ensureSectionBaseRoles(saved.getId());
         ensureCreatorMembershipAndLeaderRole(saved.getId());
         return sectionMapper.toDto(saved);
+    }
+
+    private void checkSectionDepth(Section parent) {
+        int depth = 0;
+        Section current = parent;
+        while (current != null) {
+            depth++;
+            if (depth >= 10) {
+                throw new SectionDepthExceededException("Maximum section nesting depth of 10 exceeded");
+            }
+            if (current.getParentSectionId() == null) {
+                break;
+            }
+            current = sectionRepository.findById(current.getParentSectionId()).orElse(null);
+        }
     }
 
     private void ensureCreatorMembershipAndLeaderRole(Long sectionId) {
@@ -197,10 +209,6 @@ public class SectionService {
                 });
     }
 
-    /**
-     * Returns the current role assignee user id if the assignee is a member of the section.
-     * If there is no assignment or all assignments point to non-members, returns {@code null}.
-     */
     private Long resolveCurrentAssigneeUserId(Long roleId, List<Long> memberUserIds) {
         List<UserRole> mappings = userRoleRepository.findByRoleId(roleId);
         if (mappings == null || mappings.isEmpty()) {
@@ -240,7 +248,6 @@ public class SectionService {
             }
         }
 
-        // enforce single assignment
         userRoleRepository.deleteByRoleId(roleId);
         if (selected != null) {
             userRoleRepository.save(UserRole.builder()
@@ -301,7 +308,6 @@ public class SectionService {
 
         List<Role> created = roleRepository.saveAll(toCreate);
 
-        // Copy permissions from template roles
         List<RolePermission> permissionsToCreate = new ArrayList<>();
         for (Role createdRole : created) {
             Role template = templateByName.get(createdRole.getName());
@@ -322,10 +328,7 @@ public class SectionService {
         }
     }
 
-    /**
-     * Deletes a section and all nested sections.
-     * Available only to users with SECTION_DELETE permission in the context of the target section.
-     */
+
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_DELETE')")
     public void deleteSection(Long sectionId) {
@@ -340,22 +343,19 @@ public class SectionService {
         List<Long> idsToDelete = new ArrayList<>();
         collectSubtreeSectionIds(sectionId, idsToDelete);
 
-        // Clean up dependencies that reference sections
         for (Long id : idsToDelete) {
-            // Section memberships
             sectionUserRepository.deleteBySectionId(id);
 
-            // Tasks attached to the section
             taskRepository.findBySectionId(id).forEach(taskRepository::delete);
 
-            // Section roles and related user_role / role_permission (cascaded by FK)
+            eventSectionRepository.deleteBySectionId(id);
+
             List<Role> sectionRoles = roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, id);
             if (!sectionRoles.isEmpty()) {
                 roleRepository.deleteAll(sectionRoles);
             }
         }
 
-        // Delete sections from leaves up (order is guaranteed by collectSubtreeSectionIds)
         sectionRepository.deleteAllById(idsToDelete);
     }
 

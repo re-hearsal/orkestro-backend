@@ -14,6 +14,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -73,6 +74,28 @@ public class OrganizationTechnicalRoleController {
           @Valid @RequestBody TechnicalRoleCreateRequestDTO request) {
       TechnicalRoleDTO created = technicalRoleService.createOrganizationRole(organizationId, request);
       return ResponseEntity.status(HttpStatus.CREATED).body(created);
+   }
+
+   @Operation(
+           summary = "Обновить техническую роль организации",
+           description = "Обновляет название и список прав технической роли организации."
+   )
+   @ApiResponses({
+           @ApiResponse(responseCode = "200", description = "Роль обновлена", content = @Content(schema = @Schema(implementation = TechnicalRoleDTO.class))),
+           @ApiResponse(responseCode = "400", description = "Ошибка валидации или нельзя изменить системную роль", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "404", description = "Организация или роль не найдены", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+           @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+   })
+   @SecurityRequirement(name = "Bearer Authentication")
+   @PutMapping("/{roleId}")
+   public ResponseEntity<TechnicalRoleDTO> updateOrganizationRole(
+         @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
+         @Parameter(description = "ID роли", required = true) @PathVariable @Positive Long roleId,
+         @Valid @RequestBody TechnicalRoleCreateRequestDTO request) {
+      TechnicalRoleDTO updated = technicalRoleService.updateOrganizationRole(organizationId, roleId, request);
+      return ResponseEntity.ok(updated);
    }
 
    @Operation(

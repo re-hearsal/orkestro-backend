@@ -46,25 +46,30 @@ public class TechnicalRoleService {
     @Transactional(readOnly = true)
     public List<TechnicalRoleDTO> getUserRoles(Long userId) {
         List<Role> roles = technicalRoleDao.findUserRoles(userId);
-        return technicalRoleMapper.toDtoList(roles);
+        return roles.stream().map(this::toDtoWithPermissions).toList();
     }
 
     @Transactional(readOnly = true)
     public List<TechnicalRoleDTO> getOrganizationRoles(Long organizationId) {
         List<Role> roles = technicalRoleDao.findOrganizationRoles(organizationId);
-        return technicalRoleMapper.toDtoList(roles);
+        return roles.stream().map(this::toDtoWithPermissions).toList();
     }
 
     @Transactional(readOnly = true)
     public List<TechnicalRoleDTO> getSectionRoles(Long sectionId) {
         List<Role> roles = technicalRoleDao.findSectionRoles(sectionId);
-        return technicalRoleMapper.toDtoList(roles);
+        return roles.stream().map(this::toDtoWithPermissions).toList();
     }
 
-    /**
-     * Создать техническую роль в организации с указанными правами.
-     * Доступно только обладателям ORG_TECH_ROLE_MANAGE в контексте организации.
-     */
+    private TechnicalRoleDTO toDtoWithPermissions(Role role) {
+        TechnicalRoleDTO dto = technicalRoleMapper.toDto(role);
+        List<String> codes = rolePermissionRepository.findPermissionsByRoleId(role.getId())
+                .stream().map(p -> p.getCode()).toList();
+        dto.setPermissionCodes(codes);
+        return dto;
+    }
+
+
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_TECH_ROLE_MANAGE')")
     public TechnicalRoleDTO createOrganizationRole(Long organizationId, TechnicalRoleCreateRequestDTO request) {
@@ -114,13 +119,62 @@ public class TechnicalRoleService {
             }
         }
 
-        return technicalRoleMapper.toDto(saved);
+        return toDtoWithPermissions(saved);
     }
 
-    /**
-     * Создать техническую роль в секции с указанными правами.
-     * Доступно только обладателям SECTION_TECH_ROLE_MANAGE в контексте секции.
-     */
+    @Transactional
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_TECH_ROLE_MANAGE')")
+    public TechnicalRoleDTO updateOrganizationRole(Long organizationId, Long roleId, TechnicalRoleCreateRequestDTO request) {
+        if (request == null || request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Role name must not be blank");
+        }
+
+        Role role = roleRepository
+                .findById(roleId)
+                .orElseThrow(() -> new EntityNotFoundException("Role not found: " + roleId));
+
+        if (role.getScope() != RoleScopeType.ORGANIZATION || role.getOrganizationId() == null
+                || !role.getOrganizationId().equals(organizationId)) {
+            throw new BusinessException("Role " + roleId + " does not belong to organization " + organizationId);
+        }
+
+        if (role.isSystem()) {
+            throw new BusinessException("System role cannot be modified");
+        }
+
+        String normalizedName = request.getName().trim();
+        if (!normalizedName.equals(role.getName())) {
+            roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, organizationId, normalizedName)
+                    .ifPresent(existing -> {
+                        throw new BusinessException(
+                                "Role with name '" + normalizedName + "' already exists in organization " + organizationId);
+                    });
+            role.setName(normalizedName);
+        }
+
+        rolePermissionRepository.deleteByRoleId(roleId);
+
+        List<String> codes = request.getPermissionCodes();
+        if (codes != null && !codes.isEmpty()) {
+            Set<String> uniqueCodes = new HashSet<>(codes);
+            List<Permission> permissions = permissionRepository.findByCodeIn(uniqueCodes);
+            if (permissions.size() != uniqueCodes.size()) {
+                throw new EntityNotFoundException("One or more permissions not found for codes: " + uniqueCodes);
+            }
+            List<RolePermission> mappings = uniqueCodes.stream()
+                    .map(code -> {
+                        RolePermission rp = new RolePermission();
+                        rp.setRoleId(roleId);
+                        rp.setPermissionCode(code);
+                        return rp;
+                    })
+                    .toList();
+            rolePermissionRepository.saveAll(mappings);
+        }
+
+        return toDtoWithPermissions(role);
+    }
+
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_TECH_ROLE_MANAGE')")
     public TechnicalRoleDTO createSectionRole(Long sectionId, TechnicalRoleCreateRequestDTO request) {
@@ -170,7 +224,60 @@ public class TechnicalRoleService {
             }
         }
 
-        return technicalRoleMapper.toDto(saved);
+        return toDtoWithPermissions(saved);
+    }
+
+    @Transactional
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_TECH_ROLE_MANAGE')")
+    public TechnicalRoleDTO updateSectionRole(Long sectionId, Long roleId, TechnicalRoleCreateRequestDTO request) {
+        if (request == null || request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Role name must not be blank");
+        }
+
+        Role role = roleRepository
+                .findById(roleId)
+                .orElseThrow(() -> new EntityNotFoundException("Role not found: " + roleId));
+
+        if (role.getScope() != RoleScopeType.SECTION || role.getSectionId() == null
+                || !role.getSectionId().equals(sectionId)) {
+            throw new BusinessException("Role " + roleId + " does not belong to section " + sectionId);
+        }
+
+        if (role.isSystem()) {
+            throw new BusinessException("System role cannot be modified");
+        }
+
+        String normalizedName = request.getName().trim();
+        if (!normalizedName.equals(role.getName())) {
+            roleRepository.findByScopeAndSectionIdAndName(RoleScopeType.SECTION, sectionId, normalizedName)
+                    .ifPresent(existing -> {
+                        throw new BusinessException(
+                                "Role with name '" + normalizedName + "' already exists in section " + sectionId);
+                    });
+            role.setName(normalizedName);
+        }
+
+        rolePermissionRepository.deleteByRoleId(roleId);
+
+        List<String> codes = request.getPermissionCodes();
+        if (codes != null && !codes.isEmpty()) {
+            Set<String> uniqueCodes = new HashSet<>(codes);
+            List<Permission> permissions = permissionRepository.findByCodeIn(uniqueCodes);
+            if (permissions.size() != uniqueCodes.size()) {
+                throw new EntityNotFoundException("One or more permissions not found for codes: " + uniqueCodes);
+            }
+            List<RolePermission> mappings = uniqueCodes.stream()
+                    .map(code -> {
+                        RolePermission rp = new RolePermission();
+                        rp.setRoleId(roleId);
+                        rp.setPermissionCode(code);
+                        return rp;
+                    })
+                    .toList();
+            rolePermissionRepository.saveAll(mappings);
+        }
+
+        return toDtoWithPermissions(role);
     }
 
     @Transactional
@@ -229,10 +336,7 @@ public class TechnicalRoleService {
         assignOrganizationRoleToUserInternal(organizationId, userId, roleId);
     }
 
-    /**
-     * Внутреннее назначение роли без проверки прав.
-     * Используется при создании организации.
-     */
+
     @Transactional
     public void assignOrganizationRoleToUserInternal(Long organizationId, Long userId, Long roleId) {
         if (!userRepository.existsById(userId)) {
