@@ -9,6 +9,8 @@ import io.github.Romariok.orkestro.section.models.Section;
 @Repository
 public interface SectionRepository extends JpaRepository<Section, Long> {
 
+    List<Section> findByOrganizationId(Long organizationId);
+
     List<Section> findByParentSectionId(Long parentSectionId);
 
     boolean existsByOrganizationIdAndParentSectionIdIsNullAndName(Long organizationId, String name);

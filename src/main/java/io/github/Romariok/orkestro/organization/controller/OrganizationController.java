@@ -143,14 +143,14 @@ public class OrganizationController {
         @Operation(summary = "Покинуть организацию", description = "Текущий пользователь покидает организацию.")
         @ApiResponses({
                         @ApiResponse(responseCode = "204", description = "Пользователь покинул организацию", content = @Content),
-                        @ApiResponse(responseCode = "400", description = "Последний админ не может покинуть организацию", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "400", description = "Последний лидер не может покинуть организацию", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
                         @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
                         @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
                         @ApiResponse(responseCode = "404", description = "Организация не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
                         @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
         })
         @SecurityRequirement(name = "Bearer Authentication")
-        @DeleteMapping("/{organizationId}/leave")
+        @DeleteMapping("/{organizationId}/members/me")
         public ResponseEntity<Void> leaveOrganization(
                         @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId) {
                 organizationUserService.leaveCurrentOrganization(organizationId);

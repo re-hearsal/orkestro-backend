@@ -14,8 +14,15 @@ import io.github.Romariok.orkestro.organization.repository.OrganizationInviteRep
 import io.github.Romariok.orkestro.organization.repository.OrganizationLinkRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.event.models.Event;
+import io.github.Romariok.orkestro.event.repository.EventRepository;
 import io.github.Romariok.orkestro.repertoire.models.Song;
 import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
+import io.github.Romariok.orkestro.section.models.Section;
+import io.github.Romariok.orkestro.section.repository.SectionRepository;
+import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
+import io.github.Romariok.orkestro.task.models.Task;
+import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Permission;
@@ -37,10 +44,12 @@ import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -68,6 +77,10 @@ public class OrganizationService {
    private final FileReferenceService fileReferenceService;
    private final FileRollbackHelper fileRollbackHelper;
    private final FileLimitsProperties fileLimitsProperties;
+   private final EventRepository eventRepository;
+   private final TaskRepository taskRepository;
+   private final SectionRepository sectionRepository;
+   private final SectionUserRepository sectionUserRepository;
 
    @Transactional
    public OrganizationDTO createOrganization(OrganizationCreateRequestDTO request) {
@@ -227,19 +240,45 @@ public class OrganizationService {
 
    @Transactional
    public void deleteOrganizationCascade(Long organizationId) {
-      organizationInviteRepository.deleteById(organizationId);
+      // 1. Delete events — DB cascade removes event_tags, event_participants,
+      //    event_participant_songs, event_files, event_songs, event_sections, event_comment
+      List<Event> events = eventRepository.findByOrganizationId(organizationId);
+      if (!events.isEmpty()) {
+         eventRepository.deleteAll(events);
+      }
 
-      organizationLinkRepository.deleteByOrganizationId(organizationId);
-      organizationUserRepository.deleteByOrganizationId(organizationId);
+      // 2. Delete all tasks (both org-level and section-level) —
+      //    DB cascade removes task_comment, task_files, task_visibility_role
+      List<Task> tasks = taskRepository.findByOrganizationId(organizationId);
+      if (!tasks.isEmpty()) {
+         taskRepository.deleteAll(tasks);
+      }
 
+      // 3. Songs must come after events (event_songs has FK to song without cascade)
       var songsPage = songRepository.findByOrganizationId(
             organizationId,
             org.springframework.data.domain.Pageable.unpaged());
       List<Song> songs = songsPage.getContent();
       if (!songs.isEmpty()) {
-         songRepository.deleteAll(songs);
+         songRepository.deleteAll(songs); // DB cascade: song_files, song_instruments, song_tags
       }
 
+      // 4. Sections: delete section_users and section roles first, then sections bottom-up
+      List<Section> allSections = sectionRepository.findByOrganizationId(organizationId);
+      if (!allSections.isEmpty()) {
+         List<Long> allSectionIds = allSections.stream().map(Section::getId).toList();
+         allSectionIds.forEach(sectionUserRepository::deleteBySectionId);
+
+         List<Role> sectionRoles = roleRepository.findByScopeAndSectionIdIn(
+               RoleScopeType.SECTION, allSectionIds);
+         if (!sectionRoles.isEmpty()) {
+            roleRepository.deleteAll(sectionRoles); // DB cascade: role_permission, user_role
+         }
+
+         sectionRepository.deleteAllById(getSectionIdsBottomUp(allSections));
+      }
+
+      // 5. Delete org-level roles — DB cascade removes role_permission and user_role
       List<Role> organizationRoles = roleRepository.findByScopeAndOrganizationId(
             RoleScopeType.ORGANIZATION,
             organizationId);
@@ -247,7 +286,46 @@ public class OrganizationService {
          roleRepository.deleteAll(organizationRoles);
       }
 
+      // 6. Delete remaining org data
+      organizationInviteRepository.deleteById(organizationId);
+      organizationLinkRepository.deleteByOrganizationId(organizationId);
+      organizationUserRepository.deleteByOrganizationId(organizationId);
       organizationRepository.deleteById(organizationId);
+   }
+
+   /**
+    * Returns section IDs in bottom-up order (children before parents) for safe deletion.
+    */
+   private List<Long> getSectionIdsBottomUp(List<Section> sections) {
+      Map<Long, List<Long>> childrenOf = new HashMap<>();
+      Set<Long> allIds = new HashSet<>();
+      for (Section s : sections) {
+         allIds.add(s.getId());
+         childrenOf.computeIfAbsent(s.getId(), k -> new ArrayList<>());
+      }
+      for (Section s : sections) {
+         if (s.getParentSectionId() != null && allIds.contains(s.getParentSectionId())) {
+            childrenOf.get(s.getParentSectionId()).add(s.getId());
+         }
+      }
+
+      List<Long> result = new ArrayList<>();
+      Set<Long> visited = new HashSet<>();
+      for (Section s : sections) {
+         if (s.getParentSectionId() == null || !allIds.contains(s.getParentSectionId())) {
+            dfsPostOrder(s.getId(), childrenOf, visited, result);
+         }
+      }
+      return result;
+   }
+
+   private void dfsPostOrder(Long id, Map<Long, List<Long>> childrenOf, Set<Long> visited, List<Long> result) {
+      if (visited.contains(id)) return;
+      visited.add(id);
+      for (Long childId : childrenOf.getOrDefault(id, List.of())) {
+         dfsPostOrder(childId, childrenOf, visited, result);
+      }
+      result.add(id);
    }
 
 

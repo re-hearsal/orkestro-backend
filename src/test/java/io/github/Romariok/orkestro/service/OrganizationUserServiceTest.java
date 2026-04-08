@@ -268,6 +268,53 @@ class OrganizationUserServiceTest {
       }
 
       @Test
+      void leaveCurrentOrganization_lastMember_triggersFullCascadeDelete() {
+            Long orgId = 1L;
+            Long userId = 10L;
+
+            when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+            OrganizationUser membership = new OrganizationUser();
+            membership.setOrganizationId(orgId);
+            membership.setUserId(userId);
+            membership.setStatus(OrganizationUserStatusType.ACCEPTED);
+            membership.setJoinedAt(Instant.now());
+
+            // only one member in org
+            when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId))
+                        .thenReturn(Optional.of(membership));
+            when(organizationUserRepository.findByOrganizationIdAndStatusOrderByJoinedAtAsc(
+                        orgId, OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(List.of(membership));
+            // after removal, no remaining members
+            when(organizationUserRepository.countByOrganizationIdAndStatus(orgId, OrganizationUserStatusType.ACCEPTED))
+                        .thenReturn(0L);
+
+            when(roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, orgId, "Leader"))
+                        .thenReturn(Optional.empty());
+
+            Role orgRole = Role.builder()
+                        .id(200L)
+                        .scope(RoleScopeType.ORGANIZATION)
+                        .organizationId(orgId)
+                        .name("SomeRole")
+                        .build();
+            when(roleRepository.findByScopeAndOrganizationId(RoleScopeType.ORGANIZATION, orgId))
+                        .thenReturn(List.of(orgRole));
+
+            organizationUserService.leaveCurrentOrganization(orgId);
+
+            // Verify cascade delete was triggered
+            verify(organizationService).deleteOrganizationCascade(orgId);
+            // Verify the user's org role was removed before cascade
+            verify(userRoleRepository).deleteByUserIdAndRoleIdIn(
+                        org.mockito.Mockito.eq(userId),
+                        org.mockito.Mockito.argThat(ids -> ids.contains(200L)));
+            // Verify org_users row was deleted
+            verify(organizationUserRepository).deleteByOrganizationIdAndUserId(orgId, userId);
+      }
+
+      @Test
       void removeUserFromOrganization_cannotRemoveSelf_throwsIllegalArgumentException() {
             Long orgId = 1L;
             Long userId = 10L;
