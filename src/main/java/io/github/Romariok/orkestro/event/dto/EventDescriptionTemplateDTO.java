@@ -1,5 +1,6 @@
 package io.github.Romariok.orkestro.event.dto;
 
+import io.github.Romariok.orkestro.event.models.enums.EventType;
 import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,11 +11,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class EventCommentDTO {
+public class EventDescriptionTemplateDTO {
     private Long id;
-    private Long authorUserId;
-    private String authorName;
-    private String text;
-    private Integer rating;
+    private Long organizationId;
+    private EventType eventType;
+    private String title;
+    private String content;
+    private Long createdByUserId;
     private Instant createdAt;
 }

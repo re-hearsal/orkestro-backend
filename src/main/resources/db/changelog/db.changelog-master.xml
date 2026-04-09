@@ -31,4 +31,22 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="004-event-description-templates" author="romariok">
+        <sqlFile
+            path="004-event-description-templates.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="005-event-comment-rating" author="romariok">
+        <sqlFile
+            path="005-event-comment-rating.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

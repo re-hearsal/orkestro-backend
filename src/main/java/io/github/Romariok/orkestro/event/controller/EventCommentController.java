@@ -26,6 +26,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -112,5 +113,26 @@ public class EventCommentController {
             @RequestParam @Size(min = 1) List<@Positive Long> eventIds,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(eventService.getEventCommentsByEventIds(organizationId, eventIds, pageable));
+    }
+
+    @Operation(
+            summary = "Удалить комментарий к мероприятию",
+            description = "Удаляет комментарий. Доступно автору комментария или пользователю с правом EVENT_WRITE_COMMENT."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Комментарий удален"),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Комментарий или мероприятие не найдено", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/{eventId}/comments/{commentId}")
+    public ResponseEntity<Void> deleteEventComment(
+            @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID мероприятия", required = true) @PathVariable @Positive Long eventId,
+            @Parameter(description = "ID комментария", required = true) @PathVariable @Positive Long commentId) {
+        eventService.deleteEventComment(organizationId, eventId, commentId);
+        return ResponseEntity.noContent().build();
     }
 }

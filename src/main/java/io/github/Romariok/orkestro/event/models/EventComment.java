@@ -36,6 +36,9 @@ public class EventComment {
     @Column(name = "text", nullable = false)
     private String text;
 
+    @Column(name = "rating")
+    private Integer rating;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

@@ -60,4 +60,7 @@ public class EventCreateRequestDTO {
     private Boolean sendRsvp;
 
     private Integer remindBeforeMinutes;
+
+    @Schema(description = "ID шаблона описания. Если указан, поле description будет заполнено из шаблона.")
+    private Long descriptionTemplateId;
 }

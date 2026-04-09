@@ -10,6 +10,8 @@ import io.github.Romariok.orkestro.event.dto.EventCommentCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventCommentDTO;
 import io.github.Romariok.orkestro.event.dto.EventCommentsByEventDTO;
 import io.github.Romariok.orkestro.event.dto.EventCommentsByEventPageDTO;
+import io.github.Romariok.orkestro.event.models.EventDescriptionTemplate;
+import io.github.Romariok.orkestro.event.repository.EventDescriptionTemplateRepository;
 import io.github.Romariok.orkestro.event.dto.EventUserCalendarRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventDTO;
@@ -101,6 +103,7 @@ public class EventService {
     private final FileReferenceService fileReferenceService;
     private final FileLimitsProperties fileLimitsProperties;
     private final OrganizationPermissionChecker organizationPermissionChecker;
+    private final EventDescriptionTemplateRepository eventDescriptionTemplateRepository;
 
     private static final int CALENDAR_MAX_PAGE_SIZE = 500;
     private static final Duration CALENDAR_DEFAULT_PAST_WINDOW = Duration.ofDays(7);
@@ -153,11 +156,23 @@ public class EventService {
         boolean sendRsvp = Boolean.TRUE.equals(request.getSendRsvp());
         Integer remindBeforeMinutes = request.getRemindBeforeMinutes();
 
+        String description = request.getDescription();
+        if (request.getDescriptionTemplateId() != null) {
+            EventDescriptionTemplate template = eventDescriptionTemplateRepository
+                    .findById(request.getDescriptionTemplateId())
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "Description template not found: " + request.getDescriptionTemplateId()));
+            if (!template.getOrganizationId().equals(organizationId)) {
+                throw new BusinessException("Description template does not belong to organization " + organizationId);
+            }
+            description = template.getContent();
+        }
+
         Event event = Event.builder()
                 .organizationId(organizationId)
                 .creatorUserId(currentUserId)
                 .title(request.getTitle().trim())
-                .description(request.getDescription())
+                .description(description)
                 .eventType(request.getEventType())
                 .externalLink(request.getExternalLink())
                 .location(request.getLocation())
@@ -559,6 +574,8 @@ public class EventService {
     }
 
     @Transactional
+    @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
+            + "or @organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'EVENT_WRITE_COMMENT')")
     public EventCommentDTO createEventComment(
             Long organizationId, Long eventId, EventCommentCreateRequestDTO request) {
         if (request == null) {
@@ -580,7 +597,6 @@ public class EventService {
 
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(event.getOrganizationId(), currentUserId);
-        ensureCanWriteEventComment(event, currentUserId);
 
         long existingCount = eventCommentRepository.countByEventId(eventId);
         if (existingCount >= EVENT_COMMENTS_MAX_PER_EVENT) {
@@ -591,6 +607,7 @@ public class EventService {
                 .eventId(eventId)
                 .authorUserId(currentUserId)
                 .text(normalizedText)
+                .rating(request.getRating())
                 .build());
 
         String authorName = userRepository.findById(currentUserId).map(User::getName).orElse(null);
@@ -600,8 +617,32 @@ public class EventService {
                 .authorUserId(saved.getAuthorUserId())
                 .authorName(authorName)
                 .text(saved.getText())
+                .rating(saved.getRating())
                 .createdAt(saved.getCreatedAt())
                 .build();
+    }
+
+    @Transactional
+    @PreAuthorize("@securityUtils.isCurrentUser(@eventCommentRepository.findById(#commentId).orElse(null)?.authorUserId) "
+            + "or @organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'EVENT_WRITE_COMMENT')")
+    public void deleteEventComment(Long organizationId, Long eventId, Long commentId) {
+        Event event = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
+
+        EventComment comment = eventCommentRepository
+                .findById(commentId)
+                .orElseThrow(() -> new EntityNotFoundException("Comment not found: " + commentId));
+
+        if (!comment.getEventId().equals(eventId)) {
+            throw new BusinessException("Comment " + commentId + " does not belong to event " + eventId);
+        }
+
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(event.getOrganizationId(), currentUserId);
+
+        eventCommentRepository.delete(comment);
     }
 
     @Transactional(readOnly = true)
@@ -929,15 +970,6 @@ public class EventService {
                         "User " + userId + " is not an accepted member of organization " + organizationId));
     }
 
-    private void ensureCanWriteEventComment(Event event, Long currentUserId) {
-        boolean isCreator = currentUserId != null && currentUserId.equals(event.getCreatorUserId());
-        boolean hasPermission = organizationPermissionChecker.hasOrganizationPermission(
-                event.getOrganizationId(), "EVENT_WRITE_COMMENT");
-        if (!isCreator && !hasPermission) {
-            throw new BusinessException("User is not allowed to write comments for event " + event.getId());
-        }
-    }
-
     private void notifyCommentParticipants(Event event, Long authorUserId, String authorName, String commentText) {
         try {
             List<Long> recipientUserIds = eventParticipantRepository.findByEventId(event.getId()).stream()
@@ -984,6 +1016,7 @@ public class EventService {
                                         .authorUserId(c.getAuthorUserId())
                                         .authorName(userNamesById.get(c.getAuthorUserId()))
                                         .text(c.getText())
+                                        .rating(c.getRating())
                                         .createdAt(c.getCreatedAt())
                                         .build(),
                                 Collectors.toList())));
