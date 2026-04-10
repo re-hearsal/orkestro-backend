@@ -7,9 +7,11 @@ import io.github.Romariok.orkestro.organization.dto.OrganizationUpdateRequestDTO
 import io.github.Romariok.orkestro.organization.mapper.OrganizationMapper;
 import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.models.OrganizationInvite;
+import io.github.Romariok.orkestro.organization.models.OrgFund;
 import io.github.Romariok.orkestro.organization.models.OrganizationLink;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.organization.repository.OrgFundRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationInviteRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationLinkRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
@@ -66,6 +68,7 @@ public class OrganizationService {
    private final OrganizationLinkRepository organizationLinkRepository;
    private final OrganizationInviteRepository organizationInviteRepository;
    private final OrganizationUserRepository organizationUserRepository;
+   private final OrgFundRepository orgFundRepository;
    private final StoredFileRepository storedFileRepository;
    private final SongRepository songRepository;
    private final RoleRepository roleRepository;
@@ -106,6 +109,11 @@ public class OrganizationService {
                .build();
 
          Organization saved = organizationRepository.save(organization);
+
+         orgFundRepository.save(OrgFund.builder()
+                 .organizationId(saved.getId())
+                 .balance(java.math.BigDecimal.ZERO)
+                 .build());
 
          saveLinks(saved.getId(), request.getLinks());
 

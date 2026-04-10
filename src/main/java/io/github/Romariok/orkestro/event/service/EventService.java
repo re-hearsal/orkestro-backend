@@ -598,6 +598,12 @@ public class EventService {
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(event.getOrganizationId(), currentUserId);
 
+        boolean isCreator = currentUserId.equals(event.getCreatorUserId());
+        boolean hasPermission = organizationPermissionChecker.hasOrganizationPermission(organizationId, "EVENT_WRITE_COMMENT");
+        if (!isCreator && !hasPermission) {
+            throw new BusinessException("You do not have permission to comment on this event");
+        }
+
         long existingCount = eventCommentRepository.countByEventId(eventId);
         if (existingCount >= EVENT_COMMENTS_MAX_PER_EVENT) {
             throw new BusinessException("Event comments limit reached (" + EVENT_COMMENTS_MAX_PER_EVENT + ")");

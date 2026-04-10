@@ -18,6 +18,8 @@ import io.github.Romariok.orkestro.organization.models.OrganizationInvite;
 import io.github.Romariok.orkestro.organization.models.OrganizationLink;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.LinkType;
+import io.github.Romariok.orkestro.event.repository.EventRepository;
+import io.github.Romariok.orkestro.organization.repository.OrgFundRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationInviteRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationLinkRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
@@ -26,6 +28,9 @@ import io.github.Romariok.orkestro.organization.service.OrganizationService;
 import io.github.Romariok.orkestro.config.FileLimitsProperties;
 import io.github.Romariok.orkestro.repertoire.models.Song;
 import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
+import io.github.Romariok.orkestro.section.repository.SectionRepository;
+import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
+import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.RolePermission;
@@ -89,6 +94,21 @@ class OrganizationServiceTest {
 
       @Mock
       private SecurityUtils securityUtils;
+
+      @Mock
+      private OrgFundRepository orgFundRepository;
+
+      @Mock
+      private EventRepository eventRepository;
+
+      @Mock
+      private TaskRepository taskRepository;
+
+      @Mock
+      private SectionRepository sectionRepository;
+
+      @Mock
+      private SectionUserRepository sectionUserRepository;
 
       @Mock
       private OrganizationInviteRepository organizationInviteRepository;
