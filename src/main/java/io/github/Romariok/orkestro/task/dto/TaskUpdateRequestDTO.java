@@ -22,9 +22,6 @@ public class TaskUpdateRequestDTO {
     @Size(max = 5000)
     private String description;
 
-    @Positive
-    private Long assigneeUserId;
-
     @NotNull
     private TaskVisibility visibility;
 

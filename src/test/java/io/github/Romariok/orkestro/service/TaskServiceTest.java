@@ -1,6 +1,8 @@
 package io.github.Romariok.orkestro.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -24,6 +26,7 @@ import io.github.Romariok.orkestro.task.models.Task;
 import io.github.Romariok.orkestro.task.models.TaskVisibilityRole;
 import io.github.Romariok.orkestro.task.models.enums.TaskStatus;
 import io.github.Romariok.orkestro.task.models.enums.TaskVisibility;
+import io.github.Romariok.orkestro.task.repository.TaskAssigneeRepository;
 import io.github.Romariok.orkestro.task.repository.TaskCommentRepository;
 import io.github.Romariok.orkestro.task.repository.TaskFileRepository;
 import io.github.Romariok.orkestro.task.repository.TaskRepository;
@@ -36,6 +39,7 @@ import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.exception.InvalidTaskStatusTransitionException;
 import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
@@ -73,6 +77,9 @@ class TaskServiceTest {
 
         @Mock
         private TaskVisibilityRoleRepository taskVisibilityRoleRepository;
+
+        @Mock
+        private TaskAssigneeRepository taskAssigneeRepository;
 
         @Mock
         private StoredFileRepository storedFileRepository;
@@ -119,32 +126,34 @@ class TaskServiceTest {
         @BeforeEach
         void setup() {
                 lenient().when(fileLimitsProperties.getTaskMaxFiles()).thenReturn(50);
-                lenient().when(taskAccessEvaluator.hasTaskAccess(anyLong(), any(), any(), any())).thenAnswer(invocation -> {
-                        Long userId = invocation.getArgument(0);
-                        Task task = invocation.getArgument(1);
-                        Set<Long> userRoleIds = invocation.getArgument(2);
-                        Map<Long, List<Long>> taskRolesMap = invocation.getArgument(3);
+                lenient().when(taskAssigneeRepository.findByTaskId(anyLong())).thenReturn(List.of());
+                lenient().when(taskAssigneeRepository.findByTaskIdIn(any())).thenReturn(List.of());
+                lenient().when(taskAccessEvaluator.hasTaskAccess(anyLong(), any(), any(), any(), any()))
+                                .thenAnswer(invocation -> {
+                                        Long userId = invocation.getArgument(0);
+                                        Task task = invocation.getArgument(1);
+                                        Set<Long> assigneeUserIds = invocation.getArgument(2);
+                                        Set<Long> userRoleIds = invocation.getArgument(3);
+                                        Map<Long, List<Long>> taskRolesMap = invocation.getArgument(4);
 
-                        boolean isAuthorOrAssignee = (task.getAuthorUserId() != null
-                                        && task.getAuthorUserId().equals(userId))
-                                        || (task.getAssigneeUserId() != null
-                                                        && task.getAssigneeUserId().equals(userId));
-                        if (isAuthorOrAssignee || task.getVisibility() == TaskVisibility.ALL_MEMBERS) {
-                                return true;
-                        }
+                                        boolean isAuthorOrAssignee = (task.getAuthorUserId() != null
+                                                        && task.getAuthorUserId().equals(userId))
+                                                        || (assigneeUserIds != null && assigneeUserIds.contains(userId));
+                                        if (isAuthorOrAssignee || task.getVisibility() == TaskVisibility.ALL_MEMBERS) {
+                                                return true;
+                                        }
 
-                        List<Long> allowedRoleIds = taskRolesMap.get(task.getId());
-                        return allowedRoleIds != null
-                                        && !userRoleIds.isEmpty()
-                                        && allowedRoleIds.stream().anyMatch(userRoleIds::contains);
-                });
+                                        List<Long> allowedRoleIds = taskRolesMap.get(task.getId());
+                                        return allowedRoleIds != null
+                                                        && !userRoleIds.isEmpty()
+                                                        && allowedRoleIds.stream().anyMatch(userRoleIds::contains);
+                                });
         }
 
         @Test
         void createTaskInOrganization_success_uploadsAndAttachesFiles() {
                 Long organizationId = 1L;
                 Long currentUserId = 10L;
-                Long assigneeId = 20L;
 
                 MockMultipartFile first = new MockMultipartFile(
                                 "files", "task-note.pdf", "application/pdf", "pdf".getBytes());
@@ -152,7 +161,7 @@ class TaskServiceTest {
                                 "files", "task-audio.mp3", "audio/mpeg", "audio".getBytes());
 
                 TaskCreateRequestDTO request = new TaskCreateRequestDTO(
-                                "Title", "Desc", assigneeId, TaskVisibility.ALL_MEMBERS, null, List.of(first, second));
+                                "Title", "Desc", TaskVisibility.ALL_MEMBERS, null, List.of(first, second));
 
                 Organization organization = Organization.builder()
                                 .id(organizationId)
@@ -167,23 +176,12 @@ class TaskServiceTest {
                                 .thenReturn(StoredFile.builder().id(501L).build())
                                 .thenReturn(StoredFile.builder().id(502L).build());
 
-                when(userRepository.existsById(assigneeId)).thenReturn(true);
-                OrganizationUser membership = OrganizationUser.builder()
-                                .organizationId(organizationId)
-                                .userId(assigneeId)
-                                .status(OrganizationUserStatusType.ACCEPTED)
-                                .joinedAt(Instant.now())
-                                .build();
-                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, assigneeId))
-                                .thenReturn(Optional.of(membership));
-
                 Task saved = Task.builder()
                                 .id(100L)
                                 .organizationId(organizationId)
                                 .title("Title")
                                 .description("Desc")
                                 .authorUserId(currentUserId)
-                                .assigneeUserId(assigneeId)
                                 .status(TaskStatus.OPEN)
                                 .visibility(TaskVisibility.ALL_MEMBERS)
                                 .createdAt(Instant.now())
@@ -201,7 +199,6 @@ class TaskServiceTest {
                         dto.setTitle(task.getTitle());
                         dto.setDescription(task.getDescription());
                         dto.setAuthorUserId(task.getAuthorUserId());
-                        dto.setAssigneeUserId(task.getAssigneeUserId());
                         dto.setStatus(task.getStatus());
                         dto.setVisibility(task.getVisibility());
                         dto.setCreatedAt(task.getCreatedAt());
@@ -224,7 +221,6 @@ class TaskServiceTest {
                 assertEquals("Title", persisted.getTitle());
                 assertEquals("Desc", persisted.getDescription());
                 assertEquals(currentUserId, persisted.getAuthorUserId());
-                assertEquals(assigneeId, persisted.getAssigneeUserId());
 
                 assertEquals("Title", result.getTitle());
                 assertEquals(currentUserId, result.getAuthorUserId());
@@ -234,7 +230,7 @@ class TaskServiceTest {
         @Test
         void createTaskInOrganization_blankTitle_throwsIllegalArgumentException() {
                 Long organizationId = 1L;
-                TaskCreateRequestDTO request = new TaskCreateRequestDTO("   ", "Desc", null, null, null, null);
+                TaskCreateRequestDTO request = new TaskCreateRequestDTO("   ", "Desc", null, null, null);
 
                 assertThrows(
                                 IllegalArgumentException.class,
@@ -245,23 +241,59 @@ class TaskServiceTest {
         }
 
         @Test
-        void updateTaskStatus_setsClosedAtForDone() {
+        void updateTaskStatus_validTransition_OPEN_to_IN_PROGRESS() {
                 Long organizationId = 1L;
                 Long taskId = 100L;
+                Long authorId = 10L;
 
                 Task existing = Task.builder()
                                 .id(taskId)
                                 .organizationId(organizationId)
                                 .title("Title")
+                                .authorUserId(authorId)
                                 .status(TaskStatus.OPEN)
                                 .createdAt(Instant.now())
                                 .updatedAt(Instant.now())
                                 .build();
 
                 when(taskRepository.findById(taskId)).thenReturn(Optional.of(existing));
-
+                when(securityUtils.getCurrentUserId()).thenReturn(authorId);
+                when(taskAssigneeRepository.existsByTaskIdAndUserId(taskId, authorId)).thenReturn(false);
                 when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+                when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
+                        Task task = invocation.getArgument(0);
+                        TaskDTO dto = new TaskDTO();
+                        dto.setStatus(task.getStatus());
+                        dto.setClosedAt(task.getClosedAt());
+                        return dto;
+                });
 
+                TaskDTO result = taskService.updateTaskStatus(organizationId, taskId, TaskStatus.IN_PROGRESS);
+
+                assertEquals(TaskStatus.IN_PROGRESS, result.getStatus());
+                assertNull(result.getClosedAt());
+        }
+
+        @Test
+        void updateTaskStatus_setsClosedAtForDone() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+                Long authorId = 10L;
+
+                Task existing = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .title("Title")
+                                .authorUserId(authorId)
+                                .status(TaskStatus.IN_PROGRESS)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(existing));
+                when(securityUtils.getCurrentUserId()).thenReturn(authorId);
+                when(taskAssigneeRepository.existsByTaskIdAndUserId(taskId, authorId)).thenReturn(false);
+                when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
                 when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
                         Task task = invocation.getArgument(0);
                         TaskDTO dto = new TaskDTO();
@@ -272,14 +304,190 @@ class TaskServiceTest {
                         return dto;
                 });
 
-                when(taskFileRepository.findByTaskId(anyLong())).thenReturn(List.of());
-                when(taskCommentRepository.findByTaskId(anyLong())).thenReturn(List.of());
-                when(taskVisibilityRoleRepository.findByTaskId(anyLong())).thenReturn(List.of());
-
                 TaskDTO result = taskService.updateTaskStatus(organizationId, taskId, TaskStatus.DONE);
 
                 assertEquals(TaskStatus.DONE, result.getStatus());
+                assertNotNull(result.getClosedAt());
                 verify(taskRepository).save(existing);
+        }
+
+        @Test
+        void updateTaskStatus_setsClosedAtForCancelled() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+                Long authorId = 10L;
+
+                Task existing = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .authorUserId(authorId)
+                                .status(TaskStatus.IN_PROGRESS)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(existing));
+                when(securityUtils.getCurrentUserId()).thenReturn(authorId);
+                when(taskAssigneeRepository.existsByTaskIdAndUserId(taskId, authorId)).thenReturn(false);
+                when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
+                        Task task = invocation.getArgument(0);
+                        TaskDTO dto = new TaskDTO();
+                        dto.setStatus(task.getStatus());
+                        dto.setClosedAt(task.getClosedAt());
+                        return dto;
+                });
+
+                TaskDTO result = taskService.updateTaskStatus(organizationId, taskId, TaskStatus.CANCELLED);
+
+                assertEquals(TaskStatus.CANCELLED, result.getStatus());
+                assertNotNull(result.getClosedAt());
+        }
+
+        @Test
+        void updateTaskStatus_clearsClosedAtWhenReturningToInProgress() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+                Long authorId = 10L;
+
+                Task existing = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .authorUserId(authorId)
+                                .status(TaskStatus.DONE)
+                                .closedAt(Instant.now())
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(existing));
+                when(securityUtils.getCurrentUserId()).thenReturn(authorId);
+                when(taskAssigneeRepository.existsByTaskIdAndUserId(taskId, authorId)).thenReturn(false);
+                when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
+                        Task task = invocation.getArgument(0);
+                        TaskDTO dto = new TaskDTO();
+                        dto.setStatus(task.getStatus());
+                        dto.setClosedAt(task.getClosedAt());
+                        return dto;
+                });
+
+                TaskDTO result = taskService.updateTaskStatus(organizationId, taskId, TaskStatus.IN_PROGRESS);
+
+                assertEquals(TaskStatus.IN_PROGRESS, result.getStatus());
+                assertNull(result.getClosedAt());
+        }
+
+        @Test
+        void updateTaskStatus_invalidTransition_OPEN_to_DONE_throws422() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+                Long authorId = 10L;
+
+                Task existing = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .authorUserId(authorId)
+                                .status(TaskStatus.OPEN)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(existing));
+                when(securityUtils.getCurrentUserId()).thenReturn(authorId);
+                when(taskAssigneeRepository.existsByTaskIdAndUserId(taskId, authorId)).thenReturn(false);
+
+                assertThrows(
+                                InvalidTaskStatusTransitionException.class,
+                                () -> taskService.updateTaskStatus(organizationId, taskId, TaskStatus.DONE));
+
+                verify(taskRepository, never()).save(any());
+        }
+
+        @Test
+        void updateTaskStatus_invalidTransition_OPEN_to_CANCELLED_isValid() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+                Long authorId = 10L;
+
+                Task existing = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .authorUserId(authorId)
+                                .status(TaskStatus.OPEN)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(existing));
+                when(securityUtils.getCurrentUserId()).thenReturn(authorId);
+                when(taskAssigneeRepository.existsByTaskIdAndUserId(taskId, authorId)).thenReturn(false);
+                when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
+                        Task task = invocation.getArgument(0);
+                        TaskDTO dto = new TaskDTO();
+                        dto.setStatus(task.getStatus());
+                        return dto;
+                });
+
+                TaskDTO result = taskService.updateTaskStatus(organizationId, taskId, TaskStatus.CANCELLED);
+                assertEquals(TaskStatus.CANCELLED, result.getStatus());
+        }
+
+        @Test
+        void updateTaskStatus_nonAuthorNonAssignee_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+                Long authorId = 10L;
+                Long otherId = 99L;
+
+                Task existing = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .authorUserId(authorId)
+                                .status(TaskStatus.OPEN)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(existing));
+                when(securityUtils.getCurrentUserId()).thenReturn(otherId);
+                when(taskAssigneeRepository.existsByTaskIdAndUserId(taskId, otherId)).thenReturn(false);
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> taskService.updateTaskStatus(organizationId, taskId, TaskStatus.IN_PROGRESS));
+        }
+
+        @Test
+        void updateTaskStatus_assigneeCanChangeStatus() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+                Long authorId = 10L;
+                Long assigneeId = 20L;
+
+                Task existing = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .authorUserId(authorId)
+                                .status(TaskStatus.OPEN)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(existing));
+                when(securityUtils.getCurrentUserId()).thenReturn(assigneeId);
+                when(taskAssigneeRepository.existsByTaskIdAndUserId(taskId, assigneeId)).thenReturn(true);
+                when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
+                        Task task = invocation.getArgument(0);
+                        TaskDTO dto = new TaskDTO();
+                        dto.setStatus(task.getStatus());
+                        return dto;
+                });
+
+                TaskDTO result = taskService.updateTaskStatus(organizationId, taskId, TaskStatus.IN_PROGRESS);
+                assertEquals(TaskStatus.IN_PROGRESS, result.getStatus());
         }
 
         @Test
@@ -398,7 +606,6 @@ class TaskServiceTest {
                                 .visibility(TaskVisibility.ALL_MEMBERS)
                                 .status(TaskStatus.OPEN)
                                 .authorUserId(99L)
-                                .assigneeUserId(98L)
                                 .createdAt(Instant.now())
                                 .updatedAt(Instant.now())
                                 .build();
@@ -450,7 +657,7 @@ class TaskServiceTest {
                                 "files", "task-note.pdf", "application/pdf", "pdf".getBytes());
 
                 TaskCreateRequestDTO request = new TaskCreateRequestDTO(
-                                "Title", "Desc", null, TaskVisibility.ALL_MEMBERS, null, List.of(first));
+                                "Title", "Desc", TaskVisibility.ALL_MEMBERS, null, List.of(first));
                 Organization organization = Organization.builder().id(organizationId).name("Org").location("City").build();
 
                 when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(organization));

@@ -1,5 +1,6 @@
 package io.github.Romariok.orkestro.task.controller;
 
+import io.github.Romariok.orkestro.task.dto.TaskAssigneesUpdateRequestDTO;
 import io.github.Romariok.orkestro.task.dto.TaskCreateRequestDTO;
 import io.github.Romariok.orkestro.task.dto.TaskDTO;
 import io.github.Romariok.orkestro.task.dto.TaskFileAttachRequestDTO;
@@ -579,6 +580,65 @@ public class TaskController {
             @Parameter(description = "ID файла", required = true, example = "1")
             @PathVariable @Positive Long fileId) {
         return ResponseEntity.ok(taskService.deleteTaskFileForCurrentUser(organizationId, taskId, fileId));
+    }
+
+    @Operation(
+            summary = "Добавить исполнителей к задаче",
+            description = "Добавляет одного или нескольких исполнителей к задаче. Требует ORG_EDIT."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Исполнители добавлены",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = TaskDTO.class))
+            ),
+            @ApiResponse(responseCode = "400", description = "Ошибка валидации",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Задача не найдена",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/{taskId}/assignees")
+    public ResponseEntity<TaskDTO> addAssignees(
+            @Parameter(description = "ID организации", required = true, example = "1")
+            @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID задачи", required = true, example = "1")
+            @PathVariable @Positive Long taskId,
+            @Valid @RequestBody TaskAssigneesUpdateRequestDTO request) {
+        return ResponseEntity.ok(taskService.addAssignees(organizationId, taskId, request.getUserIds()));
+    }
+
+    @Operation(
+            summary = "Удалить исполнителя из задачи",
+            description = "Удаляет исполнителя из задачи. Требует ORG_EDIT."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Исполнитель удален",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = TaskDTO.class))
+            ),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Задача не найдена",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/{taskId}/assignees/{userId}")
+    public ResponseEntity<TaskDTO> removeAssignee(
+            @Parameter(description = "ID организации", required = true, example = "1")
+            @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID задачи", required = true, example = "1")
+            @PathVariable @Positive Long taskId,
+            @Parameter(description = "ID пользователя-исполнителя", required = true, example = "5")
+            @PathVariable @Positive Long userId) {
+        return ResponseEntity.ok(taskService.removeAssignee(organizationId, taskId, userId));
     }
 
     @Operation(

@@ -22,7 +22,7 @@ public class TaskDTO {
     private String title;
     private String description;
     private Long authorUserId;
-    private Long assigneeUserId;
+    private List<TaskAssigneeDTO> assignees;
     private TaskStatus status;
     private TaskVisibility visibility;
     private Instant createdAt;

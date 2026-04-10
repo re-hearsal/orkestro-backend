@@ -11,9 +11,9 @@ import org.springframework.stereotype.Component;
 public class TaskAccessEvaluator {
 
     public boolean hasTaskAccess(
-            Long userId, Task task, Set<Long> userRoleIds, Map<Long, List<Long>> taskRolesMap) {
+            Long userId, Task task, Set<Long> assigneeUserIds, Set<Long> userRoleIds, Map<Long, List<Long>> taskRolesMap) {
         boolean isAuthorOrAssignee = (task.getAuthorUserId() != null && task.getAuthorUserId().equals(userId))
-                || (task.getAssigneeUserId() != null && task.getAssigneeUserId().equals(userId));
+                || (assigneeUserIds != null && assigneeUserIds.contains(userId));
         if (isAuthorOrAssignee || task.getVisibility() == TaskVisibility.ALL_MEMBERS) {
             return true;
         }

@@ -51,9 +51,6 @@ public class Task {
     @Column(name = "author_user_id", nullable = false)
     private Long authorUserId;
 
-    @Column(name = "assignee_user_id")
-    private Long assigneeUserId;
-
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @ColumnDefault("'OPEN'")

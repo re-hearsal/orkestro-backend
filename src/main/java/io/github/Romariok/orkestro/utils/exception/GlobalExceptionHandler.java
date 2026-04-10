@@ -45,6 +45,17 @@ public class GlobalExceptionHandler {
                         Collections.emptyList());
       }
 
+      @ExceptionHandler(InvalidTaskStatusTransitionException.class)
+      public ResponseEntity<ApiErrorResponse> handleInvalidTaskStatusTransition(
+                  InvalidTaskStatusTransitionException ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.valueOf(422),
+                        "Invalid task status transition",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
       @ExceptionHandler(SectionDepthExceededException.class)
       public ResponseEntity<ApiErrorResponse> handleSectionDepthExceeded(
                   SectionDepthExceededException ex, HttpServletRequest request) {

@@ -6,6 +6,7 @@ import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserSta
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
+import io.github.Romariok.orkestro.task.dto.TaskAssigneeDTO;
 import io.github.Romariok.orkestro.task.dto.TaskCommentDTO;
 import io.github.Romariok.orkestro.task.dto.TaskCreateRequestDTO;
 import io.github.Romariok.orkestro.task.dto.TaskDTO;
@@ -13,11 +14,13 @@ import io.github.Romariok.orkestro.task.dto.TaskUpdateRequestDTO;
 import io.github.Romariok.orkestro.task.dto.TaskVisibilityUpdateRequestDTO;
 import io.github.Romariok.orkestro.task.mapper.TaskMapper;
 import io.github.Romariok.orkestro.task.models.Task;
+import io.github.Romariok.orkestro.task.models.TaskAssignee;
 import io.github.Romariok.orkestro.task.models.TaskComment;
 import io.github.Romariok.orkestro.task.models.TaskFile;
 import io.github.Romariok.orkestro.task.models.TaskVisibilityRole;
 import io.github.Romariok.orkestro.task.models.enums.TaskStatus;
 import io.github.Romariok.orkestro.task.models.enums.TaskVisibility;
+import io.github.Romariok.orkestro.task.repository.TaskAssigneeRepository;
 import io.github.Romariok.orkestro.task.repository.TaskCommentRepository;
 import io.github.Romariok.orkestro.task.repository.TaskFileRepository;
 import io.github.Romariok.orkestro.task.repository.TaskRepository;
@@ -29,6 +32,7 @@ import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.exception.InvalidTaskStatusTransitionException;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileTypeDetector;
@@ -62,6 +66,7 @@ public class TaskService {
     private final TaskFileRepository taskFileRepository;
     private final TaskCommentRepository taskCommentRepository;
     private final TaskVisibilityRoleRepository taskVisibilityRoleRepository;
+    private final TaskAssigneeRepository taskAssigneeRepository;
     private final StoredFileRepository storedFileRepository;
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
@@ -94,10 +99,6 @@ public class TaskService {
         TaskVisibility visibility = request.getVisibility() != null ? request.getVisibility()
                 : TaskVisibility.ALL_MEMBERS;
 
-        if (request.getAssigneeUserId() != null) {
-            validateAssigneeInOrganization(organization.getId(), request.getAssigneeUserId());
-        }
-
         validateVisibilityRolesForOrganization(organization.getId(), visibility, request.getVisibilityRoleIds());
 
         List<Long> uploadedFileIds = List.of();
@@ -111,7 +112,6 @@ public class TaskService {
                     .title(request.getTitle().trim())
                     .description(request.getDescription())
                     .authorUserId(authorUserId)
-                    .assigneeUserId(request.getAssigneeUserId())
                     .status(TaskStatus.OPEN)
                     .visibility(visibility)
                     .createdAt(now)
@@ -194,11 +194,6 @@ public class TaskService {
             task.setDescription(request.getDescription());
         }
 
-        if (request.getAssigneeUserId() != null) {
-            validateAssigneeInOrganization(task.getOrganizationId(), request.getAssigneeUserId());
-            task.setAssigneeUserId(request.getAssigneeUserId());
-        }
-
         TaskVisibility currentVisibility = task.getVisibility();
         TaskVisibility newVisibility = request.getVisibility() != null ? request.getVisibility() : currentVisibility;
 
@@ -238,8 +233,8 @@ public class TaskService {
     }
 
     /**
-     * Изменить статус задачи.
-     * Доступно пользователю, имеющему доступ к задаче.
+     * Изменить статус задачи с проверкой допустимых переходов.
+     * Доступно автору задачи или одному из исполнителей.
      */
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasTaskAcces(#taskId)")
@@ -253,9 +248,19 @@ public class TaskService {
                 .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
         validateTaskOrganization(task, organizationId);
 
-        if (task.getStatus() == newStatus) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        boolean isAuthor = currentUserId.equals(task.getAuthorUserId());
+        boolean isAssignee = taskAssigneeRepository.existsByTaskIdAndUserId(taskId, currentUserId);
+        if (!isAuthor && !isAssignee) {
+            throw new BusinessException("Only the task author or an assignee can change the task status");
+        }
+
+        TaskStatus currentStatus = task.getStatus();
+        if (currentStatus == newStatus) {
             return buildTaskDto(task);
         }
+
+        validateStatusTransition(currentStatus, newStatus);
 
         Instant now = Instant.now();
         task.setStatus(newStatus);
@@ -269,6 +274,50 @@ public class TaskService {
 
         Task saved = taskRepository.save(task);
         return buildTaskDto(saved);
+    }
+
+    /**
+     * Добавить исполнителей к задаче.
+     */
+    @Transactional
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_EDIT')")
+    public TaskDTO addAssignees(Long organizationId, Long taskId, List<Long> userIds) {
+        Task task = taskRepository
+                .findById(taskId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+        validateTaskOrganization(task, organizationId);
+
+        for (Long userId : userIds) {
+            validateAssigneeInOrganization(organizationId, userId);
+            if (!taskAssigneeRepository.existsByTaskIdAndUserId(taskId, userId)) {
+                TaskAssignee assignee = new TaskAssignee();
+                assignee.setTaskId(taskId);
+                assignee.setUserId(userId);
+                taskAssigneeRepository.save(assignee);
+            }
+        }
+
+        task.setUpdatedAt(Instant.now());
+        taskRepository.save(task);
+        return buildTaskDto(task);
+    }
+
+    /**
+     * Удалить исполнителя из задачи.
+     */
+    @Transactional
+    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_EDIT')")
+    public TaskDTO removeAssignee(Long organizationId, Long taskId, Long userId) {
+        Task task = taskRepository
+                .findById(taskId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+        validateTaskOrganization(task, organizationId);
+
+        taskAssigneeRepository.deleteByTaskIdAndUserId(taskId, userId);
+
+        task.setUpdatedAt(Instant.now());
+        taskRepository.save(task);
+        return buildTaskDto(task);
     }
 
     /**
@@ -320,7 +369,11 @@ public class TaskService {
             taskRolesMap.put(taskId, visibilityRoles.stream().map(TaskVisibilityRole::getRoleId).toList());
         }
 
-        if (!taskAccessEvaluator.hasTaskAccess(userId, task, getUserRoleIds(userId), taskRolesMap)) {
+        Set<Long> assigneeUserIds = taskAssigneeRepository.findByTaskId(taskId).stream()
+                .map(TaskAssignee::getUserId)
+                .collect(Collectors.toSet());
+
+        if (!taskAccessEvaluator.hasTaskAccess(userId, task, assigneeUserIds, getUserRoleIds(userId), taskRolesMap)) {
             throw new BusinessException("User does not have access to task: " + taskId);
         }
 
@@ -374,7 +427,11 @@ public class TaskService {
             taskRolesMap.put(taskId, visibilityRoles.stream().map(TaskVisibilityRole::getRoleId).toList());
         }
 
-        if (!taskAccessEvaluator.hasTaskAccess(userId, task, getUserRoleIds(userId), taskRolesMap)) {
+        Set<Long> assigneeUserIds = taskAssigneeRepository.findByTaskId(taskId).stream()
+                .map(TaskAssignee::getUserId)
+                .collect(Collectors.toSet());
+
+        if (!taskAccessEvaluator.hasTaskAccess(userId, task, assigneeUserIds, getUserRoleIds(userId), taskRolesMap)) {
             throw new BusinessException("User does not have access to task: " + taskId);
         }
 
@@ -391,6 +448,19 @@ public class TaskService {
         taskRepository.save(task);
 
         return buildTaskDto(task);
+    }
+
+    private void validateStatusTransition(TaskStatus from, TaskStatus to) {
+        boolean valid = switch (from) {
+            case OPEN -> to == TaskStatus.IN_PROGRESS || to == TaskStatus.CANCELLED;
+            case IN_PROGRESS -> to == TaskStatus.DONE || to == TaskStatus.CANCELLED;
+            case DONE -> to == TaskStatus.IN_PROGRESS || to == TaskStatus.CANCELLED;
+            case CANCELLED -> to == TaskStatus.IN_PROGRESS || to == TaskStatus.DONE;
+        };
+        if (!valid) {
+            throw new InvalidTaskStatusTransitionException(
+                    "Invalid status transition from " + from + " to " + to);
+        }
     }
 
     private List<TaskDTO> filterTasksByVisibilityAndMap(Long userId, List<Task> tasks) {
@@ -412,9 +482,20 @@ public class TaskService {
             }
         }
 
+        Map<Long, Set<Long>> taskAssigneesMap = new HashMap<>();
+        if (!taskIds.isEmpty()) {
+            List<TaskAssignee> assignees = taskAssigneeRepository.findByTaskIdIn(taskIds);
+            for (TaskAssignee assignee : assignees) {
+                taskAssigneesMap
+                        .computeIfAbsent(assignee.getTaskId(), id -> new HashSet<>())
+                        .add(assignee.getUserId());
+            }
+        }
+
         List<TaskDTO> result = new ArrayList<>();
         for (Task task : tasks) {
-            if (taskAccessEvaluator.hasTaskAccess(userId, task, userRoleIds, taskRolesMap)) {
+            Set<Long> assigneeUserIds = taskAssigneesMap.getOrDefault(task.getId(), Set.of());
+            if (taskAccessEvaluator.hasTaskAccess(userId, task, assigneeUserIds, userRoleIds, taskRolesMap)) {
                 result.add(buildTaskDto(task));
             }
         }
@@ -559,9 +640,14 @@ public class TaskService {
         List<TaskVisibilityRole> visibilityRoles = taskVisibilityRoleRepository.findByTaskId(task.getId());
         List<Long> roleIds = visibilityRoles.stream().map(TaskVisibilityRole::getRoleId).toList();
 
+        List<TaskAssigneeDTO> assignees = taskAssigneeRepository.findByTaskId(task.getId()).stream()
+                .map(a -> new TaskAssigneeDTO(a.getUserId()))
+                .toList();
+
         dto.setFileIds(fileIds);
         dto.setComments(commentDtos);
         dto.setVisibilityRoleIds(roleIds);
+        dto.setAssignees(assignees);
         return dto;
     }
 

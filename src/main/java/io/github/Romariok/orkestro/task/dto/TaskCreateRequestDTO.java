@@ -27,9 +27,6 @@ public class TaskCreateRequestDTO {
     @Size(max = 5000)
     private String description;
 
-    @Positive
-    private Long assigneeUserId;
-
     @NotNull
     private TaskVisibility visibility;
     @Size(max = 50)

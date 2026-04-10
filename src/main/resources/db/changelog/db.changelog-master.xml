@@ -49,4 +49,13 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="006-task-assignees" author="romariok">
+        <sqlFile
+            path="006-task-assignees.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

@@ -6,7 +6,9 @@ import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepos
 import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.task.models.Task;
+import io.github.Romariok.orkestro.task.models.TaskAssignee;
 import io.github.Romariok.orkestro.task.models.TaskVisibilityRole;
+import io.github.Romariok.orkestro.task.repository.TaskAssigneeRepository;
 import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.task.repository.TaskVisibilityRoleRepository;
 import io.github.Romariok.orkestro.task.service.TaskAccessEvaluator;
@@ -36,6 +38,7 @@ public class OrganizationPermissionChecker {
    private final SectionRepository sectionRepository;
    private final TaskRepository taskRepository;
    private final TaskVisibilityRoleRepository taskVisibilityRoleRepository;
+   private final TaskAssigneeRepository taskAssigneeRepository;
    private final TaskAccessEvaluator taskAccessEvaluator;
 
    public boolean hasOrganizationPermission(Long organizationId, String permissionCode) {
@@ -113,7 +116,10 @@ public class OrganizationPermissionChecker {
 
       List<TaskVisibilityRole> allowedRoles = taskVisibilityRoleRepository.findByTaskId(taskId);
       List<Long> allowedRoleIds = allowedRoles.stream().map(TaskVisibilityRole::getRoleId).toList();
-      return taskAccessEvaluator.hasTaskAccess(userId, task, userRoleIds, Map.of(taskId, allowedRoleIds));
+      Set<Long> assigneeUserIds = taskAssigneeRepository.findByTaskId(taskId).stream()
+            .map(TaskAssignee::getUserId)
+            .collect(Collectors.toSet());
+      return taskAccessEvaluator.hasTaskAccess(userId, task, assigneeUserIds, userRoleIds, Map.of(taskId, allowedRoleIds));
    }
 
    private boolean hasPermission(RoleScopeType scope, Long contextId, String permissionCode) {
