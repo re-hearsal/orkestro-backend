@@ -58,6 +58,15 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="007-messaging" author="romariok">
+        <sqlFile
+            path="007-messaging.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
     <changeSet id="008-org-fund" author="romariok">
         <sqlFile
             path="008-org-fund.sql"
