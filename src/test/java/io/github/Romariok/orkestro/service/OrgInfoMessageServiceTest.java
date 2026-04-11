@@ -28,6 +28,7 @@ import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
+import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 
 import java.time.Instant;
@@ -73,6 +74,9 @@ class OrgInfoMessageServiceTest {
 
     @Mock
     private ObjectMapper objectMapper;
+
+    @Mock
+    private WebSocketNotificationService webSocketNotificationService;
 
     @InjectMocks
     private OrgInfoMessageService orgInfoMessageService;

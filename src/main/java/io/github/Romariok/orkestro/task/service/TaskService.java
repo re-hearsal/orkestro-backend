@@ -30,6 +30,9 @@ import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
+import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
+import io.github.Romariok.orkestro.notification.dto.InAppNotificationDTO;
+import io.github.Romariok.orkestro.notification.models.enums.InAppNotificationType;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.exception.InvalidTaskStatusTransitionException;
@@ -50,6 +53,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -60,6 +64,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TaskService {
 
     private final TaskRepository taskRepository;
@@ -80,6 +85,7 @@ public class TaskService {
     private final FileRollbackHelper fileRollbackHelper;
     private final FileLimitsProperties fileLimitsProperties;
     private final TaskAccessEvaluator taskAccessEvaluator;
+    private final WebSocketNotificationService webSocketNotificationService;
 
     /**
      * Создать задачу в организации.
@@ -273,6 +279,22 @@ public class TaskService {
         }
 
         Task saved = taskRepository.save(task);
+
+        List<TaskAssignee> assignees = taskAssigneeRepository.findByTaskId(taskId);
+        for (TaskAssignee assignee : assignees) {
+            try {
+                webSocketNotificationService.send(assignee.getUserId(), InAppNotificationDTO.builder()
+                        .type(InAppNotificationType.TASK_STATUS_CHANGED)
+                        .title("Task status changed: " + saved.getTitle())
+                        .body("Status changed to " + newStatus.name())
+                        .entityId(saved.getId())
+                        .entityType("TASK")
+                        .build());
+            } catch (Exception ex) {
+                log.warn("Failed to send WebSocket notification for task status change {} to user {}", saved.getId(), assignee.getUserId(), ex);
+            }
+        }
+
         return buildTaskDto(saved);
     }
 
@@ -287,6 +309,7 @@ public class TaskService {
                 .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
         validateTaskOrganization(task, organizationId);
 
+        Long currentUserId = securityUtils.getCurrentUserId();
         for (Long userId : userIds) {
             validateAssigneeInOrganization(organizationId, userId);
             if (!taskAssigneeRepository.existsByTaskIdAndUserId(taskId, userId)) {
@@ -294,6 +317,20 @@ public class TaskService {
                 assignee.setTaskId(taskId);
                 assignee.setUserId(userId);
                 taskAssigneeRepository.save(assignee);
+
+                if (!userId.equals(currentUserId)) {
+                    try {
+                        webSocketNotificationService.send(userId, InAppNotificationDTO.builder()
+                                .type(InAppNotificationType.NEW_TASK)
+                                .title("Assigned to task: " + task.getTitle())
+                                .body(task.getDescription())
+                                .entityId(taskId)
+                                .entityType("TASK")
+                                .build());
+                    } catch (Exception ex) {
+                        log.warn("Failed to send WebSocket notification for task assignee {} on task {}", userId, taskId, ex);
+                    }
+                }
             }
         }
 

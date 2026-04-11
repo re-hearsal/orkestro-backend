@@ -53,6 +53,9 @@ import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileTypeDetector;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
+import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
+import io.github.Romariok.orkestro.notification.dto.InAppNotificationDTO;
+import io.github.Romariok.orkestro.notification.models.enums.InAppNotificationType;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Duration;
@@ -104,6 +107,7 @@ public class EventService {
     private final FileLimitsProperties fileLimitsProperties;
     private final OrganizationPermissionChecker organizationPermissionChecker;
     private final EventDescriptionTemplateRepository eventDescriptionTemplateRepository;
+    private final WebSocketNotificationService webSocketNotificationService;
 
     private static final int CALENDAR_MAX_PAGE_SIZE = 500;
     private static final Duration CALENDAR_DEFAULT_PAST_WINDOW = Duration.ofDays(7);
@@ -198,6 +202,22 @@ public class EventService {
 
             if (sendRsvp) {
                 eventNotificationService.sendEventCreatedNotifications(saved, sources.keySet());
+            }
+
+            for (Long participantId : sources.keySet()) {
+                if (!participantId.equals(currentUserId)) {
+                    try {
+                        webSocketNotificationService.send(participantId, InAppNotificationDTO.builder()
+                                .type(InAppNotificationType.NEW_EVENT)
+                                .title("New event: " + saved.getTitle())
+                                .body(saved.getDescription())
+                                .entityId(saved.getId())
+                                .entityType("EVENT")
+                                .build());
+                    } catch (Exception ex) {
+                        log.warn("Failed to send WebSocket notification for event {} to user {}", saved.getId(), participantId, ex);
+                    }
+                }
             }
 
             return buildEventDto(saved);
@@ -618,6 +638,24 @@ public class EventService {
 
         String authorName = userRepository.findById(currentUserId).map(User::getName).orElse(null);
         notifyCommentParticipants(event, currentUserId, authorName, normalizedText);
+
+        List<EventParticipant> participants = eventParticipantRepository.findByEventId(eventId);
+        for (EventParticipant p : participants) {
+            if (!p.getUserId().equals(currentUserId)) {
+                try {
+                    webSocketNotificationService.send(p.getUserId(), InAppNotificationDTO.builder()
+                            .type(InAppNotificationType.EVENT_COMMENT)
+                            .title("New comment on: " + event.getTitle())
+                            .body(normalizedText)
+                            .entityId(eventId)
+                            .entityType("EVENT")
+                            .build());
+                } catch (Exception ex) {
+                    log.warn("Failed to send WebSocket notification for event comment {} to user {}", saved.getId(), p.getUserId(), ex);
+                }
+            }
+        }
+
         return EventCommentDTO.builder()
                 .id(saved.getId())
                 .authorUserId(saved.getAuthorUserId())

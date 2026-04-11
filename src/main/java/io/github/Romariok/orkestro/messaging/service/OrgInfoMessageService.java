@@ -17,6 +17,9 @@ import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
+import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
+import io.github.Romariok.orkestro.notification.dto.InAppNotificationDTO;
+import io.github.Romariok.orkestro.notification.models.enums.InAppNotificationType;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 
 import java.util.List;
@@ -45,6 +48,7 @@ public class OrgInfoMessageService {
     private final SecurityUtils securityUtils;
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
+    private final WebSocketNotificationService webSocketNotificationService;
 
     @Value("${orkestro.telegram.bot-message-queue-name:telegram_bot_messages}")
     private String telegramBotMessageQueueName;
@@ -180,7 +184,18 @@ public class OrgInfoMessageService {
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize notification message", e);
         }
-        // TODO: WebSocket push will be added when task 3.0 (WebSocket in-app notifications) is implemented
+
+        try {
+            webSocketNotificationService.send(user.getId(), InAppNotificationDTO.builder()
+                    .type(InAppNotificationType.NEW_INFO_MESSAGE)
+                    .title("New info message")
+                    .body(text)
+                    .entityId(messageId)
+                    .entityType("ORG_INFO_MESSAGE")
+                    .build());
+        } catch (Exception e) {
+            log.error("Failed to send WebSocket notification for info message {} to user {}", messageId, user.getId(), e);
+        }
     }
 
     private OrgInfoMessageDTO toDTO(OrgInfoMessage message, User author) {

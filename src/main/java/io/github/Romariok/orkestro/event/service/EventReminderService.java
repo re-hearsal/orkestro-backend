@@ -5,6 +5,9 @@ import io.github.Romariok.orkestro.event.models.EventParticipant;
 import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
 import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
+import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
+import io.github.Romariok.orkestro.notification.dto.InAppNotificationDTO;
+import io.github.Romariok.orkestro.notification.models.enums.InAppNotificationType;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -27,6 +30,7 @@ public class EventReminderService {
     private final EventRepository eventRepository;
     private final EventParticipantRepository eventParticipantRepository;
     private final EventNotificationService eventNotificationService;
+    private final WebSocketNotificationService webSocketNotificationService;
 
     /**
      * Периодическая проверка событий, для которых пора отправить напоминание.
@@ -71,6 +75,21 @@ public class EventReminderService {
 
             try {
                 eventNotificationService.sendEventReminderNotifications(event, userIds);
+
+                for (Long userId : userIds) {
+                    try {
+                        webSocketNotificationService.send(userId, InAppNotificationDTO.builder()
+                                .type(InAppNotificationType.REMINDER)
+                                .title("Reminder: " + event.getTitle())
+                                .body("Upcoming event starting soon")
+                                .entityId(event.getId())
+                                .entityType("EVENT")
+                                .build());
+                    } catch (Exception wsEx) {
+                        log.warn("Failed to send WebSocket reminder for event {} to user {}", event.getId(), userId, wsEx);
+                    }
+                }
+
                 event.setRemindBeforeMinutes(null);
             } catch (Exception ex) {
                 log.error("Failed to send reminder for event {}", event.getId(), ex);
