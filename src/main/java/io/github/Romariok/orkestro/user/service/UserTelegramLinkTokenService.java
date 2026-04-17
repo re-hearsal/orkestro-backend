@@ -31,17 +31,22 @@ public class UserTelegramLinkTokenService {
       Instant now = Instant.now();
       long expiresAtEpochSec = now.plusSeconds(ttlMinutes * 60).getEpochSecond();
 
+      // Payload: 8 байт userId + 8 байт времени истечения = 16 байт
       byte[] payload = ByteBuffer.allocate(Long.BYTES * 2)
             .putLong(userId)
             .putLong(expiresAtEpochSec)
             .array();
+
+      // HMAC-SHA256 подпись, усечённая до 16 байт
       byte[] signature = Arrays.copyOf(sign(payload), SIGNATURE_SIZE_BYTES);
+
+      // Итоговый токен: payload(16) + signature(16) = 32 байта -> Base64url
       byte[] tokenBytes = ByteBuffer.allocate(payload.length + signature.length)
             .put(payload)
             .put(signature)
             .array();
 
-      return URL_ENCODER.encodeToString(tokenBytes);
+      return URL_ENCODER.encodeToString(tokenBytes); // ~43 символа
    }
 
    public ParsedTelegramLinkToken parseToken(String token) {
