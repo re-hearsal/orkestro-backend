@@ -1748,4 +1748,153 @@ class EventServiceTest {
                                 BusinessException.class,
                                 () -> eventService.getEventCommentsByEventIds(organizationId, List.of(99L), pageable));
         }
+
+        @Test
+        void createEventInOrganization_endTimeBeforeStartTime_throwsIllegalArgument() {
+                Instant start = Instant.parse("2025-06-01T12:00:00Z");
+                Instant end = Instant.parse("2025-06-01T10:00:00Z"); // before start
+
+                EventCreateRequestDTO request = EventCreateRequestDTO.builder()
+                                .title("Rehearsal")
+                                .eventType(EventType.REHEARSAL)
+                                .startTime(start)
+                                .endTime(end)
+                                .build();
+
+                assertThrows(
+                                IllegalArgumentException.class,
+                                () -> eventService.createEventInOrganization(1L, request));
+
+                verify(eventRepository, never()).save(any(Event.class));
+        }
+
+        @Test
+        void getEventForCurrentUser_eventBelongsToAnotherOrganization_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+
+                Event event = Event.builder()
+                                .id(eventId)
+                                .organizationId(2L)
+                                .title("Foreign Event")
+                                .build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> eventService.getEventForCurrentUser(organizationId, eventId));
+        }
+
+        @Test
+        void updateEvent_success_updatesTitle() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long userId = 10L;
+
+                Instant start = Instant.parse("2030-06-01T10:00:00Z");
+                Instant end = Instant.parse("2030-06-01T12:00:00Z");
+
+                Event event = Event.builder()
+                                .id(eventId)
+                                .organizationId(organizationId)
+                                .title("Old Title")
+                                .description("Old Description")
+                                .startTime(start)
+                                .endTime(end)
+                                .createdAt(Instant.now())
+                                .build();
+
+                io.github.Romariok.orkestro.event.dto.EventUpdateRequestDTO request =
+                                io.github.Romariok.orkestro.event.dto.EventUpdateRequestDTO.builder()
+                                                .title("New Title")
+                                                .description("New Description")
+                                                .build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+                OrganizationUser ou = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(ou));
+
+                when(eventRepository.save(any(Event.class))).thenReturn(event);
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of());
+                when(eventFileRepository.findByEventId(eventId)).thenReturn(List.of());
+                when(eventSongRepository.findByEventId(eventId)).thenReturn(List.of());
+
+                when(eventMapper.toDto(any(Event.class))).thenAnswer(invocation -> {
+                        Event e = invocation.getArgument(0);
+                        return io.github.Romariok.orkestro.event.dto.EventDTO.builder()
+                                        .id(e.getId())
+                                        .organizationId(e.getOrganizationId())
+                                        .title(e.getTitle())
+                                        .build();
+                });
+
+                io.github.Romariok.orkestro.event.dto.EventDTO result =
+                                eventService.updateEvent(organizationId, eventId, request);
+
+                assertEquals("New Title", event.getTitle());
+                assertEquals("New Description", event.getDescription());
+                assertEquals(eventId, result.getId());
+                verify(eventRepository).save(event);
+        }
+
+        @Test
+        void updateEvent_notFound_throwsEntityNotFoundException() {
+                Long organizationId = 1L;
+                Long eventId = 999L;
+
+                io.github.Romariok.orkestro.event.dto.EventUpdateRequestDTO request =
+                                io.github.Romariok.orkestro.event.dto.EventUpdateRequestDTO.builder()
+                                                .title("New Title")
+                                                .build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> eventService.updateEvent(organizationId, eventId, request));
+
+                verify(eventRepository, never()).save(any());
+        }
+
+        @Test
+        void deleteEvent_success_deletesEvent() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long userId = 10L;
+
+                Event event = Event.builder()
+                                .id(eventId)
+                                .organizationId(organizationId)
+                                .title("Event")
+                                .startTime(Instant.now())
+                                .endTime(Instant.now().plusSeconds(3600))
+                                .createdAt(Instant.now())
+                                .build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+                OrganizationUser ou = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(ou));
+
+                eventService.deleteEvent(organizationId, eventId);
+
+                verify(eventParticipantRepository).deleteByEventId(eventId);
+                verify(eventRepository).deleteById(eventId);
+        }
 }

@@ -995,4 +995,31 @@ class SectionServiceTest {
                 org.junit.jupiter.api.Assertions.assertNotNull(order);
                 org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC, order.getDirection());
         }
+
+        @Test
+        void leaveCurrentSection_userNotMember_completesWithoutException() {
+                Long sectionId = 10L;
+                Long currentUserId = 200L;
+
+                when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+                // No members in section — user is not a member
+                when(sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(sectionId)).thenReturn(List.of());
+
+                // Leaf section — no children
+                when(sectionRepository.findByParentSectionId(sectionId)).thenReturn(List.of());
+                when(roleRepository.findByScopeAndSectionIdIn(eq(RoleScopeType.SECTION), any()))
+                                .thenReturn(List.of());
+                // After no-op deletion, still has other members (no cascade delete)
+                when(sectionUserRepository.countBySectionId(sectionId)).thenReturn(1L);
+
+                // Should complete without throwing any exception
+                sectionService.leaveCurrentSection(sectionId);
+
+                // Deletion is called but has no effect (deletes 0 rows in practice)
+                verify(sectionUserRepository).deleteBySectionIdInAndUserId(any(), eq(currentUserId));
+                // Section is NOT deleted because there are still members
+                verify(sectionRepository, never()).deleteAllById(any());
+        }
 }

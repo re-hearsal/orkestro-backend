@@ -280,6 +280,28 @@ class OrgInfoMessageServiceTest {
     }
 
     @Test
+    void postOrgMessage_authorUserNotFoundInRepository_savesMessageWithNullAuthorName() {
+        String text = "Hello from ghost!";
+        when(securityUtils.getCurrentUserId()).thenReturn(AUTHOR_ID);
+
+        OrgInfoMessage saved = buildSavedMessage(10L, ORG_ID, null, AUTHOR_ID, text);
+        when(orgInfoMessageRepository.save(any())).thenReturn(saved);
+
+        when(userRepository.findById(AUTHOR_ID)).thenReturn(Optional.empty());
+
+        when(organizationUserRepository.findByOrganizationIdAndStatus(ORG_ID, OrganizationUserStatusType.ACCEPTED))
+                .thenReturn(List.of());
+
+        OrgInfoMessageDTO result = orgInfoMessageService.postOrgMessage(ORG_ID, text);
+
+        assertNotNull(result);
+        assertEquals(ORG_ID, result.getOrganizationId());
+        assertEquals(text, result.getText());
+        assertNull(result.getAuthorName());
+        verify(orgInfoMessageRepository).save(any());
+    }
+
+    @Test
     void postOrgMessage_notificationFailure_doesNotPropagateException() throws Exception {
         String text = "Notif test";
         when(securityUtils.getCurrentUserId()).thenReturn(AUTHOR_ID);

@@ -736,6 +736,25 @@ class OrganizationServiceTest {
       }
 
       @Test
+      void createOrganization_duplicateNameConstraintViolation_propagatesException() {
+            OrganizationCreateRequestDTO request = new OrganizationCreateRequestDTO(
+                        "Duplicate Name",
+                        "Moscow",
+                        null,
+                        null,
+                        null);
+
+            when(organizationRepository.save(any(Organization.class)))
+                        .thenThrow(new org.springframework.dao.DataIntegrityViolationException("Unique constraint violation"));
+
+            assertThrows(
+                        Exception.class,
+                        () -> organizationService.createOrganization(request));
+
+            verify(organizationRepository).save(any(Organization.class));
+      }
+
+      @Test
       void searchPublicOrganizationsByName_withName_filtersByName() {
             Organization org = Organization.builder()
                         .id(1L)

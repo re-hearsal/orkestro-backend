@@ -633,6 +633,34 @@ class RepertoireServiceTest {
    }
 
    @Test
+   void searchSongs_emptyQuery_returnsMatchingSongs() {
+      Long orgId = 1L;
+
+      Song song = Song.builder()
+            .id(1L)
+            .organizationId(orgId)
+            .title("Symphony")
+            .build();
+
+      Page<Song> page = new PageImpl<>(List.of(song), PageRequest.of(0, 10), 1);
+      when(songRepository.findAll(
+            org.mockito.Mockito.<org.springframework.data.jpa.domain.Specification<Song>>any(),
+            any(org.springframework.data.domain.Pageable.class)))
+            .thenReturn(page);
+
+      SongDTO dto = new SongDTO();
+      dto.setId(1L);
+      when(songMapper.toDto(song)).thenReturn(dto);
+      when(songInstrumentRepository.findBySongId(1L)).thenReturn(List.of());
+      when(songFileRepository.findBySongId(1L)).thenReturn(List.of());
+
+      Page<SongDTO> result = repertoireService.searchSongs(orgId, null, PageRequest.of(0, 10));
+
+      assertEquals(1, result.getTotalElements());
+      assertEquals(1L, result.getContent().getFirst().getId());
+   }
+
+   @Test
    void getOrganizationSongTags_returnsUniqueSortedTags() {
       when(songRepository.findDistinctTagsByOrganizationId(1L))
             .thenReturn(List.of("classic", "warmup"));

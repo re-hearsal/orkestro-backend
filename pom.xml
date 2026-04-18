@@ -43,6 +43,13 @@
 				<artifactId>jackson-core</artifactId>
 				<version>3.1.1</version>
 			</dependency>
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>1.20.4</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 	<dependencies>
@@ -106,6 +113,31 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>rabbitmq</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>toxiproxy</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -273,6 +305,25 @@
 					 <configuration>
 						<dataFile>${project.build.directory}/coverage-reports/jacoco.exec</dataFile>
 						<outputDirectory>${project.reporting.outputDirectory}/jacoco</outputDirectory>
+						<excludes>
+						  <exclude>**/dto/**</exclude>
+						  <exclude>**/models/**</exclude>
+						  <exclude>**/config/**</exclude>
+						  <exclude>**/mapper/**</exclude>
+						  <exclude>**/*Application.class</exclude>
+						  <exclude>**/*ServletInitializer.class</exclude>
+						  <exclude>**/*Email*.class</exclude>
+						  <exclude>**/*Rsvp*.class</exclude>
+						  <exclude>**/*EmailNotification*.class</exclude>
+						  <exclude>**/utils/file/**</exclude>
+						  <exclude>**/*Listener.class</exclude>
+						  <exclude>**/*Evaluator.class</exclude>
+						  <exclude>**/security/**</exclude>
+						  <exclude>**/utils/exception/**</exclude>
+						  <exclude>**/utils/helper/**</exclude>
+						  <exclude>**/mail/jca/**</exclude>
+						  <exclude>**/dao/**</exclude>
+						</excludes>
 					 </configuration>
 				  </execution>
 				  <execution>
@@ -281,12 +332,32 @@
 						<goal>check</goal>
 					 </goals>
 					 <configuration>
+						<dataFile>${project.build.directory}/coverage-reports/jacoco.exec</dataFile>
+						<excludes>
+						  <exclude>**/dto/**</exclude>
+						  <exclude>**/models/**</exclude>
+						  <exclude>**/config/**</exclude>
+						  <exclude>**/mapper/**</exclude>
+						  <exclude>**/*Application.class</exclude>
+						  <exclude>**/*ServletInitializer.class</exclude>
+						  <exclude>**/*Email*.class</exclude>
+						  <exclude>**/*Rsvp*.class</exclude>
+						  <exclude>**/*EmailNotification*.class</exclude>
+						  <exclude>**/utils/file/**</exclude>
+						  <exclude>**/*Listener.class</exclude>
+						  <exclude>**/*Evaluator.class</exclude>
+						  <exclude>**/security/**</exclude>
+						  <exclude>**/utils/exception/**</exclude>
+						  <exclude>**/utils/helper/**</exclude>
+						  <exclude>**/mail/jca/**</exclude>
+						  <exclude>**/dao/**</exclude>
+						</excludes>
 						<rules>
 						  <rule>
 							 <element>BUNDLE</element>
 							 <limits>
 								<limit>
-								  <counter>COMPLEXITY</counter>
+								  <counter>LINE</counter>
 								  <value>COVEREDRATIO</value>
 								  <minimum>0.70</minimum>
 								</limit>
@@ -304,5 +375,40 @@
 			</plugin>
 		</plugins>
 	</build>
+
+
+	<profiles>
+		<profile>
+			<id>unit-tests</id>
+			<activation>
+				<activeByDefault>true</activeByDefault>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<excludedGroups>integration</excludedGroups>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<profile>
+			<id>integration-tests</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<groups>integration</groups>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>

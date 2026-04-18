@@ -315,6 +315,24 @@ class OrganizationUserServiceTest {
       }
 
       @Test
+      void removeUserFromOrganization_userNotMember_throwsEntityNotFound() {
+            Long orgId = 1L;
+            Long targetUserId = 99L;
+            Long currentUserId = 10L;
+
+            when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+            when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, targetUserId))
+                        .thenReturn(Optional.empty());
+
+            assertThrows(
+                        EntityNotFoundException.class,
+                        () -> organizationUserService.removeUserFromOrganization(orgId, targetUserId));
+
+            verify(organizationUserRepository, never()).deleteByOrganizationIdAndUserId(any(), any());
+      }
+
+      @Test
       void removeUserFromOrganization_cannotRemoveSelf_throwsIllegalArgumentException() {
             Long orgId = 1L;
             Long userId = 10L;
@@ -360,6 +378,30 @@ class OrganizationUserServiceTest {
             assertEquals(currentUserId, saved.getUserId());
             assertEquals(OrganizationUserStatusType.PENDING, saved.getStatus());
             assertEquals(description, saved.getDescription());
+      }
+
+      @Test
+      void requestToJoinOrganization_alreadyAccepted_isIdempotent() {
+            Long orgId = 1L;
+            Long currentUserId = 10L;
+
+            Organization org = Organization.builder()
+                        .id(orgId)
+                        .build();
+            when(organizationRepository.findById(orgId)).thenReturn(Optional.of(org));
+            when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+
+            OrganizationUser existing = OrganizationUser.builder()
+                        .organizationId(orgId)
+                        .userId(currentUserId)
+                        .status(OrganizationUserStatusType.ACCEPTED)
+                        .build();
+            when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, currentUserId))
+                        .thenReturn(Optional.of(existing));
+
+            organizationUserService.requestToJoinOrganization(orgId, "Join request description");
+
+            verify(organizationUserRepository, never()).save(any());
       }
 
       @Test

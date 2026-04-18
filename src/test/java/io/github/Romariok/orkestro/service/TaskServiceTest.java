@@ -120,6 +120,9 @@ class TaskServiceTest {
         @Mock
         private TaskAccessEvaluator taskAccessEvaluator;
 
+        @Mock
+        private io.github.Romariok.orkestro.notification.WebSocketNotificationService webSocketNotificationService;
+
         @InjectMocks
         private TaskService taskService;
 
@@ -831,5 +834,185 @@ class TaskServiceTest {
                                 () -> taskService.deleteTaskFileForCurrentUser(organizationId, taskId, fileId));
 
                 verify(taskFileRepository, never()).deleteByTaskIdAndFileId(anyLong(), anyLong());
+        }
+
+        @Test
+        void addAssignees_userNotInOrganization_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+                Long assigneeUserId = 55L;
+                Long currentUserId = 10L;
+
+                Task task = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .title("Task")
+                                .status(TaskStatus.OPEN)
+                                .visibility(TaskVisibility.ALL_MEMBERS)
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(userRepository.existsById(assigneeUserId)).thenReturn(true);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, assigneeUserId))
+                                .thenReturn(Optional.empty());
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> taskService.addAssignees(organizationId, taskId, List.of(assigneeUserId)));
+
+                verify(taskAssigneeRepository, never()).save(any());
+        }
+
+        @Test
+        void updateTask_success_updatesTitle() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+
+                io.github.Romariok.orkestro.task.dto.TaskUpdateRequestDTO request =
+                                new io.github.Romariok.orkestro.task.dto.TaskUpdateRequestDTO();
+                request.setTitle("Updated Title");
+                request.setDescription("Updated description");
+
+                Task task = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .title("Old Title")
+                                .description("Old description")
+                                .status(TaskStatus.OPEN)
+                                .visibility(TaskVisibility.ALL_MEMBERS)
+                                .authorUserId(10L)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+                when(taskRepository.save(any(Task.class))).thenReturn(task);
+
+                when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
+                        Task t = invocation.getArgument(0);
+                        return TaskDTO.builder()
+                                        .id(t.getId())
+                                        .title(t.getTitle())
+                                        .description(t.getDescription())
+                                        .status(t.getStatus())
+                                        .build();
+                });
+                when(taskFileRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
+                when(taskCommentRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
+                when(taskVisibilityRoleRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
+
+                TaskDTO result = taskService.updateTask(organizationId, taskId, request);
+
+                assertEquals("Updated Title", task.getTitle());
+                assertEquals("Updated description", task.getDescription());
+                assertNotNull(result);
+                verify(taskRepository).save(task);
+        }
+
+        @Test
+        void updateTask_notFound_throwsEntityNotFoundException() {
+                Long organizationId = 1L;
+                Long taskId = 999L;
+
+                io.github.Romariok.orkestro.task.dto.TaskUpdateRequestDTO request =
+                                new io.github.Romariok.orkestro.task.dto.TaskUpdateRequestDTO();
+                request.setTitle("Updated Title");
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> taskService.updateTask(organizationId, taskId, request));
+
+                verify(taskRepository, never()).save(any());
+        }
+
+        @Test
+        void getClosedTasksForCurrentUser_success_returnsDoneTasks() {
+                Long organizationId = 1L;
+                Long userId = 10L;
+                PageRequest pageable = PageRequest.of(0, 20);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+                OrganizationUser membership = OrganizationUser.builder()
+                                .organizationId(organizationId)
+                                .userId(userId)
+                                .status(OrganizationUserStatusType.ACCEPTED)
+                                .joinedAt(Instant.now())
+                                .build();
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(membership));
+
+                Task doneTask = Task.builder()
+                                .id(1L)
+                                .organizationId(organizationId)
+                                .title("Done Task")
+                                .visibility(TaskVisibility.ALL_MEMBERS)
+                                .status(TaskStatus.DONE)
+                                .authorUserId(userId)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findByOrganizationIdAndStatusIn(
+                                organizationId, List.of(TaskStatus.DONE, TaskStatus.CANCELLED), pageable))
+                                .thenReturn(new PageImpl<>(List.of(doneTask), pageable, 1));
+
+                when(userRoleRepository.findRolesByUserId(userId)).thenReturn(List.of());
+                when(taskVisibilityRoleRepository.findByTaskIdIn(List.of(1L))).thenReturn(List.of());
+
+                when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
+                        Task t = invocation.getArgument(0);
+                        return TaskDTO.builder()
+                                        .id(t.getId())
+                                        .title(t.getTitle())
+                                        .status(t.getStatus())
+                                        .build();
+                });
+                when(taskFileRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
+                when(taskCommentRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
+                when(taskVisibilityRoleRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
+
+                Page<TaskDTO> result = taskService.getClosedTasksForCurrentUser(organizationId, pageable);
+
+                assertEquals(1, result.getContent().size());
+                assertEquals(TaskStatus.DONE, result.getContent().getFirst().getStatus());
+        }
+
+        @Test
+        void removeAssignee_success_removesAndReturnsDto() {
+                Long organizationId = 1L;
+                Long taskId = 100L;
+                Long assigneeUserId = 55L;
+
+                Task task = Task.builder()
+                                .id(taskId)
+                                .organizationId(organizationId)
+                                .title("Task")
+                                .status(TaskStatus.IN_PROGRESS)
+                                .visibility(TaskVisibility.ALL_MEMBERS)
+                                .authorUserId(10L)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+                when(taskRepository.save(any(Task.class))).thenReturn(task);
+
+                when(taskMapper.toDto(any(Task.class))).thenAnswer(invocation -> {
+                        Task t = invocation.getArgument(0);
+                        return TaskDTO.builder().id(t.getId()).title(t.getTitle()).build();
+                });
+                when(taskFileRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
+                when(taskCommentRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
+                when(taskVisibilityRoleRepository.findByTaskId(anyLong())).thenReturn(Collections.emptyList());
+
+                TaskDTO result = taskService.removeAssignee(organizationId, taskId, assigneeUserId);
+
+                assertNotNull(result);
+                verify(taskAssigneeRepository).deleteByTaskIdAndUserId(taskId, assigneeUserId);
+                verify(taskRepository).save(task);
         }
 }

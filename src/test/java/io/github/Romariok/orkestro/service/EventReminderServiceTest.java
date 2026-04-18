@@ -14,6 +14,7 @@ import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
 import io.github.Romariok.orkestro.event.service.EventNotificationService;
 import io.github.Romariok.orkestro.event.service.EventReminderService;
+import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -34,6 +35,9 @@ class EventReminderServiceTest {
 
         @Mock
         private EventNotificationService eventNotificationService;
+
+        @Mock
+        private WebSocketNotificationService webSocketNotificationService;
 
         @InjectMocks
         private EventReminderService eventReminderService;
@@ -96,5 +100,64 @@ class EventReminderServiceTest {
                 // После успешной отправки напоминания поле remindBeforeMinutes обнуляется
                 assertNull(event.getRemindBeforeMinutes());
                 verify(eventRepository).saveAll(List.of(event));
+        }
+
+        @Test
+        void processDueEventReminders_eventStartTimeInPast_skipsReminderForPastEvent() {
+                Long eventId = 2L;
+                Instant now = Instant.now();
+                Instant startTime = now.minus(30, ChronoUnit.MINUTES);
+                Integer remindBeforeMinutes = 15;
+
+                Event event = Event.builder()
+                                .id(eventId)
+                                .organizationId(1L)
+                                .title("Past Event")
+                                .startTime(startTime)
+                                .endTime(startTime.plus(1, ChronoUnit.HOURS))
+                                .remindBeforeMinutes(remindBeforeMinutes)
+                                .createdAt(now.minus(1, ChronoUnit.DAYS))
+                                .build();
+
+                when(eventRepository.findByRemindBeforeMinutesIsNotNull()).thenReturn(List.of(event));
+
+                eventReminderService.processDueEventReminders();
+
+                verify(eventParticipantRepository, never()).findByEventId(any(Long.class));
+                verify(eventNotificationService, never())
+                                .sendEventReminderNotifications(any(Event.class), anyCollection());
+        }
+
+        @Test
+        void processDueEventReminders_emptyParticipants_clearsReminderWithoutNotification() {
+                Long eventId = 3L;
+                Instant now = Instant.now();
+                Instant startTime = now.plus(10, ChronoUnit.MINUTES);
+                Integer remindBeforeMinutes = 15;
+
+                Event event = Event.builder()
+                                .id(eventId)
+                                .organizationId(1L)
+                                .title("Empty Event")
+                                .startTime(startTime)
+                                .endTime(startTime.plus(1, ChronoUnit.HOURS))
+                                .remindBeforeMinutes(remindBeforeMinutes)
+                                .createdAt(now.minus(1, ChronoUnit.DAYS))
+                                .build();
+
+                when(eventRepository.findByRemindBeforeMinutesIsNotNull()).thenReturn(List.of(event));
+
+                EventParticipant declined = EventParticipant.builder()
+                                .eventId(eventId)
+                                .userId(10L)
+                                .rsvpStatus(EventRsvpStatus.DECLINED)
+                                .build();
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of(declined));
+
+                eventReminderService.processDueEventReminders();
+
+                verify(eventNotificationService, never())
+                                .sendEventReminderNotifications(any(Event.class), anyCollection());
+                assertNull(event.getRemindBeforeMinutes());
         }
 }

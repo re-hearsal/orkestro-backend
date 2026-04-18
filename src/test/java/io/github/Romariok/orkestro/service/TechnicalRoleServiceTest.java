@@ -505,4 +505,177 @@ class TechnicalRoleServiceTest {
                 verify(rolePermissionRepository, never()).deleteByRoleId(roleId);
                 verify(roleRepository, never()).delete(any(Role.class));
         }
+
+        @Test
+        void getOrganizationRoles_returnsMappedDtos() {
+                Long organizationId = 100L;
+                Role role = Role.builder()
+                                .id(10L)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .name("Editor")
+                                .build();
+
+                TechnicalRoleDTO dto = new TechnicalRoleDTO();
+                dto.setId(10L);
+
+                when(technicalRoleDao.findOrganizationRoles(organizationId)).thenReturn(List.of(role));
+                when(technicalRoleMapper.toDto(role)).thenReturn(dto);
+                when(rolePermissionRepository.findPermissionsByRoleId(10L)).thenReturn(List.of());
+
+                List<TechnicalRoleDTO> result = technicalRoleService.getOrganizationRoles(organizationId);
+
+                assertEquals(1, result.size());
+                assertEquals(10L, result.getFirst().getId());
+        }
+
+        @Test
+        void getSectionRoles_returnsMappedDtos() {
+                Long sectionId = 5L;
+                Role role = Role.builder()
+                                .id(20L)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .name("SectionEditor")
+                                .build();
+
+                TechnicalRoleDTO dto = new TechnicalRoleDTO();
+                dto.setId(20L);
+
+                when(technicalRoleDao.findSectionRoles(sectionId)).thenReturn(List.of(role));
+                when(technicalRoleMapper.toDto(role)).thenReturn(dto);
+                when(rolePermissionRepository.findPermissionsByRoleId(20L)).thenReturn(List.of());
+
+                List<TechnicalRoleDTO> result = technicalRoleService.getSectionRoles(sectionId);
+
+                assertEquals(1, result.size());
+                assertEquals(20L, result.getFirst().getId());
+        }
+
+        @Test
+        void updateOrganizationRole_success_updatesNameAndPermissions() {
+                Long organizationId = 100L;
+                Long roleId = 10L;
+                TechnicalRoleCreateRequestDTO request = new TechnicalRoleCreateRequestDTO(
+                                "NewName", List.of("ORG_EDIT"));
+
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .name("OldName")
+                                .system(false)
+                                .build();
+
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+                when(roleRepository.findByScopeAndOrganizationIdAndName(
+                                RoleScopeType.ORGANIZATION, organizationId, "NewName"))
+                                .thenReturn(Optional.empty());
+
+                Permission p = Permission.builder().code("ORG_EDIT").description("d").build();
+                when(permissionRepository.findByCodeIn(any())).thenReturn(List.of(p));
+
+                TechnicalRoleDTO dto = new TechnicalRoleDTO();
+                dto.setId(roleId);
+                when(technicalRoleMapper.toDto(role)).thenReturn(dto);
+                when(rolePermissionRepository.findPermissionsByRoleId(roleId)).thenReturn(List.of());
+
+                TechnicalRoleDTO result = technicalRoleService.updateOrganizationRole(organizationId, roleId, request);
+
+                assertEquals(roleId, result.getId());
+                assertEquals("NewName", role.getName());
+                verify(rolePermissionRepository).deleteByRoleId(roleId);
+                verify(rolePermissionRepository).saveAll(any());
+        }
+
+        @Test
+        void updateOrganizationRole_notFound_throwsEntityNotFoundException() {
+                Long organizationId = 100L;
+                Long roleId = 99L;
+                TechnicalRoleCreateRequestDTO request = new TechnicalRoleCreateRequestDTO("Name", List.of());
+
+                when(roleRepository.findById(roleId)).thenReturn(Optional.empty());
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> technicalRoleService.updateOrganizationRole(organizationId, roleId, request));
+        }
+
+        @Test
+        void updateOrganizationRole_duplicateName_throwsBusinessException() {
+                Long organizationId = 100L;
+                Long roleId = 10L;
+                TechnicalRoleCreateRequestDTO request = new TechnicalRoleCreateRequestDTO("ExistingName", List.of());
+
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .name("OldName")
+                                .system(false)
+                                .build();
+
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+
+                Role existing = Role.builder()
+                                .id(99L)
+                                .scope(RoleScopeType.ORGANIZATION)
+                                .organizationId(organizationId)
+                                .name("ExistingName")
+                                .build();
+                when(roleRepository.findByScopeAndOrganizationIdAndName(
+                                RoleScopeType.ORGANIZATION, organizationId, "ExistingName"))
+                                .thenReturn(Optional.of(existing));
+
+                assertThrows(
+                                BusinessException.class,
+                                () -> technicalRoleService.updateOrganizationRole(organizationId, roleId, request));
+        }
+
+        @Test
+        void updateSectionRole_success_updatesNameAndPermissions() {
+                Long sectionId = 5L;
+                Long roleId = 20L;
+                TechnicalRoleCreateRequestDTO request = new TechnicalRoleCreateRequestDTO(
+                                "UpdatedSectionRole", List.of("SECTION_EDIT"));
+
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .name("OldSectionRole")
+                                .system(false)
+                                .build();
+
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+                when(roleRepository.findByScopeAndSectionIdAndName(
+                                RoleScopeType.SECTION, sectionId, "UpdatedSectionRole"))
+                                .thenReturn(Optional.empty());
+
+                Permission p = Permission.builder().code("SECTION_EDIT").description("d").build();
+                when(permissionRepository.findByCodeIn(any())).thenReturn(List.of(p));
+
+                TechnicalRoleDTO dto = new TechnicalRoleDTO();
+                dto.setId(roleId);
+                when(technicalRoleMapper.toDto(role)).thenReturn(dto);
+                when(rolePermissionRepository.findPermissionsByRoleId(roleId)).thenReturn(List.of());
+
+                TechnicalRoleDTO result = technicalRoleService.updateSectionRole(sectionId, roleId, request);
+
+                assertEquals(roleId, result.getId());
+                verify(rolePermissionRepository).deleteByRoleId(roleId);
+        }
+
+        @Test
+        void removeOrganizationRoleFromUser_roleNotFound_throwsEntityNotFoundException() {
+                Long organizationId = 100L;
+                Long userId = 1L;
+                Long roleId = 99L;
+
+                when(roleRepository.findById(roleId)).thenReturn(Optional.empty());
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> technicalRoleService.removeOrganizationRoleFromUser(organizationId, userId, roleId));
+        }
 }

@@ -1,13 +1,19 @@
 package io.github.Romariok.orkestro.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.Romariok.orkestro.security.JWTUtil;
+import io.github.Romariok.orkestro.user.dto.AuthResponseDTO;
+import io.github.Romariok.orkestro.user.dto.LoginRequestDTO;
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.service.AuthService;
 import io.github.Romariok.orkestro.user.service.UserService;
@@ -23,8 +29,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -150,5 +159,83 @@ class AuthServiceTest {
 
             // После logout аутентификация должна быть очищена
             assertEquals(null, SecurityContextHolder.getContext().getAuthentication());
+      }
+
+      @Test
+      void register_usernameAlreadyTaken_throwsBusinessException() {
+            io.github.Romariok.orkestro.user.dto.RegisterRequestDTO request =
+                        new io.github.Romariok.orkestro.user.dto.RegisterRequestDTO();
+            request.setUsername("existingUser");
+            request.setName("Existing User");
+            request.setEmail("existing@example.com");
+            request.setPassword("password123");
+            request.setPreferredLanguage(io.github.Romariok.orkestro.user.models.enums.UserLanguageType.RU);
+            request.setBirthDate(java.time.LocalDate.of(1990, 1, 1));
+
+            when(userService.existsByUsername("existingUser")).thenReturn(true);
+
+            assertThrows(BusinessException.class, () -> authService.register(request));
+
+            verify(userService, never()).saveUser(any(User.class));
+      }
+
+      @Test
+      void login_success_returnsAuthResponseWithToken() {
+            LoginRequestDTO request = new LoginRequestDTO();
+            request.setUsername("user");
+            request.setPassword("password");
+
+            Authentication auth = new UsernamePasswordAuthenticationToken("user", "password", List.of());
+            when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(auth);
+
+            UserDetails userDetails = org.mockito.Mockito.mock(UserDetails.class);
+            when(userDetails.getAuthorities()).thenReturn(List.of());
+            when(userService.loadUserByUsername("user")).thenReturn(userDetails);
+            when(jwtUtil.generateToken(eq("user"), anySet())).thenReturn("jwt-token");
+
+            AuthResponseDTO result = authService.login(request);
+
+            assertNotNull(result);
+            assertEquals("jwt-token", result.getToken());
+            assertEquals("user", result.getUsername());
+      }
+
+      @Test
+      void login_badCredentials_throwsBadCredentialsException() {
+            LoginRequestDTO request = new LoginRequestDTO();
+            request.setUsername("user");
+            request.setPassword("wrong");
+
+            when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                        .thenThrow(new BadCredentialsException("Bad credentials"));
+
+            assertThrows(BadCredentialsException.class, () -> authService.login(request));
+      }
+
+      @Test
+      void register_success_noAvatar_returnsAuthResponse() {
+            io.github.Romariok.orkestro.user.dto.RegisterRequestDTO request =
+                        new io.github.Romariok.orkestro.user.dto.RegisterRequestDTO();
+            request.setUsername("newUser");
+            request.setName("New User");
+            request.setEmail("new@example.com");
+            request.setPassword("password123");
+            request.setPreferredLanguage(io.github.Romariok.orkestro.user.models.enums.UserLanguageType.EN);
+            request.setBirthDate(java.time.LocalDate.of(1995, 6, 15));
+
+            when(userService.existsByUsername("newUser")).thenReturn(false);
+            when(passwordEncoder.encode("password123")).thenReturn("encoded-pass");
+
+            UserDetails userDetails = org.mockito.Mockito.mock(UserDetails.class);
+            when(userDetails.getAuthorities()).thenReturn(List.of());
+            when(userService.loadUserByUsername("newUser")).thenReturn(userDetails);
+            when(jwtUtil.generateToken(eq("newUser"), anySet())).thenReturn("new-jwt-token");
+
+            AuthResponseDTO result = authService.register(request);
+
+            assertNotNull(result);
+            assertEquals("new-jwt-token", result.getToken());
+            assertEquals("newUser", result.getUsername());
+            verify(userService).saveUser(any(User.class));
       }
 }

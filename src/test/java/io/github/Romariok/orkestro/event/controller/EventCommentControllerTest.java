@@ -70,4 +70,11 @@ class EventCommentControllerTest {
         assertEquals(3, result.getBody().getTotalElements());
         assertEquals(2, result.getBody().getTotalPages());
     }
+
+    @Test
+    void deleteEventComment_returnsNoContent() {
+        var result = eventCommentController.deleteEventComment(1L, 10L, 5L);
+
+        assertEquals(HttpStatus.NO_CONTENT, result.getStatusCode());
+    }
 }

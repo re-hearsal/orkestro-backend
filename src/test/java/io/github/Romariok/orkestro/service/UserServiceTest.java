@@ -3,6 +3,7 @@ package io.github.Romariok.orkestro.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -299,6 +300,21 @@ class UserServiceTest {
                 verify(fileStorageService).delete(10L);
                 assertEquals(null, user.getProfileImageFileId());
                 verify(userRepository).save(user);
+        }
+
+        @Test
+        void updateUserProfile_userNotFound_throwsEntityNotFound() {
+                Long userId = 99L;
+                when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+                UserProfileUpdateRequestDTO request = new UserProfileUpdateRequestDTO();
+                request.setName("New Name");
+
+                assertThrows(
+                                EntityNotFoundException.class,
+                                () -> userService.updateUserProfile(userId, request));
+
+                verify(userRepository, never()).save(any(User.class));
         }
 
         @Test
