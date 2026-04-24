@@ -1,7 +1,10 @@
 package io.github.Romariok.orkestro.user.service;
 
+import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.organization.service.OrgNotificationService;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.user.dao.TechnicalRoleDao;
 import io.github.Romariok.orkestro.user.dto.TechnicalRoleCreateRequestDTO;
@@ -41,7 +44,9 @@ public class TechnicalRoleService {
     private final PermissionRepository permissionRepository;
     private final UserRepository userRepository;
     private final OrganizationUserRepository organizationUserRepository;
+    private final OrganizationRepository organizationRepository;
     private final SectionUserRepository sectionUserRepository;
+    private final OrgNotificationService orgNotificationService;
 
     @Transactional(readOnly = true)
     public List<TechnicalRoleDTO> getUserRoles(Long userId) {
@@ -334,6 +339,10 @@ public class TechnicalRoleService {
     @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_ASSIGN_TECH_ROLE')")
     public void assignOrganizationRoleToUser(Long organizationId, Long userId, Long roleId) {
         assignOrganizationRoleToUserInternal(organizationId, userId, roleId);
+        Role role = roleRepository.findById(roleId).orElse(null);
+        String roleName = role != null ? role.getName() : "";
+        String orgName = organizationRepository.findById(organizationId).map(Organization::getName).orElse("");
+        orgNotificationService.notifyRoleAssigned(organizationId, userId, roleName, orgName);
     }
 
 
@@ -385,11 +394,28 @@ public class TechnicalRoleService {
             throw new BusinessException("Role " + roleId + " does not belong to organization " + organizationId);
         }
 
+        if (role.isSystem()) {
+            if ("Leader".equals(role.getName())) {
+                long leaderCount = userRoleRepository.findByRoleId(roleId).size();
+                if (leaderCount <= 1) {
+                    throw new BusinessException("Cannot remove the last leader of the organization");
+                }
+            } else if ("Co-leader".equals(role.getName())) {
+                long coLeaderCount = userRoleRepository.findByRoleId(roleId).size();
+                if (coLeaderCount <= 1) {
+                    throw new BusinessException("Cannot remove the last co-leader of the organization");
+                }
+            }
+        }
+
         UserRoleId id = UserRoleId.builder()
                 .userId(userId)
                 .roleId(roleId)
                 .build();
         userRoleRepository.deleteById(id);
+
+        String orgName = organizationRepository.findById(organizationId).map(Organization::getName).orElse("");
+        orgNotificationService.notifyRoleRemoved(organizationId, userId, role.getName(), orgName);
     }
 
     @Transactional

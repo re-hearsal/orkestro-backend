@@ -1,5 +1,6 @@
 package io.github.Romariok.orkestro.organization.controller;
 
+import io.github.Romariok.orkestro.organization.dto.OrgMemberContextDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationCreateRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
@@ -7,11 +8,13 @@ import io.github.Romariok.orkestro.organization.dto.OrganizationJoinRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationJoinCreateRequestDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationUpdateRequestDTO;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
+import io.github.Romariok.orkestro.organization.service.OrganizationInviteService;
 import io.github.Romariok.orkestro.organization.service.OrganizationService;
 import io.github.Romariok.orkestro.organization.service.OrganizationUserService;
 import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -33,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -50,6 +54,7 @@ public class OrganizationController {
 
         private final OrganizationService organizationService;
         private final OrganizationUserService organizationUserService;
+        private final OrganizationInviteService organizationInviteService;
 
         @Operation(summary = "Создать организацию", description = "Создает новую организацию (музыкальную группу). Создатель автоматически становится администратором организации.")
         @ApiResponses({
@@ -140,6 +145,20 @@ public class OrganizationController {
                 return ResponseEntity.noContent().build();
         }
 
+        @Operation(summary = "Получить контекст участника", description = "Возвращает техническую роль и список прав текущего пользователя в организации.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Контекст участника получен", content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = OrgMemberContextDTO.class))),
+                        @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "403", description = "Не является участником организации", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "404", description = "Организация не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+        })
+        @SecurityRequirement(name = "Bearer Authentication")
+        @GetMapping("/{organizationId}/members/me")
+        public ResponseEntity<OrgMemberContextDTO> getMyMemberContext(
+                        @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId) {
+                return ResponseEntity.ok(organizationUserService.getOrgMemberContext(organizationId));
+        }
+
         @Operation(summary = "Покинуть организацию", description = "Текущий пользователь покидает организацию.")
         @ApiResponses({
                         @ApiResponse(responseCode = "204", description = "Пользователь покинул организацию", content = @Content),
@@ -160,9 +179,9 @@ public class OrganizationController {
         @Operation(summary = "Присоединиться к организации", description = "Отправляет запрос на присоединение к организации с описанием (до 1000 символов).")
         @ApiResponses({
                         @ApiResponse(responseCode = "204", description = "Запрос отправлен", content = @Content),
-                        @ApiResponse(responseCode = "400", description = "Организация приватная", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "400", description = "Организация приватная, пользователь уже состоит в организации или заявка уже подана", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
                         @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
-                        @ApiResponse(responseCode = "403", description = "Уже состоите в организации", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
                         @ApiResponse(responseCode = "404", description = "Организация не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
                         @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
         })
@@ -216,7 +235,7 @@ public class OrganizationController {
 
         @Operation(summary = "Получить ожидающие запросы на вступление", description = "Возвращает список пользователей, ожидающих одобрения вступления в организацию.")
         @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Список запросов получен", content = @Content(schema = @Schema(implementation = List.class))),
+                        @ApiResponse(responseCode = "200", description = "Список запросов получен", content = @Content(array = @ArraySchema(schema = @Schema(implementation = OrganizationJoinRequestDTO.class)))),
                         @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
                         @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
                         @ApiResponse(responseCode = "404", description = "Организация не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
@@ -227,9 +246,24 @@ public class OrganizationController {
         public ResponseEntity<List<OrganizationJoinRequestDTO>> getPendingJoinRequests(
                         @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId) {
                 List<OrganizationUser> pending = organizationUserService.getPendingJoinRequests(organizationId);
-                List<OrganizationJoinRequestDTO> dtos = pending.stream()
-                                .map(OrganizationJoinRequestDTO::fromEntity)
-                                .toList();
+                List<OrganizationJoinRequestDTO> dtos = new ArrayList<>(pending.size());
+
+                for (OrganizationUser organizationUser : pending) {
+                        OrganizationJoinRequestDTO dto = new OrganizationJoinRequestDTO();
+                        dto.setUserId(organizationUser.getUserId());
+                        dto.setStatus(organizationUser.getStatus());
+                        dto.setJoinedAt(organizationUser.getJoinedAt());
+                        dto.setDescription(organizationUser.getDescription());
+
+                        if (organizationUser.getUser() != null) {
+                                dto.setUsername(organizationUser.getUser().getUsername());
+                                dto.setName(organizationUser.getUser().getName());
+                                dto.setProfileImageFileId(organizationUser.getUser().getProfileImageFileId());
+                        }
+
+                        dtos.add(dto);
+                }
+
                 return ResponseEntity.ok(dtos);
         }
 
@@ -290,5 +324,59 @@ public class OrganizationController {
                         @Parameter(description = "Поиск по названию") @RequestParam(required = false) String name,
                         @Parameter(description = "Параметры пагинации") @PageableDefault(size = 10) Pageable pageable) {
                 return ResponseEntity.ok(organizationService.searchPublicOrganizationsByName(name, pageable));
+        }
+
+        @Operation(summary = "Получить пригласительный код", description = "Возвращает текущий пригласительный код организации. Требует права ORG_EDIT.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Код получен", content = @Content(mediaType = MediaType.TEXT_PLAIN_VALUE, schema = @Schema(type = "string"))),
+                        @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "404", description = "Организация не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+        })
+        @SecurityRequirement(name = "Bearer Authentication")
+        @GetMapping("/{organizationId}/invite")
+        public ResponseEntity<String> getInviteCode(
+                        @Parameter(description = "ID организации", required = true) @PathVariable @jakarta.validation.constraints.Positive Long organizationId) {
+                return ResponseEntity.ok(organizationInviteService.getInviteCode(organizationId));
+        }
+
+        @Operation(summary = "Обновить пригласительный код", description = "Генерирует новый пригласительный код для организации. Требует права ORG_EDIT.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Новый код сгенерирован", content = @Content(mediaType = MediaType.TEXT_PLAIN_VALUE, schema = @Schema(type = "string"))),
+                        @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "404", description = "Организация не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+        })
+        @SecurityRequirement(name = "Bearer Authentication")
+        @PostMapping("/{organizationId}/invite/regenerate")
+        public ResponseEntity<String> regenerateInviteCode(
+                        @Parameter(description = "ID организации", required = true) @PathVariable @jakarta.validation.constraints.Positive Long organizationId) {
+                return ResponseEntity.ok(organizationInviteService.regenerateInviteCode(organizationId));
+        }
+
+        @Operation(summary = "Получить информацию об организации по коду приглашения", description = "Публичный эндпоинт. Возвращает OrganizationDTO по коду приглашения.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Организация найдена", content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = OrganizationDTO.class))),
+                        @ApiResponse(responseCode = "404", description = "Некорректный код приглашения", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+        })
+        @GetMapping("/invite-info")
+        public ResponseEntity<OrganizationDTO> getOrganizationByInviteCode(
+                        @Parameter(description = "Код приглашения", required = true) @RequestParam String code) {
+                return ResponseEntity.ok(organizationInviteService.getOrganizationByInviteCode(code));
+        }
+
+        @Operation(summary = "Вступить в организацию по коду приглашения", description = "Подаёт заявку на вступление в организацию по коду приглашения. Требует авторизации.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "204", description = "Заявка подана", content = @Content),
+                        @ApiResponse(responseCode = "400", description = "Некорректный код приглашения, пользователь уже состоит в организации или заявка уже подана", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+                        @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+        })
+        @SecurityRequirement(name = "Bearer Authentication")
+        @PostMapping("/join/invite")
+        public ResponseEntity<Void> joinByInviteCode(
+                        @Parameter(description = "Код приглашения", required = true) @RequestParam String code,
+                        @Valid @RequestBody OrganizationJoinCreateRequestDTO request) {
+                organizationInviteService.joinByInviteCode(code, request.getDescription());
+                return ResponseEntity.noContent().build();
         }
 }

@@ -47,6 +47,7 @@ public class SecurityConfig {
                                     "/api/v1/instruments",
                                     "/api/v1/organizations/public",
                                     "/api/v1/organizations/public/page",
+                                    "/api/v1/organizations/invite-info",
                                     "/ws/**",
                                     "/swagger-ui/**",
                                     "/swagger-ui.html",

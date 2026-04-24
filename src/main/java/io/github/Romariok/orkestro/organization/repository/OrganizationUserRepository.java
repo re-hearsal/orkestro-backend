@@ -20,6 +20,7 @@ public interface OrganizationUserRepository extends JpaRepository<OrganizationUs
 
    Optional<OrganizationUser> findByOrganizationIdAndUserId(Long organizationId, Long userId);
 
+   @EntityGraph(attributePaths = "user")
    List<OrganizationUser> findByOrganizationIdAndStatus(Long organizationId, OrganizationUserStatusType status);
 
    List<OrganizationUser> findByOrganizationIdAndStatusOrderByJoinedAtAsc(
@@ -30,6 +31,8 @@ public interface OrganizationUserRepository extends JpaRepository<OrganizationUs
    @Override
    @EntityGraph(attributePaths = "user")
    Page<OrganizationUser> findAll(Specification<OrganizationUser> spec, Pageable pageable);
+
+   List<OrganizationUser> findByUserIdAndStatus(Long userId, OrganizationUserStatusType status);
 
    void deleteByUserId(Long userId);
 

@@ -1,16 +1,23 @@
 package io.github.Romariok.orkestro.organization.service;
 
+import io.github.Romariok.orkestro.organization.dto.OrgMemberContextDTO;
+import io.github.Romariok.orkestro.organization.dto.OrganizationDTO;
+import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.organization.mapper.OrganizationMapper;
 import io.github.Romariok.orkestro.organization.mapper.OrganizationMemberMapper;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
 import io.github.Romariok.orkestro.organization.specification.OrganizationUserSpecifications;
 import io.github.Romariok.orkestro.security.SecurityUtils;
+import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
+import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.UserRoleId;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
+import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
@@ -18,6 +25,8 @@ import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -38,12 +47,54 @@ public class OrganizationUserService {
       private final OrganizationService organizationService;
       private final RoleRepository roleRepository;
       private final UserRoleRepository userRoleRepository;
+      private final RolePermissionRepository rolePermissionRepository;
+      private final OrganizationMapper organizationMapper;
       private final SecurityUtils securityUtils;
       private final OrganizationMemberMapper organizationMemberMapper;
+      private final OrgNotificationService orgNotificationService;
+
+      @Transactional(readOnly = true)
+      @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMember(#organizationId)")
+      public OrgMemberContextDTO getOrgMemberContext(Long organizationId) {
+            Long currentUserId = securityUtils.getCurrentUserId();
+
+            organizationRepository.findById(organizationId)
+                        .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
+
+            List<Role> orgRoles = roleRepository.findByScopeAndOrganizationId(RoleScopeType.ORGANIZATION, organizationId);
+            List<Long> orgRoleIds = orgRoles.stream().map(Role::getId).toList();
+
+            List<Role> userOrgRoles = userRoleRepository.findRolesByUserId(currentUserId).stream()
+                        .filter(r -> orgRoleIds.contains(r.getId()))
+                        .toList();
+
+            Role primaryRole = userOrgRoles.isEmpty() ? null : userOrgRoles.get(0);
+
+            List<String> permissions = userOrgRoles.stream()
+                        .flatMap(role -> rolePermissionRepository.findPermissionsByRoleId(role.getId()).stream())
+                        .map(Permission::getCode)
+                        .distinct()
+                        .toList();
+
+            OrgMemberContextDTO.RoleInfo roleInfo = primaryRole == null ? null
+                        : new OrgMemberContextDTO.RoleInfo(primaryRole.getId(), primaryRole.getName());
+
+            return new OrgMemberContextDTO(roleInfo, permissions);
+      }
+
+      @Transactional(readOnly = true)
+      public List<OrganizationDTO> getUserOrganizations(Long userId) {
+            List<OrganizationUser> memberships = organizationUserRepository
+                        .findByUserIdAndStatus(userId, OrganizationUserStatusType.ACCEPTED);
+            List<Long> orgIds = memberships.stream().map(OrganizationUser::getOrganizationId).toList();
+            return organizationRepository.findAllById(orgIds).stream()
+                        .map(organizationMapper::toDto)
+                        .toList();
+      }
 
       @Transactional
       public void requestToJoinOrganization(Long organizationId, String description) {
-            organizationRepository.findById(organizationId)
+            Organization organization = organizationRepository.findById(organizationId)
                         .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
 
             Long currentUserId = securityUtils.getCurrentUserId();
@@ -51,26 +102,29 @@ public class OrganizationUserService {
             var existing = organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId);
             if (existing.isPresent()) {
                   OrganizationUser ou = existing.get();
-                  if (ou.getStatus() == OrganizationUserStatusType.ACCEPTED
-                              || ou.getStatus() == OrganizationUserStatusType.PENDING) {
-                        return;
+                  if (ou.getStatus() == OrganizationUserStatusType.ACCEPTED) {
+                        throw new BusinessException("User is already a member of organization " + organizationId);
+                  }
+                  if (ou.getStatus() == OrganizationUserStatusType.PENDING) {
+                        throw new BusinessException("Join request already pending for organization " + organizationId);
                   }
                   // REJECTED -> allow re-apply
                   ou.setStatus(OrganizationUserStatusType.PENDING);
                   ou.setJoinedAt(Instant.now());
                   ou.setDescription(description);
                   organizationUserRepository.save(ou);
-                  return;
+            } else {
+                  OrganizationUser ou = OrganizationUser.builder()
+                              .organizationId(organizationId)
+                              .userId(currentUserId)
+                              .status(OrganizationUserStatusType.PENDING)
+                              .joinedAt(Instant.now())
+                              .description(description)
+                              .build();
+                  organizationUserRepository.save(ou);
             }
 
-            OrganizationUser ou = OrganizationUser.builder()
-                        .organizationId(organizationId)
-                        .userId(currentUserId)
-                        .status(OrganizationUserStatusType.PENDING)
-                        .joinedAt(Instant.now())
-                        .description(description)
-                        .build();
-            organizationUserRepository.save(ou);
+            orgNotificationService.notifyJoinRequestReceived(organizationId, currentUserId, organization.getName());
       }
 
       @Transactional(readOnly = true)
@@ -103,8 +157,32 @@ public class OrganizationUserService {
                         .and(OrganizationUserSpecifications.userHasAnyInstrument(instrumentIds));
 
             Page<OrganizationUser> memberships = organizationUserRepository.findAll(spec, mappedPageable);
+
+            List<Role> orgRoles = roleRepository.findByScopeAndOrganizationId(RoleScopeType.ORGANIZATION, organizationId);
+            List<Long> orgRoleIds = orgRoles.stream().map(Role::getId).toList();
+            List<Long> memberUserIds = memberships.getContent().stream()
+                  .map(ou -> ou.getUser().getId())
+                  .toList();
+
+            Map<Long, Role> roleById = orgRoles.stream()
+                  .collect(Collectors.toMap(Role::getId, r -> r));
+
+            Map<Long, Long> userToRoleId = orgRoleIds.isEmpty() || memberUserIds.isEmpty()
+                  ? Map.of()
+                  : userRoleRepository.findByUserIdInAndRoleIdIn(memberUserIds, orgRoleIds).stream()
+                        .collect(Collectors.toMap(UserRole::getUserId, UserRole::getRoleId, (a, b) -> a));
+
             return memberships.map(ou -> {
-                  return organizationMemberMapper.toDto(ou.getUser(), ou.getJoinedAt());
+                  OrganizationMemberDTO dto = organizationMemberMapper.toDto(ou.getUser(), ou.getJoinedAt());
+                  Long userId = ou.getUser().getId();
+                  Long assignedRoleId = userToRoleId.get(userId);
+                  if (assignedRoleId != null) {
+                        Role role = roleById.get(assignedRoleId);
+                        if (role != null) {
+                              dto.setRole(new OrganizationMemberDTO.RoleInfo(role.getId(), role.getName()));
+                        }
+                  }
+                  return dto;
             });
       }
 
@@ -155,6 +233,10 @@ public class OrganizationUserService {
             organizationUserRepository.save(organizationUser);
 
             organizationService.syncOrganizationLeadershipRoles(organizationId);
+
+            String orgName = organizationRepository.findById(organizationId)
+                        .map(Organization::getName).orElse("");
+            orgNotificationService.notifyJoinRequestApproved(organizationId, userId, orgName);
       }
 
       @Transactional
@@ -255,5 +337,9 @@ public class OrganizationUserService {
 
             organizationUser.setStatus(OrganizationUserStatusType.REJECTED);
             organizationUserRepository.save(organizationUser);
+
+            String orgName = organizationRepository.findById(organizationId)
+                        .map(Organization::getName).orElse("");
+            orgNotificationService.notifyJoinRequestRejected(organizationId, userId, orgName);
       }
 }

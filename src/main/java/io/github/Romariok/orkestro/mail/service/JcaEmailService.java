@@ -54,6 +54,25 @@ public class JcaEmailService {
     private String applyTemplate(String template, Map<String, Object> model) {
         String result = template;
         for (Map.Entry<String, Object> entry : model.entrySet()) {
+            String key = entry.getKey();
+            String openTag = "{{#" + key + "}}";
+            String closeTag = "{{/" + key + "}}";
+            if (result.contains(openTag)) {
+                boolean condition = Boolean.parseBoolean(String.valueOf(entry.getValue()));
+                if (condition) {
+                    result = result.replace(openTag, "").replace(closeTag, "");
+                } else {
+                    int start = result.indexOf(openTag);
+                    while (start != -1) {
+                        int end = result.indexOf(closeTag, start);
+                        if (end == -1) break;
+                        result = result.substring(0, start) + result.substring(end + closeTag.length());
+                        start = result.indexOf(openTag);
+                    }
+                }
+            }
+        }
+        for (Map.Entry<String, Object> entry : model.entrySet()) {
             String token = "{{" + entry.getKey() + "}}";
             String value = entry.getValue() == null ? "" : String.valueOf(entry.getValue());
             result = result.replace(token, value);

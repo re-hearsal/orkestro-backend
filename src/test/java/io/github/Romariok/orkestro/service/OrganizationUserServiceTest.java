@@ -12,6 +12,7 @@ import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserSta
 import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.organization.service.OrgNotificationService;
 import io.github.Romariok.orkestro.organization.service.OrganizationService;
 import io.github.Romariok.orkestro.organization.service.OrganizationUserService;
 import io.github.Romariok.orkestro.organization.dto.OrganizationMemberDTO;
@@ -61,6 +62,9 @@ class OrganizationUserServiceTest {
 
       @Mock
       private OrganizationService organizationService;
+
+      @Mock
+      private OrgNotificationService orgNotificationService;
 
       @InjectMocks
       private OrganizationUserService organizationUserService;
@@ -381,7 +385,7 @@ class OrganizationUserServiceTest {
       }
 
       @Test
-      void requestToJoinOrganization_alreadyAccepted_isIdempotent() {
+      void requestToJoinOrganization_alreadyAccepted_throwsBusinessException() {
             Long orgId = 1L;
             Long currentUserId = 10L;
 
@@ -399,13 +403,17 @@ class OrganizationUserServiceTest {
             when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, currentUserId))
                         .thenReturn(Optional.of(existing));
 
-            organizationUserService.requestToJoinOrganization(orgId, "Join request description");
+            BusinessException exception = assertThrows(
+                        BusinessException.class,
+                        () -> organizationUserService.requestToJoinOrganization(orgId, "Join request description"));
 
+            assertEquals("User is already a member of organization 1", exception.getMessage());
             verify(organizationUserRepository, never()).save(any());
+            verify(orgNotificationService, never()).notifyJoinRequestReceived(any(), any(), any());
       }
 
       @Test
-      void requestToJoinOrganization_alreadyPending_isIdempotent() {
+      void requestToJoinOrganization_alreadyPending_throwsBusinessException() {
             Long orgId = 1L;
             Long currentUserId = 10L;
 
@@ -423,9 +431,13 @@ class OrganizationUserServiceTest {
             when(organizationUserRepository.findByOrganizationIdAndUserId(orgId, currentUserId))
                         .thenReturn(Optional.of(existing));
 
-            organizationUserService.requestToJoinOrganization(orgId, "Join request description");
+            BusinessException exception = assertThrows(
+                        BusinessException.class,
+                        () -> organizationUserService.requestToJoinOrganization(orgId, "Join request description"));
 
+            assertEquals("Join request already pending for organization 1", exception.getMessage());
             verify(organizationUserRepository, never()).save(any());
+            verify(orgNotificationService, never()).notifyJoinRequestReceived(any(), any(), any());
       }
 
       @Test
@@ -464,7 +476,8 @@ class OrganizationUserServiceTest {
                                           u.getUsername(),
                                           u.getName(),
                                           u.getProfileImageFileId(),
-                                          joinedAt);
+                                          joinedAt,
+                                          null);
                         });
 
             Page<OrganizationMemberDTO> result = organizationUserService.searchMembers(
@@ -518,7 +531,8 @@ class OrganizationUserServiceTest {
                                           u.getUsername(),
                                           u.getName(),
                                           u.getProfileImageFileId(),
-                                          joinedAt);
+                                          joinedAt,
+                                          null);
                         });
 
             Page<OrganizationMemberDTO> result = organizationUserService.searchMembers(

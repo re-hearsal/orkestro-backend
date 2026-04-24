@@ -9,5 +9,5 @@ public class FileLimitsProperties {
     private int eventMaxFiles;
     private int taskMaxFiles;
     private int songMaxFiles;
-    private int organizationMaxFiles;
+    private int linksTypes;
 }

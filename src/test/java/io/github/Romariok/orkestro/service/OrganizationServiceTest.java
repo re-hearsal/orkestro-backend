@@ -130,7 +130,7 @@ class OrganizationServiceTest {
 
       @BeforeEach
       void setup() {
-            lenient().when(fileLimitsProperties.getOrganizationMaxFiles()).thenReturn(100);
+            lenient().when(fileLimitsProperties.getLinksTypes()).thenReturn(7);
       }
 
       @Test

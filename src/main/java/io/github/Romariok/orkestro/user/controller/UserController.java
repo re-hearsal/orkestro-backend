@@ -1,5 +1,7 @@
 package io.github.Romariok.orkestro.user.controller;
 
+import io.github.Romariok.orkestro.organization.dto.OrganizationDTO;
+import io.github.Romariok.orkestro.organization.service.OrganizationUserService;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.dto.CurrentUserResponseDTO;
 import io.github.Romariok.orkestro.user.dto.MusicalRoleDTO;
@@ -50,6 +52,7 @@ public class UserController {
     private final UserTelegramLinkService userTelegramLinkService;
     private final UserVkLinkService userVkLinkService;
     private final UserService userService;
+    private final OrganizationUserService organizationUserService;
 
     @Operation(
             summary = "Получить профиль текущего пользователя",
@@ -166,6 +169,21 @@ public class UserController {
     public ResponseEntity<List<MusicalRoleDTO>> getMyMusicalRoles() {
         Long currentUserId = securityUtils.getCurrentUserId();
         return ResponseEntity.ok(musicalRoleService.getUserMusicalRoles(currentUserId));
+    }
+
+    @Operation(
+            summary = "Получить организации текущего пользователя",
+            description = "Возвращает список организаций, в которых состоит текущий пользователь."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Список организаций получен", content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE)),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/organizations")
+    public ResponseEntity<List<OrganizationDTO>> getMyOrganizations() {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        return ResponseEntity.ok(organizationUserService.getUserOrganizations(currentUserId));
     }
 
     @Operation(

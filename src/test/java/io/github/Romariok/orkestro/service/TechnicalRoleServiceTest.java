@@ -9,7 +9,9 @@ import static org.mockito.Mockito.when;
 
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import io.github.Romariok.orkestro.organization.service.OrgNotificationService;
 import io.github.Romariok.orkestro.section.models.SectionUser;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.user.dao.TechnicalRoleDao;
@@ -61,6 +63,9 @@ class TechnicalRoleServiceTest {
         private OrganizationUserRepository organizationUserRepository;
 
         @Mock
+        private OrganizationRepository organizationRepository;
+
+        @Mock
         private SectionUserRepository sectionUserRepository;
 
         @Mock
@@ -68,6 +73,9 @@ class TechnicalRoleServiceTest {
 
         @Mock
         private PermissionRepository permissionRepository;
+
+        @Mock
+        private OrgNotificationService orgNotificationService;
 
         @InjectMocks
         private TechnicalRoleService technicalRoleService;

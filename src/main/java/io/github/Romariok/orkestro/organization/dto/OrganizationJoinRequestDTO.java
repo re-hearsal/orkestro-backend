@@ -13,6 +13,9 @@ import lombok.NoArgsConstructor;
 public class OrganizationJoinRequestDTO {
 
    private Long userId;
+   private String username;
+   private String name;
+   private Long profileImageFileId;
    private OrganizationUserStatusType status;
    private Instant joinedAt;
    private String description;
@@ -21,11 +24,24 @@ public class OrganizationJoinRequestDTO {
       if (ou == null) {
          return null;
       }
+
+      String username = null;
+      String name = null;
+      Long profileImageFileId = null;
+
+      if (ou.getUser() != null) {
+         username = ou.getUser().getUsername();
+         name = ou.getUser().getName();
+         profileImageFileId = ou.getUser().getProfileImageFileId();
+      }
+
       return new OrganizationJoinRequestDTO(
             ou.getUserId(),
+            username,
+            name,
+            profileImageFileId,
             ou.getStatus(),
             ou.getJoinedAt(),
             ou.getDescription());
    }
 }
-

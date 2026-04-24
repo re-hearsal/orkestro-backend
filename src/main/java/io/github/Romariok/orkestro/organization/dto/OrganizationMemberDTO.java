@@ -14,5 +14,13 @@ public class OrganizationMemberDTO {
    private String name;
    private Long profileImageFileId;
    private Instant joinedAt;
-}
+   private RoleInfo role;
 
+   @Data
+   @NoArgsConstructor
+   @AllArgsConstructor
+   public static class RoleInfo {
+      private Long id;
+      private String name;
+   }
+}

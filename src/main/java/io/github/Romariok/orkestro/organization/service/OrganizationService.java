@@ -337,12 +337,8 @@ public class OrganizationService {
    }
 
 
-   /**
-    * Явно перегенерировать пригласительную ссылку для организации.
-    * Доступно только обладателям права ORG_MEMBER_INVITE в контексте организации.
-    */
    @Transactional
-   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_MEMBER_INVITE')")
+   @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_EDIT')")
    public String regenerateInviteLink(Long organizationId) {
       organizationRepository.findById(organizationId)
             .orElseThrow(() -> new EntityNotFoundException("Organization not found: " + organizationId));
@@ -403,9 +399,9 @@ public class OrganizationService {
       if (links == null || links.isEmpty()) {
          return;
       }
-      if (links.size() > fileLimitsProperties.getOrganizationMaxFiles()) {
+      if (links.size() > fileLimitsProperties.getLinksTypes()) {
          throw new IllegalArgumentException(
-               "Organization cannot have more than " + fileLimitsProperties.getOrganizationMaxFiles() + " links");
+               "Organization cannot have more than " + fileLimitsProperties.getLinksTypes() + " links");
       }
 
       Map<String, OrganizationLinkDTO> uniqueLinks = new LinkedHashMap<>();

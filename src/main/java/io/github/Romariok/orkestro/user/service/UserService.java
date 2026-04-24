@@ -19,6 +19,7 @@ import io.github.Romariok.orkestro.utils.file.FileReferenceService;
 import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -46,6 +47,7 @@ public class UserService implements UserDetailsService {
    private final FileReferenceService fileReferenceService;
    private final CurrentUserMapper currentUserMapper;
    private final SecurityUtils securityUtils;
+   private final SimpMessagingTemplate messagingTemplate;
 
    @Override
    @Transactional(readOnly = true)
@@ -140,7 +142,14 @@ public class UserService implements UserDetailsService {
    @Transactional
    public User updateCurrentUserProfile(UserProfileUpdateRequestDTO request) {
       Long currentUserId = securityUtils.getCurrentUserId();
-      return updateUserProfile(currentUserId, request);
+      User updated = updateUserProfile(currentUserId, request);
+      CurrentUserResponseDTO profileDTO = currentUserMapper.toDto(updated);
+      messagingTemplate.convertAndSendToUser(
+            String.valueOf(currentUserId),
+            "/queue/profile-updated",
+            profileDTO
+      );
+      return updated;
    }
 
    @Transactional
