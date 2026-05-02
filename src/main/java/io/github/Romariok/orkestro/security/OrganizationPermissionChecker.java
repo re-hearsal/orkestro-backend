@@ -80,6 +80,18 @@ public class OrganizationPermissionChecker {
       return sectionUserRepository.findBySectionIdAndUserId(sectionId, userId).isPresent();
    }
 
+   public boolean isAcceptedOrganizationMemberBySectionId(Long sectionId) {
+      if (sectionId == null || sectionId <= 0) {
+         return false;
+      }
+
+      Long organizationId = sectionRepository.findById(sectionId)
+            .orElseThrow(() -> new EntityNotFoundException("Section not found: " + sectionId))
+            .getOrganizationId();
+
+      return isAcceptedOrganizationMember(organizationId);
+   }
+
    public boolean hasSectionPermission(Long sectionId, String permissionCode) {
       return hasPermission(RoleScopeType.SECTION, sectionId, permissionCode);
    }

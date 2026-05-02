@@ -59,7 +59,8 @@ class SectionMemberControllerTest {
 
     @Test
     void searchMembersPage_returnsOk() {
-        SectionMemberDTO member = new SectionMemberDTO(2L, "john_doe", "John Doe", null, Instant.parse("2026-01-01T00:00:00Z"));
+        SectionMemberDTO member = new SectionMemberDTO(2L, "john_doe", "John Doe", null,
+                Instant.parse("2026-01-01T00:00:00Z"), null);
         Page<SectionMemberDTO> page = new PageImpl<>(List.of(member));
         when(sectionService.searchMembers(eq(1L), isNull(), isNull(), isNull(), any()))
                 .thenReturn(page);

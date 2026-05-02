@@ -466,6 +466,20 @@ public class TechnicalRoleService {
             throw new BusinessException("Role " + roleId + " does not belong to section " + sectionId);
         }
 
+        if (role.isSystem()) {
+            if ("Leader".equals(role.getName())) {
+                long leaderCount = userRoleRepository.findByRoleId(roleId).size();
+                if (leaderCount <= 1) {
+                    throw new BusinessException("Cannot remove the last leader of the section");
+                }
+            } else if ("Co-leader".equals(role.getName())) {
+                long coLeaderCount = userRoleRepository.findByRoleId(roleId).size();
+                if (coLeaderCount <= 1) {
+                    throw new BusinessException("Cannot remove the last co-leader of the section");
+                }
+            }
+        }
+
         UserRoleId id = UserRoleId.builder()
                 .userId(userId)
                 .roleId(roleId)

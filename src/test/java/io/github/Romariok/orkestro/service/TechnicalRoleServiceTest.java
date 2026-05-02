@@ -399,6 +399,50 @@ class TechnicalRoleServiceTest {
         }
 
         @Test
+        void removeSectionRoleFromUser_lastLeader_throwsBusinessException() {
+                Long sectionId = 5L;
+                Long userId = 1L;
+                Long roleId = 20L;
+
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .name("Leader")
+                                .system(true)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+                when(userRoleRepository.findByRoleId(roleId)).thenReturn(List.of(UserRole.builder().build()));
+
+                assertThrows(BusinessException.class,
+                                () -> technicalRoleService.removeSectionRoleFromUser(sectionId, userId, roleId));
+
+                verify(userRoleRepository, never()).deleteById(any(UserRoleId.class));
+        }
+
+        @Test
+        void removeSectionRoleFromUser_lastCoLeader_throwsBusinessException() {
+                Long sectionId = 5L;
+                Long userId = 1L;
+                Long roleId = 21L;
+
+                Role role = Role.builder()
+                                .id(roleId)
+                                .scope(RoleScopeType.SECTION)
+                                .sectionId(sectionId)
+                                .name("Co-leader")
+                                .system(true)
+                                .build();
+                when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+                when(userRoleRepository.findByRoleId(roleId)).thenReturn(List.of(UserRole.builder().build()));
+
+                assertThrows(BusinessException.class,
+                                () -> technicalRoleService.removeSectionRoleFromUser(sectionId, userId, roleId));
+
+                verify(userRoleRepository, never()).deleteById(any(UserRoleId.class));
+        }
+
+        @Test
         void deleteOrganizationRole_success_deletesRolePermissionsAndRole() {
                 Long organizationId = 100L;
                 Long roleId = 10L;

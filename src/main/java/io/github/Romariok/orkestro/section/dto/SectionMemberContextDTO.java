@@ -1,6 +1,6 @@
 package io.github.Romariok.orkestro.section.dto;
 
-import java.time.Instant;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -8,13 +8,11 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class SectionMemberDTO {
-    private Long id;
-    private String username;
-    private String name;
-    private Long profileImageFileId;
-    private Instant joinedAt;
+public class SectionMemberContextDTO {
+
+    private boolean member;
     private RoleInfo role;
+    private List<String> permissions;
 
     @Data
     @NoArgsConstructor

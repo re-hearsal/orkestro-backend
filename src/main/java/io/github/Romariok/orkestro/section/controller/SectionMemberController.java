@@ -1,5 +1,6 @@
 package io.github.Romariok.orkestro.section.controller;
 
+import io.github.Romariok.orkestro.section.dto.SectionMemberContextDTO;
 import io.github.Romariok.orkestro.section.dto.SectionMemberDTO;
 import io.github.Romariok.orkestro.section.service.SectionService;
 import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
@@ -77,6 +78,44 @@ public class SectionMemberController {
    }
 
     @Operation(
+            summary = "Вступить в секцию",
+            description = "Текущий аутентифицированный пользователь вступает в секцию. Для вложенной секции пользователь должен состоять в родительской секции."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Пользователь вступил в секцию", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Нарушение бизнес-правил", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Секция не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PostMapping("/me")
+    public ResponseEntity<Void> joinSection(
+            @Parameter(description = "ID секции", required = true) @PathVariable @Positive Long sectionId) {
+        sectionService.joinCurrentUserToSection(sectionId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "Получить контекст участника секции",
+            description = "Возвращает техническую роль и список прав текущего пользователя в секции. Для участников организации без роли в секции вернет пустой контекст."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Контекст участника секции получен", content = @Content(schema = @Schema(implementation = SectionMemberContextDTO.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Секция не найдена", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/me")
+    public ResponseEntity<SectionMemberContextDTO> getMyMemberContext(
+            @Parameter(description = "ID секции", required = true) @PathVariable @Positive Long sectionId) {
+        return ResponseEntity.ok(sectionService.getSectionMemberContext(sectionId));
+    }
+
+    @Operation(
             summary = "Покинуть секцию",
             description = "Текущий аутентифицированный пользователь покидает секцию. Лидер не может покинуть секцию, пока есть другие участники."
     )
@@ -124,4 +163,3 @@ public class SectionMemberController {
                   pageable));
    }
 }
-

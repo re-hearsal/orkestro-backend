@@ -8,7 +8,9 @@ import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepos
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.section.dto.SectionCreateRequestDTO;
 import io.github.Romariok.orkestro.section.dto.SectionDTO;
+import io.github.Romariok.orkestro.section.dto.SectionMemberContextDTO;
 import io.github.Romariok.orkestro.section.dto.SectionMemberDTO;
+import io.github.Romariok.orkestro.section.dto.SectionUpdateRequestDTO;
 import io.github.Romariok.orkestro.section.mapper.SectionMapper;
 import io.github.Romariok.orkestro.section.mapper.SectionMemberMapper;
 import io.github.Romariok.orkestro.section.models.Section;
@@ -17,7 +19,6 @@ import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.section.specification.SectionUserSpecifications;
 import io.github.Romariok.orkestro.event.repository.EventSectionRepository;
-import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.RolePermission;
@@ -55,12 +56,23 @@ public class SectionService {
     private final SectionUserRepository sectionUserRepository;
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
-    private final TaskRepository taskRepository;
     private final EventSectionRepository eventSectionRepository;
     private final SectionMapper sectionMapper;
     private final SectionMemberMapper sectionMemberMapper;
     private final RolePermissionRepository rolePermissionRepository;
     private final SecurityUtils securityUtils;
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMember(#organizationId)")
+    public List<SectionDTO> getSectionsByOrganization(Long organizationId) {
+        return sectionMapper.toDtoList(sectionRepository.findByOrganizationId(organizationId));
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMember(#organizationId)")
+    public List<SectionDTO> getSectionsByOrganizationId(Long organizationId) {
+        return getSectionsByOrganization(organizationId);
+    }
 
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMember(#organizationId)")
@@ -122,6 +134,49 @@ public class SectionService {
         ensureSectionBaseRoles(saved.getId());
         ensureCreatorMembershipAndLeaderRole(saved.getId());
         return sectionMapper.toDto(saved);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMemberBySectionId(#parentSectionId)")
+    public List<SectionDTO> getChildSections(Long parentSectionId) {
+        if (!sectionRepository.existsById(parentSectionId)) {
+            throw new EntityNotFoundException("Section not found: " + parentSectionId);
+        }
+
+        return sectionMapper.toDtoList(sectionRepository.findByParentSectionId(parentSectionId));
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMemberBySectionId(#sectionId)")
+    public SectionDTO getSectionById(Long sectionId) {
+        Section section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new EntityNotFoundException("Section not found: " + sectionId));
+        return sectionMapper.toDto(section);
+    }
+
+    @Transactional
+    @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_EDIT')")
+    public SectionDTO updateSection(Long sectionId, SectionUpdateRequestDTO request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Section update request must not be null");
+        }
+
+        Section section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new EntityNotFoundException("Section not found: " + sectionId));
+
+        if (request.getName() != null) {
+            String normalizedName = request.getName().trim();
+            if (normalizedName.isEmpty()) {
+                throw new IllegalArgumentException("Section name must not be blank");
+            }
+            section.setName(normalizedName);
+        }
+
+        if (request.getDescription() != null) {
+            section.setDescription(request.getDescription());
+        }
+
+        return sectionMapper.toDto(sectionRepository.save(section));
     }
 
     private void checkSectionDepth(Section parent) {
@@ -346,8 +401,6 @@ public class SectionService {
         for (Long id : idsToDelete) {
             sectionUserRepository.deleteBySectionId(id);
 
-            taskRepository.findBySectionId(id).forEach(taskRepository::delete);
-
             eventSectionRepository.deleteBySectionId(id);
 
             List<Role> sectionRoles = roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, id);
@@ -367,8 +420,19 @@ public class SectionService {
      * Available only to users with SECTION_MEMBER_ADD permission in the context of the section.
      */
     @Transactional
+    @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMemberBySectionId(#sectionId)")
+    public void joinCurrentUserToSection(Long sectionId) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        addUserToSectionInternal(sectionId, currentUserId);
+    }
+
+    @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasSectionPermission(#sectionId, 'SECTION_MEMBER_ADD')")
     public void addUserToSection(Long sectionId, Long userId) {
+        addUserToSectionInternal(sectionId, userId);
+    }
+
+    private void addUserToSectionInternal(Long sectionId, Long userId) {
         Section section = sectionRepository.findById(sectionId)
                 .orElseThrow(() -> new EntityNotFoundException("Section not found: " + sectionId));
 
@@ -427,7 +491,7 @@ public class SectionService {
     }
 
     @Transactional(readOnly = true)
-    @PreAuthorize("@organizationPermissionChecker.isSectionMember(#sectionId)")
+    @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMemberBySectionId(#sectionId)")
     public Page<SectionMemberDTO> searchMembers(
             Long sectionId,
             String query,
@@ -446,7 +510,75 @@ public class SectionService {
                 .and(SectionUserSpecifications.userHasAnySectionRole(sectionId, roleIds))
                 .and(SectionUserSpecifications.userHasAnyInstrument(instrumentIds));
 
-        return sectionUserRepository.findAll(spec, mappedPageable).map(sectionMemberMapper::toDto);
+        Page<SectionUser> memberships = sectionUserRepository.findAll(spec, mappedPageable);
+
+        List<Role> sectionRoles = roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId);
+        List<Long> sectionRoleIds = sectionRoles.stream().map(Role::getId).toList();
+        List<Long> memberUserIds = memberships.getContent().stream()
+                .map(this::resolveMemberUserId)
+                .toList();
+
+        Map<Long, Role> roleById = new HashMap<>();
+        for (Role role : sectionRoles) {
+            roleById.put(role.getId(), role);
+        }
+
+        Map<Long, Long> userToRoleId = new HashMap<>();
+        if (!sectionRoleIds.isEmpty() && !memberUserIds.isEmpty()) {
+            for (UserRole userRole : userRoleRepository.findByUserIdInAndRoleIdIn(memberUserIds, sectionRoleIds)) {
+                userToRoleId.putIfAbsent(userRole.getUserId(), userRole.getRoleId());
+            }
+        }
+
+        return memberships.map(sectionUser -> {
+            SectionMemberDTO dto = sectionMemberMapper.toDto(sectionUser);
+            Long assignedRoleId = userToRoleId.get(resolveMemberUserId(sectionUser));
+            if (assignedRoleId != null) {
+                Role role = roleById.get(assignedRoleId);
+                if (role != null) {
+                    dto.setRole(new SectionMemberDTO.RoleInfo(role.getId(), role.getName()));
+                }
+            }
+            return dto;
+        });
+    }
+
+    private Long resolveMemberUserId(SectionUser sectionUser) {
+        if (sectionUser.getUser() != null) {
+            return sectionUser.getUser().getId();
+        }
+        return sectionUser.getUserId();
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMemberBySectionId(#sectionId)")
+    public SectionMemberContextDTO getSectionMemberContext(Long sectionId) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+
+        sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new EntityNotFoundException("Section not found: " + sectionId));
+
+        List<Role> sectionRoles = roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId);
+        List<Long> sectionRoleIds = sectionRoles.stream().map(Role::getId).toList();
+
+        List<Role> userSectionRoles = userRoleRepository.findRolesByUserId(currentUserId).stream()
+                .filter(role -> sectionRoleIds.contains(role.getId()))
+                .toList();
+
+        Role primaryRole = userSectionRoles.isEmpty() ? null : userSectionRoles.get(0);
+        boolean isMember = sectionUserRepository.findBySectionIdAndUserId(sectionId, currentUserId).isPresent();
+
+        List<String> permissions = userSectionRoles.stream()
+                .flatMap(role -> rolePermissionRepository.findPermissionsByRoleId(role.getId()).stream())
+                .map(Permission::getCode)
+                .distinct()
+                .toList();
+
+        SectionMemberContextDTO.RoleInfo roleInfo = primaryRole == null
+                ? null
+                : new SectionMemberContextDTO.RoleInfo(primaryRole.getId(), primaryRole.getName());
+
+        return new SectionMemberContextDTO(isMember, roleInfo, permissions);
     }
 
     private Pageable mapSectionMemberSort(Pageable pageable) {

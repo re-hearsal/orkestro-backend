@@ -23,9 +23,7 @@ import io.github.Romariok.orkestro.section.models.SectionUser;
 import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.section.service.SectionService;
-import io.github.Romariok.orkestro.task.models.Task;
 import io.github.Romariok.orkestro.event.repository.EventSectionRepository;
-import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.user.models.Role;
 import io.github.Romariok.orkestro.user.models.UserRole;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
@@ -71,9 +69,6 @@ class SectionServiceTest {
 
         @Mock
         private RolePermissionRepository rolePermissionRepository;
-
-        @Mock
-        private TaskRepository taskRepository;
 
         @Mock
         private EventSectionRepository eventSectionRepository;
@@ -328,13 +323,11 @@ class SectionServiceTest {
                 when(sectionRepository.existsById(sectionId)).thenReturn(true);
                 when(sectionRepository.findByParentSectionId(sectionId)).thenReturn(List.of());
 
-                when(taskRepository.findBySectionId(sectionId)).thenReturn(List.of());
                 when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId)).thenReturn(List.of());
 
                 sectionService.deleteSection(sectionId);
 
                 verify(sectionUserRepository).deleteBySectionId(sectionId);
-                verify(taskRepository).findBySectionId(sectionId);
                 verify(roleRepository).findByScopeAndSectionId(RoleScopeType.SECTION, sectionId);
                 verify(sectionRepository).deleteAllById(List.of(sectionId));
         }
@@ -354,14 +347,6 @@ class SectionServiceTest {
                 when(sectionRepository.findByParentSectionId(rootId)).thenReturn(List.of(child));
                 when(sectionRepository.findByParentSectionId(childId)).thenReturn(List.of());
 
-                Task childTask = Task.builder()
-                                .id(50L)
-                                .sectionId(childId)
-                                .build();
-
-                when(taskRepository.findBySectionId(childId)).thenReturn(List.of(childTask));
-                when(taskRepository.findBySectionId(rootId)).thenReturn(List.of());
-
                 Role childRole = Role.builder()
                                 .id(200L)
                                 .scope(RoleScopeType.SECTION)
@@ -376,10 +361,6 @@ class SectionServiceTest {
 
                 verify(sectionUserRepository).deleteBySectionId(childId);
                 verify(sectionUserRepository).deleteBySectionId(rootId);
-
-                verify(taskRepository).findBySectionId(childId);
-                verify(taskRepository).findBySectionId(rootId);
-                verify(taskRepository).delete(childTask);
 
                 verify(roleRepository).findByScopeAndSectionId(RoleScopeType.SECTION, childId);
                 verify(roleRepository).findByScopeAndSectionId(RoleScopeType.SECTION, rootId);
@@ -608,7 +589,6 @@ class SectionServiceTest {
                 when(roleRepository.findByScopeAndSectionIdIn(eq(RoleScopeType.SECTION), any()))
                                 .thenReturn(List.of());
                 when(sectionUserRepository.countBySectionId(sectionId)).thenReturn(0L);
-                when(taskRepository.findBySectionId(sectionId)).thenReturn(List.of());
                 when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId)).thenReturn(List.of());
 
                 sectionService.removeUserFromSection(sectionId, userId);
@@ -692,7 +672,6 @@ class SectionServiceTest {
                 when(roleRepository.findByScopeAndSectionIdIn(eq(RoleScopeType.SECTION), any()))
                                 .thenReturn(List.of());
                 when(sectionUserRepository.countBySectionId(sectionId)).thenReturn(0L);
-                when(taskRepository.findBySectionId(sectionId)).thenReturn(List.of());
                 when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId)).thenReturn(List.of());
 
                 sectionService.leaveCurrentSection(sectionId);
@@ -852,6 +831,7 @@ class SectionServiceTest {
         void searchMembers_blankQuery_returnsAll() {
                 Long sectionId = 10L;
                 when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId)).thenReturn(List.of());
 
                 SectionUser membership = new SectionUser();
                 membership.setSectionId(sectionId);
@@ -864,7 +844,8 @@ class SectionServiceTest {
                                 .thenReturn(page);
                 when(sectionMemberMapper.toDto(any(SectionUser.class)))
                                 .thenReturn(new io.github.Romariok.orkestro.section.dto.SectionMemberDTO(
-                                                100L, "u", "User", 1L, java.time.Instant.parse("2026-01-01T00:00:00Z")));
+                                                100L, "u", "User", 1L, java.time.Instant.parse("2026-01-01T00:00:00Z"),
+                                                null));
 
                 Page<io.github.Romariok.orkestro.section.dto.SectionMemberDTO> result = sectionService.searchMembers(
                                 sectionId, "   ", List.of(), List.of(), PageRequest.of(0, 20));
@@ -959,7 +940,6 @@ class SectionServiceTest {
                 when(roleRepository.findByScopeAndSectionIdIn(eq(RoleScopeType.SECTION), any()))
                                 .thenReturn(List.of());
                 when(sectionUserRepository.countBySectionId(sectionId)).thenReturn(0L);
-                when(taskRepository.findBySectionId(sectionId)).thenReturn(List.of());
                 when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId)).thenReturn(List.of());
 
                 sectionService.leaveCurrentSection(sectionId);
@@ -972,6 +952,7 @@ class SectionServiceTest {
         void searchMembers_sortByJoinedAt_mapsSortToMembership() {
                 Long sectionId = 10L;
                 when(sectionRepository.existsById(sectionId)).thenReturn(true);
+                when(roleRepository.findByScopeAndSectionId(RoleScopeType.SECTION, sectionId)).thenReturn(List.of());
 
                 when(sectionUserRepository.findAll(
                                 org.mockito.Mockito.<org.springframework.data.jpa.domain.Specification<SectionUser>>any(),

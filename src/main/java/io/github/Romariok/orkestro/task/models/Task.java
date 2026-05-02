@@ -39,9 +39,6 @@ public class Task {
     @Column(name = "organization_id", nullable = false)
     private Long organizationId;
 
-    @Column(name = "section_id")
-    private Long sectionId;
-
     @Column(name = "title", nullable = false)
     private String title;
 

@@ -12,13 +12,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface TaskRepository extends JpaRepository<Task, Long> {
 
-    List<Task> findBySectionId(Long sectionId);
-
     List<Task> findByOrganizationId(Long organizationId);
 
     List<Task> findByOrganizationIdAndStatusIn(Long organizationId, Collection<TaskStatus> statuses);
-
-    List<Task> findBySectionIdAndStatusIn(Long sectionId, Collection<TaskStatus> statuses);
 
     Page<Task> findByOrganizationIdAndStatusIn(
             Long organizationId, Collection<TaskStatus> statuses, Pageable pageable);

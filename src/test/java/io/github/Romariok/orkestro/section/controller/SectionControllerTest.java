@@ -50,12 +50,4 @@ class SectionControllerTest {
         assertEquals(HttpStatus.NO_CONTENT, result.getStatusCode());
     }
 
-    @Test
-    void leaveSection_returnsNoContent() {
-        doNothing().when(sectionService).leaveCurrentSection(2L);
-
-        var result = sectionController.leaveSection(2L);
-
-        assertEquals(HttpStatus.NO_CONTENT, result.getStatusCode());
-    }
 }

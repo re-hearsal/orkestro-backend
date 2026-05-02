@@ -18,7 +18,6 @@ public class TaskDTO {
 
     private Long id;
     private Long organizationId;
-    private Long sectionId;
     private String title;
     private String description;
     private Long authorUserId;

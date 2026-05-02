@@ -114,7 +114,6 @@ public class TaskService {
             Instant now = Instant.now();
             Task task = Task.builder()
                     .organizationId(organization.getId())
-                    .sectionId(null)
                     .title(request.getTitle().trim())
                     .description(request.getDescription())
                     .authorUserId(authorUserId)

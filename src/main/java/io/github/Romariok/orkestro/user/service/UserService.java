@@ -2,6 +2,7 @@ package io.github.Romariok.orkestro.user.service;
 
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.dto.CurrentUserResponseDTO;
+import io.github.Romariok.orkestro.user.dto.PublicUserProfileDTO;
 import io.github.Romariok.orkestro.user.dto.UserProfileUpdateRequestDTO;
 import io.github.Romariok.orkestro.user.models.Permission;
 import io.github.Romariok.orkestro.user.models.Role;
@@ -99,6 +100,16 @@ public class UserService implements UserDetailsService {
    @Transactional(readOnly = true)
    public boolean existsByUsername(String username) {
       return userRepository.existsByUsername(username);
+   }
+
+   @Transactional(readOnly = true)
+   public PublicUserProfileDTO getPublicUserProfile(Long userId) {
+      User user = userRepository.findById(userId)
+            .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+      return new PublicUserProfileDTO(
+            user.getId(), user.getUsername(), user.getName(), user.getEmail(),
+            user.getLocation(), user.getBirthDate(), user.getPreferredLanguage(),
+            user.getProfileImageFileId(), null);
    }
 
    @Transactional(readOnly = true)

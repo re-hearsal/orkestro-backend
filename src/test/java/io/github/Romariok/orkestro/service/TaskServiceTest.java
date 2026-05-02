@@ -198,7 +198,6 @@ class TaskServiceTest {
                         TaskDTO dto = new TaskDTO();
                         dto.setId(task.getId());
                         dto.setOrganizationId(task.getOrganizationId());
-                        dto.setSectionId(task.getSectionId());
                         dto.setTitle(task.getTitle());
                         dto.setDescription(task.getDescription());
                         dto.setAuthorUserId(task.getAuthorUserId());
