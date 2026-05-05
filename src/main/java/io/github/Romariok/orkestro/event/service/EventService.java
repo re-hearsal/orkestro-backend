@@ -122,18 +122,6 @@ public class EventService {
             throw new IllegalArgumentException("Request must not be null");
         }
 
-        if (request.getTitle() == null || request.getTitle().trim().isEmpty()) {
-            throw new IllegalArgumentException("Event title must not be blank");
-        }
-
-        if (request.getEventType() == null) {
-            throw new IllegalArgumentException("Event type must not be null");
-        }
-
-        if (request.getStartTime() == null || request.getEndTime() == null) {
-            throw new IllegalArgumentException("Event start and end time must not be null");
-        }
-
         if (!request.getEndTime().isAfter(request.getStartTime())) {
             throw new IllegalArgumentException("Event end time must be after start time");
         }

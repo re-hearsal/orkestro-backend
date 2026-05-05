@@ -10,4 +10,6 @@ import io.github.Romariok.orkestro.task.models.TaskComment;
 public interface TaskCommentRepository extends JpaRepository<TaskComment, Long> {
 
     List<TaskComment> findByTaskId(Long taskId);
+
+    void deleteByTaskId(Long taskId);
 }

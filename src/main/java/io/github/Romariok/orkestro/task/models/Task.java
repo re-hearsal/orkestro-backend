@@ -70,4 +70,11 @@ public class Task {
 
     @Column(name = "closed_at")
     private Instant closedAt;
+
+    @Column(name = "deadline")
+    private Instant deadline;
+
+    @ColumnDefault("false")
+    @Column(name = "deadline_notified", nullable = false)
+    private boolean deadlineNotified;
 }

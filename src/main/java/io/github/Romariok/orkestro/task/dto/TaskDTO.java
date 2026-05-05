@@ -20,13 +20,14 @@ public class TaskDTO {
     private Long organizationId;
     private String title;
     private String description;
-    private Long authorUserId;
-    private List<TaskAssigneeDTO> assignees;
+    private TaskUserInfoDTO author;
+    private List<TaskUserInfoDTO> assignees;
     private TaskStatus status;
     private TaskVisibility visibility;
     private Instant createdAt;
     private Instant updatedAt;
     private Instant closedAt;
+    private Instant deadline;
 
     private List<Long> fileIds;
     private List<TaskCommentDTO> comments;

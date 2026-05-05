@@ -688,4 +688,52 @@ public class TaskController {
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(taskService.getAvailableTasksForCurrentUser(organizationId, pageable));
     }
+
+    @Operation(
+            summary = "Получить задачу по ID",
+            description = "Возвращает полную информацию о задаче для пользователя, имеющего к ней доступ."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Задача найдена",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = TaskDTO.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Нет доступа к задаче",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Задача не найдена",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/{taskId}")
+    public ResponseEntity<TaskDTO> getTaskById(
+            @Parameter(description = "ID организации", required = true, example = "1")
+            @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID задачи", required = true, example = "1")
+            @PathVariable @Positive Long taskId) {
+        return ResponseEntity.ok(taskService.getTaskById(organizationId, taskId));
+    }
+
+    @Operation(
+            summary = "Удалить задачу",
+            description = "Удаляет задачу. Доступно автору задачи или участнику с правом TASK_MANAGE."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Задача успешно удалена"),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Нет прав для удаления задачи",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Задача не найдена",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @DeleteMapping("/{taskId}")
+    public ResponseEntity<Void> deleteTask(
+            @Parameter(description = "ID организации", required = true, example = "1")
+            @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID задачи", required = true, example = "1")
+            @PathVariable @Positive Long taskId) {
+        taskService.deleteTask(organizationId, taskId);
+        return ResponseEntity.noContent().build();
+    }
 }

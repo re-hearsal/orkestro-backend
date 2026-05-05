@@ -135,6 +135,7 @@ public class OrgFundService {
                 .description(t.getDescription())
                 .performedByUserId(t.getPerformedByUserId())
                 .performedByName(performer != null ? performer.getName() : null)
+                .performedByProfileImageFileId(performer != null ? performer.getProfileImageFileId() : null)
                 .createdAt(t.getCreatedAt())
                 .build();
     }

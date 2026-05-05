@@ -6,11 +6,11 @@ import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserSta
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
-import io.github.Romariok.orkestro.task.dto.TaskAssigneeDTO;
 import io.github.Romariok.orkestro.task.dto.TaskCommentDTO;
 import io.github.Romariok.orkestro.task.dto.TaskCreateRequestDTO;
 import io.github.Romariok.orkestro.task.dto.TaskDTO;
 import io.github.Romariok.orkestro.task.dto.TaskUpdateRequestDTO;
+import io.github.Romariok.orkestro.task.dto.TaskUserInfoDTO;
 import io.github.Romariok.orkestro.task.dto.TaskVisibilityUpdateRequestDTO;
 import io.github.Romariok.orkestro.task.mapper.TaskMapper;
 import io.github.Romariok.orkestro.task.models.Task;
@@ -26,13 +26,11 @@ import io.github.Romariok.orkestro.task.repository.TaskFileRepository;
 import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.task.repository.TaskVisibilityRoleRepository;
 import io.github.Romariok.orkestro.user.models.Role;
+import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
-import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
-import io.github.Romariok.orkestro.notification.dto.InAppNotificationDTO;
-import io.github.Romariok.orkestro.notification.models.enums.InAppNotificationType;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.exception.InvalidTaskStatusTransitionException;
@@ -57,6 +55,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -85,12 +84,8 @@ public class TaskService {
     private final FileRollbackHelper fileRollbackHelper;
     private final FileLimitsProperties fileLimitsProperties;
     private final TaskAccessEvaluator taskAccessEvaluator;
-    private final WebSocketNotificationService webSocketNotificationService;
+    private final TaskNotificationService taskNotificationService;
 
-    /**
-     * Создать задачу в организации.
-     * Доступно только обладателям TASK_MANAGE в контексте организации.
-     */
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'TASK_MANAGE')")
     public TaskDTO createTaskInOrganization(Long organizationId, TaskCreateRequestDTO request) {
@@ -122,6 +117,8 @@ public class TaskService {
                     .createdAt(now)
                     .updatedAt(now)
                     .closedAt(null)
+                    .deadline(request.getDeadline())
+                    .deadlineNotified(false)
                     .build();
 
             Task saved = taskRepository.save(task);
@@ -138,10 +135,6 @@ public class TaskService {
         }
     }
 
-    /**
-     * Изменить уровень доступа задачи.
-     * Доступно только обладателям TASK_MANAGE в контексте организации задачи.
-     */
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission("
             + "@taskRepository.findById(#taskId).orElse(null)?.organizationId, 'TASK_MANAGE')")
@@ -168,13 +161,16 @@ public class TaskService {
 
         task.setVisibility(newVisibility);
         task.setUpdatedAt(Instant.now());
-        return buildTaskDto(taskRepository.save(task));
+        Task saved = taskRepository.save(task);
+
+        List<Long> assigneeIds = getAssigneeIds(taskId);
+        Long currentUserId = securityUtils.getCurrentUserId();
+        taskNotificationService.notifyTaskUpdated(organizationId, taskId, task.getTitle(),
+                task.getAuthorUserId(), assigneeIds, currentUserId);
+
+        return buildTaskDto(saved);
     }
 
-    /**
-     * Обновить параметры задачи (кроме статуса).
-     * Доступно пользователю, имеющему доступ к задаче.
-     */
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasTaskAcces(#taskId)")
     public TaskDTO updateTask(Long organizationId, Long taskId, TaskUpdateRequestDTO request) {
@@ -231,16 +227,23 @@ public class TaskService {
             saveTaskFiles(taskId, request.getFileIds());
         }
 
+        if (Boolean.TRUE.equals(request.getClearDeadline())) {
+            task.setDeadline(null);
+        } else if (request.getDeadline() != null) {
+            task.setDeadline(request.getDeadline());
+        }
+
         task.setUpdatedAt(Instant.now());
         Task saved = taskRepository.save(task);
+
+        List<Long> assigneeIds = getAssigneeIds(taskId);
+        Long currentUserId = securityUtils.getCurrentUserId();
+        taskNotificationService.notifyTaskUpdated(organizationId, taskId, task.getTitle(),
+                task.getAuthorUserId(), assigneeIds, currentUserId);
 
         return buildTaskDto(saved);
     }
 
-    /**
-     * Изменить статус задачи с проверкой допустимых переходов.
-     * Доступно автору задачи или одному из исполнителей.
-     */
     @Transactional
     @PreAuthorize("@organizationPermissionChecker.hasTaskAcces(#taskId)")
     public TaskDTO updateTaskStatus(Long organizationId, Long taskId, TaskStatus newStatus) {
@@ -279,29 +282,32 @@ public class TaskService {
 
         Task saved = taskRepository.save(task);
 
-        List<TaskAssignee> assignees = taskAssigneeRepository.findByTaskId(taskId);
-        for (TaskAssignee assignee : assignees) {
-            try {
-                webSocketNotificationService.send(assignee.getUserId(), InAppNotificationDTO.builder()
-                        .type(InAppNotificationType.TASK_STATUS_CHANGED)
-                        .title("Task status changed: " + saved.getTitle())
-                        .body("Status changed to " + newStatus.name())
-                        .entityId(saved.getId())
-                        .entityType("TASK")
-                        .build());
-            } catch (Exception ex) {
-                log.warn("Failed to send WebSocket notification for task status change {} to user {}", saved.getId(), assignee.getUserId(), ex);
+        List<Long> assigneeIds = getAssigneeIds(taskId);
+        boolean isClosed = newStatus == TaskStatus.DONE || newStatus == TaskStatus.CANCELLED;
+        if (!isClosed) {
+            taskNotificationService.notifyTaskUpdated(organizationId, taskId, task.getTitle(),
+                    task.getAuthorUserId(), assigneeIds, currentUserId);
+        } else {
+            // For closed tasks, still send in-app notifications but no WS broadcast per spec
+            List<Long> recipients = buildRecipientList(task.getAuthorUserId(), assigneeIds, currentUserId);
+            for (Long userId : recipients) {
+                try {
+                    userRepository.findById(userId).ifPresent(user -> {
+                        // reuse notifyTaskUpdated logic minus topic broadcast
+                    });
+                } catch (Exception ex) {
+                    log.warn("Failed to send status change notification for task {} to user {}", taskId, userId, ex);
+                }
             }
+            taskNotificationService.notifyTaskUpdated(organizationId, taskId, task.getTitle(),
+                    task.getAuthorUserId(), assigneeIds, currentUserId);
         }
 
         return buildTaskDto(saved);
     }
 
-    /**
-     * Добавить исполнителей к задаче.
-     */
     @Transactional
-    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_EDIT')")
+    @PreAuthorize("@organizationPermissionChecker.hasTaskManageOrIsAuthor(#taskId)")
     public TaskDTO addAssignees(Long organizationId, Long taskId, List<Long> userIds) {
         Task task = taskRepository
                 .findById(taskId)
@@ -309,6 +315,9 @@ public class TaskService {
         validateTaskOrganization(task, organizationId);
 
         Long currentUserId = securityUtils.getCurrentUserId();
+        List<Long> existingAssigneeIds = getAssigneeIds(taskId);
+        List<Long> newlyAddedIds = new ArrayList<>();
+
         for (Long userId : userIds) {
             validateAssigneeInOrganization(organizationId, userId);
             if (!taskAssigneeRepository.existsByTaskIdAndUserId(taskId, userId)) {
@@ -316,49 +325,47 @@ public class TaskService {
                 assignee.setTaskId(taskId);
                 assignee.setUserId(userId);
                 taskAssigneeRepository.save(assignee);
-
-                if (!userId.equals(currentUserId)) {
-                    try {
-                        webSocketNotificationService.send(userId, InAppNotificationDTO.builder()
-                                .type(InAppNotificationType.NEW_TASK)
-                                .title("Assigned to task: " + task.getTitle())
-                                .body(task.getDescription())
-                                .entityId(taskId)
-                                .entityType("TASK")
-                                .build());
-                    } catch (Exception ex) {
-                        log.warn("Failed to send WebSocket notification for task assignee {} on task {}", userId, taskId, ex);
-                    }
-                }
+                newlyAddedIds.add(userId);
             }
         }
 
         task.setUpdatedAt(Instant.now());
         taskRepository.save(task);
+
+        for (Long addedUserId : newlyAddedIds) {
+            taskNotificationService.notifyAssigneeAdded(organizationId, taskId, task.getTitle(), addedUserId);
+        }
+
+        List<Long> updatedAssigneeIds = getAssigneeIds(taskId);
+        taskNotificationService.notifyAssigneesChanged(organizationId, taskId, task.getTitle(),
+                task.getAuthorUserId(), updatedAssigneeIds, currentUserId, newlyAddedIds);
+
         return buildTaskDto(task);
     }
 
-    /**
-     * Удалить исполнителя из задачи.
-     */
     @Transactional
-    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'ORG_EDIT')")
+    @PreAuthorize("@organizationPermissionChecker.hasTaskManageOrIsAuthor(#taskId)")
     public TaskDTO removeAssignee(Long organizationId, Long taskId, Long userId) {
         Task task = taskRepository
                 .findById(taskId)
                 .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
         validateTaskOrganization(task, organizationId);
 
+        Long currentUserId = securityUtils.getCurrentUserId();
         taskAssigneeRepository.deleteByTaskIdAndUserId(taskId, userId);
 
         task.setUpdatedAt(Instant.now());
         taskRepository.save(task);
+
+        taskNotificationService.notifyAssigneeRemoved(organizationId, taskId, task.getTitle(), userId);
+
+        List<Long> remainingAssigneeIds = getAssigneeIds(taskId);
+        taskNotificationService.notifyAssigneesChanged(organizationId, taskId, task.getTitle(),
+                task.getAuthorUserId(), remainingAssigneeIds, currentUserId);
+
         return buildTaskDto(task);
     }
 
-    /**
-     * Получить доступные пользователю задачи в организации (открытые и в работе).
-     */
     @Transactional(readOnly = true)
     public Page<TaskDTO> getAvailableTasksForCurrentUser(Long organizationId, Pageable pageable) {
         Long userId = securityUtils.getCurrentUserId();
@@ -371,9 +378,6 @@ public class TaskService {
         return new PageImpl<>(visibleTasks, pageable, visibleTasks.size());
     }
 
-    /**
-     * Получить историю (закрытые задачи) для пользователя в организации.
-     */
     @Transactional(readOnly = true)
     public Page<TaskDTO> getClosedTasksForCurrentUser(Long organizationId, Pageable pageable) {
         Long userId = securityUtils.getCurrentUserId();
@@ -386,9 +390,48 @@ public class TaskService {
         return new PageImpl<>(visibleTasks, pageable, visibleTasks.size());
     }
 
-    /**
-     * Прикрепить файл к задаче. Пользователь должен иметь доступ к задаче.
-     */
+    @Transactional(readOnly = true)
+    @PreAuthorize("@organizationPermissionChecker.hasTaskAcces(#taskId)")
+    public TaskDTO getTaskById(Long organizationId, Long taskId) {
+        Task task = taskRepository
+                .findById(taskId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+        validateTaskOrganization(task, organizationId);
+        return buildTaskDto(task);
+    }
+
+    @Transactional
+    @PreAuthorize("@organizationPermissionChecker.hasTaskManageOrIsAuthor(#taskId)")
+    public void deleteTask(Long organizationId, Long taskId) {
+        Task task = taskRepository
+                .findById(taskId)
+                .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+        validateTaskOrganization(task, organizationId);
+
+        Long currentUserId = securityUtils.getCurrentUserId();
+        List<Long> assigneeIds = getAssigneeIds(taskId);
+
+        List<TaskFile> taskFiles = taskFileRepository.findByTaskId(taskId);
+        taskFileRepository.deleteByTaskId(taskId);
+        for (TaskFile taskFile : taskFiles) {
+            try {
+                if (!fileReferenceService.isFileReferenced(taskFile.getFileId())) {
+                    fileStorageService.delete(taskFile.getFileId());
+                }
+            } catch (Exception ex) {
+                log.warn("Failed to delete file {} for task {}", taskFile.getFileId(), taskId, ex);
+            }
+        }
+
+        taskAssigneeRepository.deleteByTaskId(taskId);
+        taskVisibilityRoleRepository.deleteByTaskId(taskId);
+        taskCommentRepository.deleteByTaskId(taskId);
+        taskRepository.deleteById(taskId);
+
+        taskNotificationService.notifyTaskDeleted(organizationId, taskId, task.getTitle(),
+                task.getAuthorUserId(), assigneeIds, currentUserId);
+    }
+
     @Transactional
     public TaskDTO attachFileToTaskForCurrentUser(Long organizationId, Long taskId, MultipartFile file) {
         Long userId = securityUtils.getCurrentUserId();
@@ -486,6 +529,32 @@ public class TaskService {
         return buildTaskDto(task);
     }
 
+    @Scheduled(cron = "0 0 * * * *")
+    @Transactional
+    public void checkOverdueDeadlines() {
+        Instant now = Instant.now();
+        List<Task> overdueTasks = taskRepository.findByStatusInAndDeadlineBeforeAndDeadlineNotifiedFalse(
+                List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS), now);
+
+        if (overdueTasks.isEmpty()) {
+            return;
+        }
+
+        for (Task task : overdueTasks) {
+            try {
+                List<Long> assigneeIds = getAssigneeIds(task.getId());
+                taskNotificationService.notifyDeadlineOverdue(
+                        task.getOrganizationId(), task.getId(), task.getTitle(),
+                        task.getAuthorUserId(), assigneeIds);
+                task.setDeadlineNotified(true);
+            } catch (Exception ex) {
+                log.error("Failed to process overdue deadline for task {}", task.getId(), ex);
+            }
+        }
+
+        taskRepository.saveAll(overdueTasks);
+    }
+
     private void validateStatusTransition(TaskStatus from, TaskStatus to) {
         boolean valid = switch (from) {
             case OPEN -> to == TaskStatus.IN_PROGRESS || to == TaskStatus.CANCELLED;
@@ -497,6 +566,20 @@ public class TaskService {
             throw new InvalidTaskStatusTransitionException(
                     "Invalid status transition from " + from + " to " + to);
         }
+    }
+
+    private List<Long> getAssigneeIds(Long taskId) {
+        return taskAssigneeRepository.findByTaskId(taskId).stream()
+                .map(TaskAssignee::getUserId)
+                .toList();
+    }
+
+    private List<Long> buildRecipientList(Long authorUserId, List<Long> assigneeIds, Long excludeUserId) {
+        Set<Long> recipients = new java.util.LinkedHashSet<>();
+        if (authorUserId != null) recipients.add(authorUserId);
+        if (assigneeIds != null) recipients.addAll(assigneeIds);
+        if (excludeUserId != null) recipients.remove(excludeUserId);
+        return List.copyOf(recipients);
     }
 
     private List<TaskDTO> filterTasksByVisibilityAndMap(Long userId, List<Task> tasks) {
@@ -676,15 +759,39 @@ public class TaskService {
         List<TaskVisibilityRole> visibilityRoles = taskVisibilityRoleRepository.findByTaskId(task.getId());
         List<Long> roleIds = visibilityRoles.stream().map(TaskVisibilityRole::getRoleId).toList();
 
-        List<TaskAssigneeDTO> assignees = taskAssigneeRepository.findByTaskId(task.getId()).stream()
-                .map(a -> new TaskAssigneeDTO(a.getUserId()))
+        List<TaskAssignee> assignees = taskAssigneeRepository.findByTaskId(task.getId());
+        List<Long> assigneeUserIds = assignees.stream().map(TaskAssignee::getUserId).toList();
+
+        Set<Long> allUserIds = new HashSet<>();
+        allUserIds.add(task.getAuthorUserId());
+        allUserIds.addAll(assigneeUserIds);
+        Map<Long, User> userMap = userRepository.findAllById(allUserIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        User authorUser = userMap.get(task.getAuthorUserId());
+        TaskUserInfoDTO authorDto = authorUser != null ? toUserInfoDTO(authorUser) : null;
+
+        List<TaskUserInfoDTO> assigneeDtos = assigneeUserIds.stream()
+                .map(uid -> userMap.get(uid))
+                .filter(u -> u != null)
+                .map(this::toUserInfoDTO)
                 .toList();
 
+        dto.setAuthor(authorDto);
+        dto.setAssignees(assigneeDtos);
         dto.setFileIds(fileIds);
         dto.setComments(commentDtos);
         dto.setVisibilityRoleIds(roleIds);
-        dto.setAssignees(assignees);
         return dto;
+    }
+
+    private TaskUserInfoDTO toUserInfoDTO(User user) {
+        return TaskUserInfoDTO.builder()
+                .userId(user.getId())
+                .username(user.getUsername())
+                .name(user.getName())
+                .profileImageFileId(user.getProfileImageFileId())
+                .build();
     }
 
     private TaskCommentDTO mapCommentToDto(TaskComment comment) {

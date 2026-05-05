@@ -2,6 +2,7 @@ package io.github.Romariok.orkestro.task.repository;
 
 import io.github.Romariok.orkestro.task.models.Task;
 import io.github.Romariok.orkestro.task.models.enums.TaskStatus;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,4 +19,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     Page<Task> findByOrganizationIdAndStatusIn(
             Long organizationId, Collection<TaskStatus> statuses, Pageable pageable);
+
+    List<Task> findByStatusInAndDeadlineBeforeAndDeadlineNotifiedFalse(
+            Collection<TaskStatus> statuses, Instant deadline);
 }

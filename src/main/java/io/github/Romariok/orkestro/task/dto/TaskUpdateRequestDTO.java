@@ -1,9 +1,11 @@
 package io.github.Romariok.orkestro.task.dto;
 
 import io.github.Romariok.orkestro.task.models.enums.TaskVisibility;
+import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,4 +38,12 @@ public class TaskUpdateRequestDTO {
      */
     @Size(max = 50)
     private List<@NotNull @Positive Long> fileIds;
+
+    @Future
+    private Instant deadline;
+
+    /**
+     * Если true — явно снять дедлайн (установить null), иначе поле deadline игнорируется при null.
+     */
+    private Boolean clearDeadline;
 }

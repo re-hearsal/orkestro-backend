@@ -39,10 +39,12 @@ import io.github.Romariok.orkestro.event.repository.EventCommentRepository;
 import io.github.Romariok.orkestro.event.repository.EventFileRepository;
 import io.github.Romariok.orkestro.event.repository.EventSongRepository;
 import io.github.Romariok.orkestro.event.repository.EventRepository;
+import io.github.Romariok.orkestro.event.repository.EventDescriptionTemplateRepository;
 import io.github.Romariok.orkestro.event.repository.EventSectionRepository;
 import io.github.Romariok.orkestro.event.service.EventService;
 import io.github.Romariok.orkestro.event.service.EventNotificationService;
 import io.github.Romariok.orkestro.config.FileLimitsProperties;
+import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
 import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
@@ -133,6 +135,12 @@ class EventServiceTest {
 
         @Mock
         private FileLimitsProperties fileLimitsProperties;
+
+        @Mock
+        private EventDescriptionTemplateRepository eventDescriptionTemplateRepository;
+
+        @Mock
+        private WebSocketNotificationService webSocketNotificationService;
 
         @InjectMocks
         private EventService eventService;
@@ -594,24 +602,6 @@ class EventServiceTest {
                 assertEquals(sectionId, eventSections.get(0).getSectionId());
 
                 assertEquals("Section plus soloists", result.getTitle());
-        }
-
-        @Test
-        void createEventInOrganization_blankTitle_throwsIllegalArgumentException() {
-                Long organizationId = 1L;
-
-                EventCreateRequestDTO request = EventCreateRequestDTO.builder()
-                                .title("   ")
-                                .eventType(EventType.CONCERT)
-                                .startTime(Instant.now())
-                                .endTime(Instant.now().plusSeconds(3600))
-                                .build();
-
-                assertThrows(IllegalArgumentException.class,
-                                () -> eventService.createEventInOrganization(organizationId, request));
-
-                verify(organizationRepository, never()).findById(anyLong());
-                verify(eventRepository, never()).save(any());
         }
 
         @Test

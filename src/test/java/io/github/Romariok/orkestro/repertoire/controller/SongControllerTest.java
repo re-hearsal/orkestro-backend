@@ -34,7 +34,7 @@ class SongControllerTest {
 
     private SongDTO buildSong(Long id, String title) {
         return new SongDTO(id, 1L, title, "Composer", 300, null, null,
-                Instant.parse("2026-01-01T00:00:00Z"), List.of(), List.of(), List.of(), List.of());
+                Instant.parse("2026-01-01T00:00:00Z"), List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     @Test
@@ -43,7 +43,7 @@ class SongControllerTest {
         when(repertoireService.createSong(eq(1L), any(SongCreateRequestDTO.class))).thenReturn(created);
         SongCreateRequestDTO request = new SongCreateRequestDTO(
                 "Bohemian Rhapsody", "Freddie Mercury", 354, null, null,
-                List.of(), List.of(), List.of(), List.of());
+                List.<io.github.Romariok.orkestro.repertoire.dto.SongInstrumentDTO>of(), List.of(), List.of());
 
         var result = songController.createSong(1L, request);
 
@@ -57,7 +57,7 @@ class SongControllerTest {
         SongDTO updated = buildSong(1L, "New Title");
         when(repertoireService.updateSong(eq(1L), eq(1L), any(SongUpdateRequestDTO.class))).thenReturn(updated);
         SongUpdateRequestDTO request = new SongUpdateRequestDTO("New Title", null, null, null, null,
-                null, null, null, null);
+                null, null, null);
 
         var result = songController.updateSong(1L, 1L, request);
 

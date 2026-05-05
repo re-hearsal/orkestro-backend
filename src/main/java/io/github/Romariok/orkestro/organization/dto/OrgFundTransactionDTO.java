@@ -19,5 +19,6 @@ public class OrgFundTransactionDTO {
     private String description;
     private Long performedByUserId;
     private String performedByName;
+    private Long performedByProfileImageFileId;
     private Instant createdAt;
 }

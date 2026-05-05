@@ -96,6 +96,20 @@ public class OrganizationPermissionChecker {
       return hasPermission(RoleScopeType.SECTION, sectionId, permissionCode);
    }
 
+   public boolean hasTaskManageOrIsAuthor(Long taskId) {
+      if (taskId == null || taskId <= 0) return false;
+      Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new EntityNotFoundException("Task not found: " + taskId));
+      Long userId;
+      try {
+         userId = securityUtils.getCurrentUserId();
+      } catch (SecurityException ex) {
+         return false;
+      }
+      if (task.getAuthorUserId().equals(userId)) return true;
+      return hasOrganizationPermission(task.getOrganizationId(), "TASK_MANAGE");
+   }
+
    public boolean hasTaskAcces(Long taskId) {
       if (taskId == null || taskId <= 0) {
          return false;

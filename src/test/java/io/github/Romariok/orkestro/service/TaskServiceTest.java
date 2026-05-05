@@ -121,7 +121,7 @@ class TaskServiceTest {
         private TaskAccessEvaluator taskAccessEvaluator;
 
         @Mock
-        private io.github.Romariok.orkestro.notification.WebSocketNotificationService webSocketNotificationService;
+        private io.github.Romariok.orkestro.task.service.TaskNotificationService taskNotificationService;
 
         @InjectMocks
         private TaskService taskService;
@@ -131,6 +131,8 @@ class TaskServiceTest {
                 lenient().when(fileLimitsProperties.getTaskMaxFiles()).thenReturn(50);
                 lenient().when(taskAssigneeRepository.findByTaskId(anyLong())).thenReturn(List.of());
                 lenient().when(taskAssigneeRepository.findByTaskIdIn(any())).thenReturn(List.of());
+                lenient().when(securityUtils.getCurrentUserId()).thenReturn(10L);
+                lenient().when(userRepository.findAllById(any())).thenReturn(List.of());
                 lenient().when(taskAccessEvaluator.hasTaskAccess(anyLong(), any(), any(), any(), any()))
                                 .thenAnswer(invocation -> {
                                         Long userId = invocation.getArgument(0);
@@ -164,7 +166,7 @@ class TaskServiceTest {
                                 "files", "task-audio.mp3", "audio/mpeg", "audio".getBytes());
 
                 TaskCreateRequestDTO request = new TaskCreateRequestDTO(
-                                "Title", "Desc", TaskVisibility.ALL_MEMBERS, null, List.of(first, second));
+                                "Title", "Desc", TaskVisibility.ALL_MEMBERS, null, null, List.of(first, second));
 
                 Organization organization = Organization.builder()
                                 .id(organizationId)
@@ -200,7 +202,6 @@ class TaskServiceTest {
                         dto.setOrganizationId(task.getOrganizationId());
                         dto.setTitle(task.getTitle());
                         dto.setDescription(task.getDescription());
-                        dto.setAuthorUserId(task.getAuthorUserId());
                         dto.setStatus(task.getStatus());
                         dto.setVisibility(task.getVisibility());
                         dto.setCreatedAt(task.getCreatedAt());
@@ -225,14 +226,13 @@ class TaskServiceTest {
                 assertEquals(currentUserId, persisted.getAuthorUserId());
 
                 assertEquals("Title", result.getTitle());
-                assertEquals(currentUserId, result.getAuthorUserId());
                 verify(taskFileRepository).saveAll(any());
         }
 
         @Test
         void createTaskInOrganization_blankTitle_throwsIllegalArgumentException() {
                 Long organizationId = 1L;
-                TaskCreateRequestDTO request = new TaskCreateRequestDTO("   ", "Desc", null, null, null);
+                TaskCreateRequestDTO request = new TaskCreateRequestDTO("   ", "Desc", null, null, null, null);
 
                 assertThrows(
                                 IllegalArgumentException.class,
@@ -659,7 +659,7 @@ class TaskServiceTest {
                                 "files", "task-note.pdf", "application/pdf", "pdf".getBytes());
 
                 TaskCreateRequestDTO request = new TaskCreateRequestDTO(
-                                "Title", "Desc", TaskVisibility.ALL_MEMBERS, null, List.of(first));
+                                "Title", "Desc", TaskVisibility.ALL_MEMBERS, null, null, List.of(first));
                 Organization organization = Organization.builder().id(organizationId).name("Org").location("City").build();
 
                 when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(organization));

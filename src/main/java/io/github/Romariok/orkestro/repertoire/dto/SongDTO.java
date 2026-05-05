@@ -32,4 +32,5 @@ public class SongDTO {
    private List<String> tags;
    private List<Long> sheetFileIds;
    private List<Long> audioFileIds;
+   private List<Long> fileIds;
 }

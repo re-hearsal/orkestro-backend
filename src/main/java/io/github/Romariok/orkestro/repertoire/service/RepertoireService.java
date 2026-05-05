@@ -24,6 +24,7 @@ import io.github.Romariok.orkestro.utils.file.FileTypeDetector;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
 import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
+import io.github.Romariok.orkestro.utils.helper.FileValidationHelper;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,20 +33,24 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RepertoireService {
@@ -60,6 +65,7 @@ public class RepertoireService {
    private final SongMapper songMapper;
    private final FileRollbackHelper fileRollbackHelper;
    private final FileLimitsProperties fileLimitsProperties;
+   private final SimpMessagingTemplate messagingTemplate;
 
    @Transactional
    @PreAuthorize("@organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'REPERTOIRE_CREATE_SONG')")
@@ -70,9 +76,7 @@ public class RepertoireService {
       List<String> normalizedTags = normalizeTags(request.getTags());
       List<Long> uploadedFileIds = List.of();
       try {
-         uploadedFileIds = uploadSongFilesForCreate(
-               request.getSheetFiles(),
-               request.getAudioFiles());
+         uploadedFileIds = uploadSongFilesForCreate(request.getFiles());
 
          Song song = Song.builder()
                .organizationId(organizationId)
@@ -135,26 +139,12 @@ public class RepertoireService {
          song.getTags().addAll(normalizedTags);
       }
 
-      if (request.getSheetFileIds() != null || request.getAudioFileIds() != null) {
-         FileBuckets current = bucketizeSongFiles(songId);
-
-         List<Long> targetSheetFileIds = request.getSheetFileIds() != null
-               ? normalizeFileIds(request.getSheetFileIds())
-               : current.sheetFileIds();
-         List<Long> targetAudioFileIds = request.getAudioFileIds() != null
-               ? normalizeFileIds(request.getAudioFileIds())
-               : current.audioFileIds();
-
-         validateSongFiles(targetSheetFileIds, targetAudioFileIds);
-
-         List<Long> merged = new ArrayList<>();
-         merged.addAll(targetSheetFileIds);
-         merged.addAll(targetAudioFileIds);
-         merged.addAll(current.otherFileIds());
-
-         validateSongTotalFilesCount(merged);
+      if (request.getFileIds() != null) {
+         List<Long> targetFileIds = normalizeFileIds(request.getFileIds());
+         FileValidationHelper.validateFiles(targetFileIds, storedFileRepository);
+         validateSongTotalFilesCount(targetFileIds);
          songFileRepository.deleteBySongId(songId);
-         saveSongFiles(songId, merged);
+         saveSongFiles(songId, targetFileIds);
       }
 
       Song saved = songRepository.save(song);
@@ -182,11 +172,6 @@ public class RepertoireService {
       }
 
       FileType detectedType = FileTypeDetector.detect(request.getFile());
-      if (detectedType != FileType.PDF
-            && detectedType != FileType.PHOTO
-            && detectedType != FileType.AUDIO) {
-         throw new IllegalArgumentException("Unsupported fileType: " + detectedType);
-      }
 
       int existingCount = songFileRepository.findBySongId(songId).size();
       if (existingCount >= fileLimitsProperties.getSongMaxFiles()) {
@@ -216,6 +201,13 @@ public class RepertoireService {
       requireOrganizationExists(organizationId);
       Song song = getSongInOrganizationOrThrow(organizationId, songId);
       songRepository.deleteById(song.getId());
+      try {
+         messagingTemplate.convertAndSend(
+               "/topic/organizations/" + organizationId + "/repertoire",
+               (Object) Map.of("type", "SONG_DELETED", "songId", songId));
+      } catch (Exception e) {
+         log.warn("Failed to broadcast SONG_DELETED to org {} repertoire topic", organizationId, e);
+      }
    }
 
    @Transactional(readOnly = true)
@@ -314,6 +306,7 @@ public class RepertoireService {
             .toList());
       dto.setSheetFileIds(buckets.sheetFileIds());
       dto.setAudioFileIds(buckets.audioFileIds());
+      dto.setFileIds(fileIds);
       return dto;
    }
 
@@ -441,45 +434,24 @@ public class RepertoireService {
             .toList();
    }
 
-   private void validateSongFiles(List<Long> sheetFileIds, List<Long> audioFileIds) {
-      Set<Long> sheetSet = new HashSet<>(sheetFileIds == null ? List.of() : sheetFileIds);
-      Set<Long> audioSet = new HashSet<>(audioFileIds == null ? List.of() : audioFileIds);
 
-      Set<Long> overlap = new HashSet<>(sheetSet);
-      overlap.retainAll(audioSet);
-      if (!overlap.isEmpty()) {
-         throw new IllegalArgumentException("sheetFileIds and audioFileIds must not overlap");
+   private List<Long> uploadSongFilesForCreate(List<MultipartFile> files) {
+      if (files == null || files.isEmpty()) {
+         return List.of();
       }
-
-      int totalUnique = sheetSet.size() + audioSet.size();
-      if (totalUnique > fileLimitsProperties.getSongMaxFiles()) {
+      if (files.size() > fileLimitsProperties.getSongMaxFiles()) {
          throw new IllegalArgumentException(
                "Song cannot have more than " + fileLimitsProperties.getSongMaxFiles() + " files");
       }
 
-      validateFilesByTypes(sheetFileIds, Set.of(FileType.PDF, FileType.PHOTO), "sheetFileIds");
-      validateFilesByTypes(audioFileIds, Set.of(FileType.AUDIO), "audioFileIds");
-   }
-
-   private List<Long> uploadSongFilesForCreate(
-         List<MultipartFile> sheetFiles,
-         List<MultipartFile> audioFiles) {
-      int sheetCount = sheetFiles == null ? 0 : sheetFiles.size();
-      int audioCount = audioFiles == null ? 0 : audioFiles.size();
-      int totalCount = sheetCount + audioCount;
-      if (totalCount > fileLimitsProperties.getSongMaxFiles()) {
-         throw new IllegalArgumentException(
-               "Song cannot have more than " + fileLimitsProperties.getSongMaxFiles() + " files");
-      }
-
-      validateMultipartFiles(sheetFiles, "sheetFiles");
-      validateMultipartFiles(audioFiles, "audioFiles");
+      validateMultipartFiles(files, "files");
 
       List<Long> uploadedIds = new ArrayList<>();
-
-      uploadMultipartFiles(uploadedIds, sheetFiles, Set.of(FileType.PDF, FileType.PHOTO), "sheetFiles");
-      uploadMultipartFiles(uploadedIds, audioFiles, Set.of(FileType.AUDIO), "audioFiles");
-
+      for (MultipartFile file : files) {
+         FileType detected = FileTypeDetector.detect(file);
+         StoredFile stored = fileStorageService.uploadForCurrentUser(file, detected);
+         uploadedIds.add(stored.getId());
+      }
       return uploadedIds;
    }
 
@@ -502,25 +474,6 @@ public class RepertoireService {
       }
    }
 
-   private void uploadMultipartFiles(
-         List<Long> uploadedIds,
-         List<MultipartFile> files,
-         Set<FileType> allowedTypes,
-         String filesFieldName) {
-      if (files == null || files.isEmpty()) {
-         return;
-      }
-
-      for (int i = 0; i < files.size(); i++) {
-         MultipartFile file = files.get(i);
-         FileType detected = FileTypeDetector.detect(file);
-         if (!allowedTypes.contains(detected)) {
-            throw new IllegalArgumentException(filesFieldName + "[" + i + "] has unsupported fileType: " + detected);
-         }
-         StoredFile stored = fileStorageService.uploadForCurrentUser(file, detected);
-         uploadedIds.add(stored.getId());
-      }
-   }
 
    private void validateSongTotalFilesCount(Collection<Long> fileIds) {
       if (fileIds == null || fileIds.isEmpty()) {
@@ -530,28 +483,6 @@ public class RepertoireService {
       if (uniqueCount > fileLimitsProperties.getSongMaxFiles()) {
          throw new IllegalArgumentException(
                "Song cannot have more than " + fileLimitsProperties.getSongMaxFiles() + " files");
-      }
-   }
-
-   private void validateFilesByTypes(List<Long> fileIds, Set<FileType> allowed, String fieldName) {
-      if (fileIds == null || fileIds.isEmpty()) {
-         return;
-      }
-
-      Set<Long> uniqueIds = new HashSet<>(fileIds);
-      List<StoredFile> files = storedFileRepository.findAllById(uniqueIds);
-      if (files.size() != uniqueIds.size()) {
-         throw new EntityNotFoundException("One or more files not found for ids: " + uniqueIds);
-      }
-
-      List<Long> invalidTypeIds = files.stream()
-            .filter(f -> f.getFileType() == null || !allowed.contains(f.getFileType()))
-            .map(StoredFile::getId)
-            .sorted()
-            .toList();
-      if (!invalidTypeIds.isEmpty()) {
-         throw new IllegalArgumentException(
-               fieldName + " contains unsupported file types for ids: " + invalidTypeIds);
       }
    }
 

@@ -48,15 +48,6 @@ public class SongCreateRequestDTO {
 
    private List<@NotNull @NotBlank @Size(max = 50) String> tags;
 
-   /**
-    * Загружаемые файлы с нотами (PDF/PHOTO).
-    */
-  @Size(max = 50)
-   private List<MultipartFile> sheetFiles;
-
-   /**
-    * Загружаемые аудио файлы (AUDIO).
-    */
-  @Size(max = 50)
-   private List<MultipartFile> audioFiles;
+   @Size(max = 50)
+   private List<MultipartFile> files;
 }
