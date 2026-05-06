@@ -19,6 +19,7 @@ public class OrgInfoMessageDTO {
     private Long sectionId;
     private Long authorUserId;
     private String authorName;
+    private Long authorProfileImageFileId;
     private String text;
     private Instant createdAt;
 }

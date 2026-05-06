@@ -3,6 +3,8 @@ package io.github.Romariok.orkestro.event.controller;
 import io.github.Romariok.orkestro.event.dto.EventCommentCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventCommentDTO;
 import io.github.Romariok.orkestro.event.dto.EventCommentsByEventPageDTO;
+import io.github.Romariok.orkestro.event.dto.EventFeedbackRequestDTO;
+import io.github.Romariok.orkestro.event.dto.EventFeedbackRowDTO;
 import io.github.Romariok.orkestro.event.service.EventService;
 import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,6 +31,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -156,5 +159,25 @@ public class EventCommentController {
             @Parameter(description = "ID комментария", required = true) @PathVariable @Positive Long commentId) {
         eventService.deleteEventComment(organizationId, eventId, commentId);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "Получить обратную связь по мероприятиям",
+            description = "Возвращает пагинированный список комментариев к мероприятиям организации, в которых участвует текущий пользователь. Поддерживает фильтрацию по названию, типу, периоду дат и тегам."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Список комментариев получен",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = Page.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/feedback")
+    public ResponseEntity<Page<EventFeedbackRowDTO>> getEventFeedback(
+            @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
+            @ParameterObject @ModelAttribute EventFeedbackRequestDTO request,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(eventService.getEventFeedbackForCurrentUser(organizationId, request, pageable));
     }
 }

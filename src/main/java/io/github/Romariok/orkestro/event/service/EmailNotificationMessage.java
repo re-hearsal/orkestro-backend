@@ -10,5 +10,8 @@ public record EmailNotificationMessage(
         @JsonProperty("text") String text,
         @JsonProperty("organization_name") String organizationName,
         @JsonProperty("event_title") String eventTitle,
-        @JsonProperty("include_rsvp_form") Boolean includeRsvpForm) {
+        @JsonProperty("include_rsvp_form") Boolean includeRsvpForm,
+        @JsonProperty("template") String template,
+        @JsonProperty("author_name") String authorName,
+        @JsonProperty("section_name") String sectionName) {
 }

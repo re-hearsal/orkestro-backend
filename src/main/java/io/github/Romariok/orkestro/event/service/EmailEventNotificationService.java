@@ -48,7 +48,8 @@ public class EmailEventNotificationService implements EventNotificationSender {
                     text,
                     organizationName,
                     eventTitle,
-                    true);
+                    true,
+                    null, null, null);
             String payload = objectMapper.writeValueAsString(message);
             rabbitTemplate.convertAndSend(emailQueueName, payload);
             return true;
@@ -83,7 +84,8 @@ public class EmailEventNotificationService implements EventNotificationSender {
                     text,
                     organizationName,
                     eventTitle,
-                    false);
+                    false,
+                    null, null, null);
             String payload = objectMapper.writeValueAsString(message);
             rabbitTemplate.convertAndSend(emailQueueName, payload);
             return true;

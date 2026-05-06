@@ -23,6 +23,10 @@ import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.enums.RoleScopeType;
 import io.github.Romariok.orkestro.user.repository.RoleRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
+import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
+import io.github.Romariok.orkestro.event.repository.EventRepository;
+import io.github.Romariok.orkestro.organization.mapper.OrganizationMapper;
+import io.github.Romariok.orkestro.user.repository.RolePermissionRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import java.time.Instant;
@@ -65,6 +69,18 @@ class OrganizationUserServiceTest {
 
       @Mock
       private OrgNotificationService orgNotificationService;
+
+      @Mock
+      private EventParticipantRepository eventParticipantRepository;
+
+      @Mock
+      private EventRepository eventRepository;
+
+      @Mock
+      private RolePermissionRepository rolePermissionRepository;
+
+      @Mock
+      private OrganizationMapper organizationMapper;
 
       @InjectMocks
       private OrganizationUserService organizationUserService;

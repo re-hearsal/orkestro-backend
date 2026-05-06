@@ -10,6 +10,8 @@ import io.github.Romariok.orkestro.event.dto.EventCommentCreateRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventCommentDTO;
 import io.github.Romariok.orkestro.event.dto.EventCommentsByEventDTO;
 import io.github.Romariok.orkestro.event.dto.EventCommentsByEventPageDTO;
+import io.github.Romariok.orkestro.event.dto.EventFeedbackRequestDTO;
+import io.github.Romariok.orkestro.event.dto.EventFeedbackRowDTO;
 import io.github.Romariok.orkestro.event.models.EventDescriptionTemplate;
 import io.github.Romariok.orkestro.event.repository.EventDescriptionTemplateRepository;
 import io.github.Romariok.orkestro.event.dto.EventUserCalendarRequestDTO;
@@ -19,6 +21,7 @@ import io.github.Romariok.orkestro.event.dto.EventUpdateRequestDTO;
 import io.github.Romariok.orkestro.event.mapper.EventMapper;
 import io.github.Romariok.orkestro.event.models.EventComment;
 import io.github.Romariok.orkestro.event.models.Event;
+import io.github.Romariok.orkestro.event.specification.EventCommentSpecifications;
 import io.github.Romariok.orkestro.event.models.EventFile;
 import io.github.Romariok.orkestro.event.models.EventParticipant;
 import io.github.Romariok.orkestro.event.models.EventSection;
@@ -47,6 +50,7 @@ import io.github.Romariok.orkestro.section.models.SectionUser;
 import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.FileReferenceService;
@@ -68,11 +72,13 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.MessageSource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -109,6 +115,7 @@ public class EventService {
     private final OrganizationPermissionChecker organizationPermissionChecker;
     private final EventDescriptionTemplateRepository eventDescriptionTemplateRepository;
     private final WebSocketNotificationService webSocketNotificationService;
+    private final MessageSource messageSource;
 
     private static final int CALENDAR_MAX_PAGE_SIZE = 500;
     private static final Duration CALENDAR_DEFAULT_PAST_WINDOW = Duration.ofDays(7);
@@ -193,12 +200,17 @@ public class EventService {
                 eventNotificationService.sendEventCreatedNotifications(saved, sources.keySet());
             }
 
+            Map<Long, User> participantUsers = userRepository.findAllById(sources.keySet()).stream()
+                    .collect(Collectors.toMap(User::getId, u -> u));
             for (Long participantId : sources.keySet()) {
                 if (!participantId.equals(currentUserId)) {
                     try {
+                        Locale locale = resolveLocale(participantUsers.get(participantId));
+                        String title = messageSource.getMessage("notification.inapp.event.new.title",
+                                new Object[]{saved.getTitle()}, locale);
                         webSocketNotificationService.send(participantId, InAppNotificationDTO.builder()
                                 .type(InAppNotificationType.NEW_EVENT)
-                                .title("New event: " + saved.getTitle())
+                                .title(title)
                                 .body(saved.getDescription())
                                 .entityId(saved.getId())
                                 .entityType("EVENT")
@@ -675,12 +687,18 @@ public class EventService {
         notifyCommentParticipants(event, currentUserId, authorName, normalizedText);
 
         List<EventParticipant> participants = eventParticipantRepository.findByEventId(eventId);
+        List<Long> participantIds = participants.stream().map(EventParticipant::getUserId).toList();
+        Map<Long, User> participantUsers = userRepository.findAllById(participantIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
         for (EventParticipant p : participants) {
             if (!p.getUserId().equals(currentUserId)) {
                 try {
+                    Locale locale = resolveLocale(participantUsers.get(p.getUserId()));
+                    String title = messageSource.getMessage("notification.inapp.event.comment.title",
+                            new Object[]{event.getTitle()}, locale);
                     webSocketNotificationService.send(p.getUserId(), InAppNotificationDTO.builder()
                             .type(InAppNotificationType.EVENT_COMMENT)
-                            .title("New comment on: " + event.getTitle())
+                            .title(title)
                             .body(normalizedText)
                             .entityId(eventId)
                             .entityType("EVENT")
@@ -955,6 +973,66 @@ public class EventService {
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(organizationId, currentUserId);
         return eventRepository.findDistinctTagsByOrganizationId(organizationId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EventFeedbackRowDTO> getEventFeedbackForCurrentUser(
+            Long organizationId, EventFeedbackRequestDTO request, Pageable pageable) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(organizationId, currentUserId);
+
+        Specification<EventComment> spec = Specification
+                .where(EventCommentSpecifications.eventOrganizationEquals(organizationId))
+                .and(EventCommentSpecifications.eventInvolvesUser(currentUserId));
+
+        if (request != null) {
+            if (request.getTitle() != null && !request.getTitle().isBlank()) {
+                spec = spec.and(EventCommentSpecifications.eventTitleContains(request.getTitle()));
+            }
+            if (request.getEventType() != null) {
+                spec = spec.and(EventCommentSpecifications.eventTypeEquals(request.getEventType()));
+            }
+            if (request.getFrom() != null || request.getTo() != null) {
+                spec = spec.and(EventCommentSpecifications.eventIntersectsDateRange(request.getFrom(), request.getTo()));
+            }
+            if (request.getTags() != null && !request.getTags().isEmpty()) {
+                spec = spec.and(EventCommentSpecifications.eventHasAnyTag(request.getTags()));
+            }
+        }
+
+        Page<EventComment> page = eventCommentRepository.findAll(spec, pageable);
+
+        Set<Long> authorIds = page.getContent().stream()
+                .map(EventComment::getAuthorUserId)
+                .collect(Collectors.toSet());
+        Map<Long, User> usersById = userRepository.findAllById(authorIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        Set<Long> eventIds = page.getContent().stream()
+                .map(EventComment::getEventId)
+                .collect(Collectors.toSet());
+        Map<Long, Event> eventsById = eventRepository.findAllById(eventIds).stream()
+                .collect(Collectors.toMap(Event::getId, e -> e));
+
+        return page.map(comment -> {
+            User author = usersById.get(comment.getAuthorUserId());
+            Event event = eventsById.get(comment.getEventId());
+            return EventFeedbackRowDTO.builder()
+                    .commentId(comment.getId())
+                    .commentText(comment.getText())
+                    .rating(comment.getRating())
+                    .commentCreatedAt(comment.getCreatedAt())
+                    .authorUserId(comment.getAuthorUserId())
+                    .authorName(author != null ? author.getName() : null)
+                    .authorProfileImageFileId(author != null ? author.getProfileImageFileId() : null)
+                    .eventId(comment.getEventId())
+                    .eventTitle(event != null ? event.getTitle() : null)
+                    .eventType(event != null ? event.getEventType() : null)
+                    .eventStartTime(event != null ? event.getStartTime() : null)
+                    .eventEndTime(event != null ? event.getEndTime() : null)
+                    .eventTags(event != null ? event.getTags() : null)
+                    .build();
+        });
     }
 
     /**
@@ -1854,5 +1932,12 @@ public class EventService {
         }
 
         return dtos;
+    }
+
+    private Locale resolveLocale(User user) {
+        if (user != null && user.getPreferredLanguage() == UserLanguageType.EN) {
+            return Locale.ENGLISH;
+        }
+        return Locale.forLanguageTag("ru");
     }
 }

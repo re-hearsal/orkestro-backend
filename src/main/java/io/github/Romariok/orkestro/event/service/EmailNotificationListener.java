@@ -44,36 +44,43 @@ public class EmailNotificationListener {
             }
             Locale locale = resolveLocale(message.userId());
 
+            String templateName = message.template() != null ? message.template() : "event-invite.html";
             Map<String, Object> templateModel = new HashMap<>();
-            templateModel.put("text", message.text());
-            templateModel.put("organizationName", message.organizationName());
-            templateModel.put("eventTitle", message.eventTitle());
             templateModel.put("lang", locale.getLanguage());
-            templateModel.put("emailTitle", messageSource.getMessage("notification.email.template.title", null, locale));
-            templateModel.put("organizationLabel",
-                    messageSource.getMessage("notification.email.template.label.organization", null, locale));
-            templateModel.put("eventLabel",
-                    messageSource.getMessage("notification.email.template.label.event", null, locale));
-            boolean includeRsvpForm = message.includeRsvpForm() == null || message.includeRsvpForm();
-            templateModel.put("includeRsvpForm", includeRsvpForm);
-            if (includeRsvpForm) {
-                templateModel.put("attendButtonLabel",
-                        messageSource.getMessage("notification.email.template.button.attend", null, locale));
-                templateModel.put("absentButtonLabel",
-                        messageSource.getMessage("notification.email.template.button.absent", null, locale));
-                templateModel.put(
-                        "attendUrl",
-                        buildRsvpUrl(message.eventId(), message.userId(), true));
-                templateModel.put(
-                        "absentUrl",
-                        buildRsvpUrl(message.eventId(), message.userId(), false));
+
+            if ("org-notification.html".equals(templateName)) {
+                templateModel.put("emailTitle", messageSource.getMessage("notification.org.info-message.email.title", null, locale));
+                templateModel.put("text", message.text());
+                templateModel.put("authorLabel", messageSource.getMessage("notification.org.info-message.label.author", null, locale));
+                templateModel.put("authorName", message.authorName() != null ? message.authorName() : "");
+                templateModel.put("organizationLabel", messageSource.getMessage("notification.org.info-message.label.organization", null, locale));
+                templateModel.put("organizationName", message.organizationName() != null ? message.organizationName() : "");
+                boolean hasSection = message.sectionName() != null && !message.sectionName().isBlank();
+                templateModel.put("hasSection", hasSection);
+                templateModel.put("sectionLabel", messageSource.getMessage("notification.org.info-message.label.section", null, locale));
+                templateModel.put("sectionName", hasSection ? message.sectionName() : "");
+            } else {
+                templateModel.put("text", message.text());
+                templateModel.put("organizationName", message.organizationName());
+                templateModel.put("eventTitle", message.eventTitle());
+                templateModel.put("emailTitle", messageSource.getMessage("notification.email.template.title", null, locale));
+                templateModel.put("organizationLabel",
+                        messageSource.getMessage("notification.email.template.label.organization", null, locale));
+                templateModel.put("eventLabel",
+                        messageSource.getMessage("notification.email.template.label.event", null, locale));
+                boolean includeRsvpForm = message.includeRsvpForm() == null || message.includeRsvpForm();
+                templateModel.put("includeRsvpForm", includeRsvpForm);
+                if (includeRsvpForm) {
+                    templateModel.put("attendButtonLabel",
+                            messageSource.getMessage("notification.email.template.button.attend", null, locale));
+                    templateModel.put("absentButtonLabel",
+                            messageSource.getMessage("notification.email.template.button.absent", null, locale));
+                    templateModel.put("attendUrl", buildRsvpUrl(message.eventId(), message.userId(), true));
+                    templateModel.put("absentUrl", buildRsvpUrl(message.eventId(), message.userId(), false));
+                }
             }
 
-            jcaEmailService.sendTemplateMessage(
-                    message.to(),
-                    message.subject(),
-                    "event-invite.html",
-                    templateModel);
+            jcaEmailService.sendTemplateMessage(message.to(), message.subject(), templateName, templateModel);
         } catch (Exception ex) {
             log.error("Failed to process RabbitMQ email notification message", ex);
         }

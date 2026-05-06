@@ -2,13 +2,15 @@ package io.github.Romariok.orkestro.messaging.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.Romariok.orkestro.event.service.notification.NotificationMessage;
+import io.github.Romariok.orkestro.event.service.EmailNotificationMessage;
 import io.github.Romariok.orkestro.messaging.dto.OrgInfoMessageDTO;
 import io.github.Romariok.orkestro.messaging.models.OrgInfoMessage;
 import io.github.Romariok.orkestro.messaging.repository.OrgInfoMessageRepository;
+import io.github.Romariok.orkestro.organization.models.Organization;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.section.models.Section;
 import io.github.Romariok.orkestro.section.models.SectionUser;
@@ -16,6 +18,7 @@ import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
 import io.github.Romariok.orkestro.security.SecurityUtils;
 import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
 import io.github.Romariok.orkestro.notification.dto.InAppNotificationDTO;
@@ -23,12 +26,14 @@ import io.github.Romariok.orkestro.notification.models.enums.InAppNotificationTy
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.MessageSource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -41,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrgInfoMessageService {
 
     private final OrgInfoMessageRepository orgInfoMessageRepository;
+    private final OrganizationRepository organizationRepository;
     private final OrganizationUserRepository organizationUserRepository;
     private final SectionUserRepository sectionUserRepository;
     private final SectionRepository sectionRepository;
@@ -49,6 +55,7 @@ public class OrgInfoMessageService {
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
     private final WebSocketNotificationService webSocketNotificationService;
+    private final MessageSource messageSource;
 
     @Value("${orkestro.telegram.bot-message-queue-name:telegram_bot_messages}")
     private String telegramBotMessageQueueName;
@@ -73,6 +80,9 @@ public class OrgInfoMessageService {
         OrgInfoMessage saved = orgInfoMessageRepository.save(message);
 
         User author = userRepository.findById(authorId).orElse(null);
+        String authorName = author != null ? author.getName() : null;
+        String orgName = organizationRepository.findById(organizationId)
+                .map(Organization::getName).orElse(null);
         OrgInfoMessageDTO dto = toDTO(saved, author);
 
         List<OrganizationUser> members = organizationUserRepository
@@ -82,7 +92,7 @@ public class OrgInfoMessageService {
                 .filter(id -> !id.equals(authorId))
                 .distinct()
                 .toList();
-        sendNotificationsToUsers(memberUserIds, text, saved.getId());
+        sendNotificationsToUsers(memberUserIds, text, saved.getId(), authorName, orgName, null);
 
         return dto;
     }
@@ -104,6 +114,9 @@ public class OrgInfoMessageService {
         OrgInfoMessage saved = orgInfoMessageRepository.save(message);
 
         User author = userRepository.findById(authorId).orElse(null);
+        String authorName = author != null ? author.getName() : null;
+        String orgName = organizationRepository.findById(section.getOrganizationId())
+                .map(Organization::getName).orElse(null);
         OrgInfoMessageDTO dto = toDTO(saved, author);
 
         List<SectionUser> sectionUsers = sectionUserRepository.findBySectionIdOrderByJoinedAtAsc(sectionId);
@@ -112,7 +125,7 @@ public class OrgInfoMessageService {
                 .filter(id -> !id.equals(authorId))
                 .distinct()
                 .toList();
-        sendNotificationsToUsers(memberUserIds, text, saved.getId());
+        sendNotificationsToUsers(memberUserIds, text, saved.getId(), authorName, orgName, section.getName());
 
         return dto;
     }
@@ -149,37 +162,50 @@ public class OrgInfoMessageService {
         return page.map(m -> toDTO(m, usersById.get(m.getAuthorUserId())));
     }
 
-    private void sendNotificationsToUsers(List<Long> userIds, String text, Long messageId) {
+    private void sendNotificationsToUsers(List<Long> userIds, String text, Long messageId,
+                                          String authorName, String orgName, String sectionName) {
         if (userIds.isEmpty()) {
             return;
         }
         List<User> users = userRepository.findAllById(userIds);
         for (User user : users) {
             try {
-                sendNotificationToUser(user, text, messageId);
+                sendNotificationToUser(user, text, messageId, authorName, orgName, sectionName);
             } catch (Exception e) {
                 log.error("Failed to send info message notification to user {}", user.getId(), e);
             }
         }
     }
 
-    private void sendNotificationToUser(User user, String text, Long messageId) {
+    private void sendNotificationToUser(User user, String text, Long messageId,
+                                        String authorName, String orgName, String sectionName) {
         NotificationChannelType channel = user.getNotificationChannel();
-        NotificationMessage msg = new NotificationMessage(
-                user.getId(),
-                channel,
-                "ORG_INFO_MESSAGE",
-                text,
-                Map.of("message_id", messageId)
-        );
+        Locale locale = resolveLocale(user);
         try {
-            String json = objectMapper.writeValueAsString(msg);
             if (channel == NotificationChannelType.TELEGRAM && user.getTelegramUserId() != null) {
-                rabbitTemplate.convertAndSend(telegramBotMessageQueueName, json);
+                String telegramText = buildTelegramText(locale, text, authorName, orgName, sectionName);
+                Map<String, Object> payload = Map.of(
+                        "telegram_user_id", user.getTelegramUserId(),
+                        "text", telegramText,
+                        "buttons", List.of());
+                rabbitTemplate.convertAndSend(telegramBotMessageQueueName, objectMapper.writeValueAsString(payload));
             } else if (channel == NotificationChannelType.VK && user.getVkUserId() != null) {
-                rabbitTemplate.convertAndSend(vkBotMessageQueueName, json);
+                String vkText = buildTelegramText(locale, text, authorName, orgName, sectionName);
+                Map<String, Object> payload = Map.of(
+                        "vk_user_id", user.getVkUserId(),
+                        "text", vkText);
+                rabbitTemplate.convertAndSend(vkBotMessageQueueName, objectMapper.writeValueAsString(payload));
             } else {
-                rabbitTemplate.convertAndSend(emailQueueName, json);
+                if (user.getEmail() == null || user.getEmail().isBlank()) return;
+                String subject = messageSource.getMessage(
+                        "notification.org.info-message.email.subject",
+                        new Object[]{sectionName != null ? sectionName : orgName},
+                        locale);
+                EmailNotificationMessage emailMsg = new EmailNotificationMessage(
+                        user.getId(), null, user.getEmail(), subject, text,
+                        orgName, null, false,
+                        "org-notification.html", authorName, sectionName);
+                rabbitTemplate.convertAndSend(emailQueueName, objectMapper.writeValueAsString(emailMsg));
             }
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize notification message", e);
@@ -188,7 +214,7 @@ public class OrgInfoMessageService {
         try {
             webSocketNotificationService.send(user.getId(), InAppNotificationDTO.builder()
                     .type(InAppNotificationType.NEW_INFO_MESSAGE)
-                    .title("New info message")
+                    .title(messageSource.getMessage("notification.org.info-message.email.title", null, locale))
                     .body(text)
                     .entityId(messageId)
                     .entityType("ORG_INFO_MESSAGE")
@@ -198,6 +224,26 @@ public class OrgInfoMessageService {
         }
     }
 
+    private String buildTelegramText(Locale locale, String text, String authorName, String orgName, String sectionName) {
+        if (sectionName != null) {
+            return messageSource.getMessage(
+                    "notification.org.info-message.telegram.section",
+                    new Object[]{sectionName, orgName, authorName, text},
+                    locale);
+        }
+        return messageSource.getMessage(
+                "notification.org.info-message.telegram.org",
+                new Object[]{orgName, authorName, text},
+                locale);
+    }
+
+    private Locale resolveLocale(User user) {
+        if (user.getPreferredLanguage() == UserLanguageType.EN) {
+            return Locale.ENGLISH;
+        }
+        return Locale.forLanguageTag("ru");
+    }
+
     private OrgInfoMessageDTO toDTO(OrgInfoMessage message, User author) {
         return OrgInfoMessageDTO.builder()
                 .id(message.getId())
@@ -205,6 +251,7 @@ public class OrgInfoMessageService {
                 .sectionId(message.getSectionId())
                 .authorUserId(message.getAuthorUserId())
                 .authorName(author != null ? author.getName() : null)
+                .authorProfileImageFileId(author != null ? author.getProfileImageFileId() : null)
                 .text(message.getText())
                 .createdAt(message.getCreatedAt())
                 .build();
