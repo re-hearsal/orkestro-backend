@@ -1,10 +1,10 @@
-package io.github.Romariok.orkestro.repertoire.controller;
+package io.github.Romariok.orkestro.utils.file.controller;
 
-import io.github.Romariok.orkestro.repertoire.dto.FileMetadataDTO;
 import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.file.StoredFileRepository;
+import io.github.Romariok.orkestro.utils.file.dto.FileMetadataDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/files")
-@Tag(name = "Files", description = "API для управления файлами. Gonna be deprecated eventually")
+@Tag(name = "Files", description = "API для управления файлами")
 public class FileMetadataController {
 
     private final StoredFileRepository storedFileRepository;
@@ -59,7 +59,7 @@ public class FileMetadataController {
             )
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    @GetMapping("/{fileId}/info")
+    @GetMapping("/{fileId}/meta")
     public ResponseEntity<FileMetadataDTO> getFileInfo(@PathVariable @Positive Long fileId) {
         StoredFile file = storedFileRepository.findById(fileId)
                 .orElseThrow(() -> new EntityNotFoundException("File not found: " + fileId));

@@ -2,6 +2,8 @@ package io.github.Romariok.orkestro.event.controller;
 
 import io.github.Romariok.orkestro.event.dto.EventAttendanceMarkRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventAttendanceRowDTO;
+import io.github.Romariok.orkestro.event.dto.EventDTO;
+import io.github.Romariok.orkestro.event.dto.EventRsvpUpdateRequestDTO;
 import io.github.Romariok.orkestro.event.service.EventService;
 import io.github.Romariok.orkestro.utils.exception.ApiErrorResponse;
 import jakarta.validation.Valid;
@@ -9,7 +11,11 @@ import jakarta.validation.constraints.Positive;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -18,8 +24,10 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -39,6 +47,29 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class EventAttendanceController {
 
     private final EventService eventService;
+
+    @Operation(
+            summary = "Обновить RSVP текущего пользователя",
+            description = "Позволяет участнику события изменить свой RSVP-статус. Доступно только участникам события."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "RSVP обновлён",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = EventDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Ошибка валидации", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Пользователь не является участником события", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Событие не найдено", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @PutMapping(value = "/{eventId}/rsvp", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<EventDTO> updateMyRsvp(
+            @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID события", required = true) @PathVariable @Positive Long eventId,
+            @Valid @RequestBody EventRsvpUpdateRequestDTO request) {
+        return ResponseEntity.ok(
+                eventService.updateMyRsvp(organizationId, eventId, request.getRsvpStatus()));
+    }
 
     @Operation(
             summary = "Отметить посещаемость",
@@ -64,6 +95,27 @@ public class EventAttendanceController {
             @Valid @RequestBody EventAttendanceMarkRequestDTO request) {
         eventService.markEventAttendance(organizationId, eventId, request.getParticipantUserId(), request.getAttendanceStatus());
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "Получить список участников события",
+            description = "Возвращает пагинированный список участников события с их RSVP и статусом посещаемости. Поддерживает поиск по имени."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Список участников получен",
+                    content = @Content(schema = @Schema(implementation = Page.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Событие не найдено", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/{eventId}/participants")
+    public ResponseEntity<Page<EventAttendanceRowDTO>> getEventParticipants(
+            @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID события", required = true) @PathVariable @Positive Long eventId,
+            @Parameter(description = "Поиск по имени участника") @RequestParam(required = false) String name,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(eventService.getEventParticipantsPaged(organizationId, eventId, name, pageable));
     }
 
     @Operation(

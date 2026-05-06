@@ -14,6 +14,7 @@ public class EventCommentDTO {
     private Long id;
     private Long authorUserId;
     private String authorName;
+    private Long authorProfileImageFileId;
     private String text;
     private Integer rating;
     private Instant createdAt;

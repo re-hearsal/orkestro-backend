@@ -74,6 +74,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -203,7 +204,8 @@ public class EventService {
                                 .entityType("EVENT")
                                 .build());
                     } catch (Exception ex) {
-                        log.warn("Failed to send WebSocket notification for event {} to user {}", saved.getId(), participantId, ex);
+                        log.warn("Failed to send WebSocket notification for event {} to user {}", saved.getId(),
+                                participantId, ex);
                     }
                 }
             }
@@ -216,6 +218,9 @@ public class EventService {
     }
 
     @Transactional
+    @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
+            + "or @organizationPermissionChecker.hasOrganizationPermission("
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MANAGE')")
     public EventDTO updateEvent(Long organizationId, Long eventId, EventUpdateRequestDTO request) {
         if (request == null) {
             throw new IllegalArgumentException("Request must not be null");
@@ -420,9 +425,35 @@ public class EventService {
     }
 
     @Transactional
+    public EventDTO updateMyRsvp(Long organizationId, Long eventId, EventRsvpStatus rsvpStatus) {
+        if (rsvpStatus == null) {
+            throw new IllegalArgumentException("rsvpStatus must not be null");
+        }
+
+        Event event = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
+
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(organizationId, currentUserId);
+
+        EventParticipant participant = eventParticipantRepository
+                .findByEventIdAndUserId(eventId, currentUserId)
+                .orElseThrow(() -> new BusinessException(
+                        "User " + currentUserId + " is not a participant of event " + eventId));
+
+        participant.setRsvpStatus(rsvpStatus);
+        participant.setRsvpAt(Instant.now());
+        eventParticipantRepository.save(participant);
+
+        return buildEventDto(event);
+    }
+
+    @Transactional
     @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
             + "or @organizationPermissionChecker.hasOrganizationPermission("
-            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_DELETION')")
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MANAGE')")
     public void deleteEvent(Long organizationId, Long eventId) {
         Event event = eventRepository
                 .findById(eventId)
@@ -434,6 +465,14 @@ public class EventService {
 
         eventParticipantRepository.deleteByEventId(eventId);
         eventRepository.deleteById(eventId);
+
+        try {
+            webSocketNotificationService.sendToTopic(
+                    "/topic/organizations/" + organizationId + "/events/" + eventId,
+                    Map.of("type", "EVENT_DELETED", "eventId", eventId, "organizationId", organizationId));
+        } catch (Exception ex) {
+            log.warn("Failed to send WS topic notification for deleted event {}", eventId, ex);
+        }
     }
 
     @Transactional
@@ -464,6 +503,9 @@ public class EventService {
     }
 
     @Transactional
+    @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
+            + "or @organizationPermissionChecker.hasOrganizationPermission("
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MANAGE')")
     public EventDTO attachFileToEvent(Long organizationId, Long eventId, MultipartFile file) {
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(organizationId, currentUserId);
@@ -501,6 +543,9 @@ public class EventService {
     }
 
     @Transactional
+    @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
+            + "or @organizationPermissionChecker.hasOrganizationPermission("
+            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MANAGE')")
     public EventDTO deleteEventFile(Long organizationId, Long eventId, Long fileId) {
         Long currentUserId = securityUtils.getCurrentUserId();
         ensureUserInOrganization(organizationId, currentUserId);
@@ -524,9 +569,6 @@ public class EventService {
     }
 
     @Transactional(readOnly = true)
-    @PreAuthorize("@securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId) "
-            + "or @organizationPermissionChecker.hasOrganizationPermission("
-            + "@eventRepository.findById(#eventId).orElse(null)?.organizationId, 'EVENT_MARK_ATTENDANCE')")
     public List<EventAttendanceRowDTO> getEventAttendanceTable(Long organizationId, Long eventId) {
         Event event = eventRepository
                 .findById(eventId)
@@ -557,7 +599,9 @@ public class EventService {
                     String name = user != null ? user.getName() : null;
 
                     return EventAttendanceRowDTO.builder()
+                            .userId(p.getUserId())
                             .name(name)
+                            .profileImageFileId(user != null ? user.getProfileImageFileId() : null)
                             .rsvpStatus(p.getRsvpStatus())
                             .attendanceStatus(p.getAttendanceStatus())
                             .build();
@@ -607,7 +651,8 @@ public class EventService {
         ensureUserInOrganization(event.getOrganizationId(), currentUserId);
 
         boolean isCreator = currentUserId.equals(event.getCreatorUserId());
-        boolean hasPermission = organizationPermissionChecker.hasOrganizationPermission(organizationId, "EVENT_WRITE_COMMENT");
+        boolean hasPermission = organizationPermissionChecker.hasOrganizationPermission(organizationId,
+                "EVENT_WRITE_COMMENT");
         if (!isCreator && !hasPermission) {
             throw new BusinessException("You do not have permission to comment on this event");
         }
@@ -624,7 +669,9 @@ public class EventService {
                 .rating(request.getRating())
                 .build());
 
-        String authorName = userRepository.findById(currentUserId).map(User::getName).orElse(null);
+        User author = userRepository.findById(currentUserId).orElse(null);
+        String authorName = author != null ? author.getName() : null;
+        Long authorProfileImageFileId = author != null ? author.getProfileImageFileId() : null;
         notifyCommentParticipants(event, currentUserId, authorName, normalizedText);
 
         List<EventParticipant> participants = eventParticipantRepository.findByEventId(eventId);
@@ -639,15 +686,25 @@ public class EventService {
                             .entityType("EVENT")
                             .build());
                 } catch (Exception ex) {
-                    log.warn("Failed to send WebSocket notification for event comment {} to user {}", saved.getId(), p.getUserId(), ex);
+                    log.warn("Failed to send WebSocket notification for event comment {} to user {}", saved.getId(),
+                            p.getUserId(), ex);
                 }
             }
+        }
+
+        try {
+            webSocketNotificationService.sendToTopic(
+                    "/topic/organizations/" + organizationId + "/events/" + eventId + "/comments",
+                    Map.of("eventId", eventId, "organizationId", organizationId));
+        } catch (Exception ex) {
+            log.warn("Failed to send WS topic notification for new comment on event {}", eventId, ex);
         }
 
         return EventCommentDTO.builder()
                 .id(saved.getId())
                 .authorUserId(saved.getAuthorUserId())
                 .authorName(authorName)
+                .authorProfileImageFileId(authorProfileImageFileId)
                 .text(saved.getText())
                 .rating(saved.getRating())
                 .createdAt(saved.getCreatedAt())
@@ -656,7 +713,7 @@ public class EventService {
 
     @Transactional
     @PreAuthorize("@securityUtils.isCurrentUser(@eventCommentRepository.findById(#commentId).orElse(null)?.authorUserId) "
-            + "or @organizationPermissionChecker.hasOrganizationPermission(#organizationId, 'EVENT_WRITE_COMMENT')")
+            + "or @securityUtils.isCurrentUser(@eventRepository.findById(#eventId).orElse(null)?.creatorUserId)")
     public void deleteEventComment(Long organizationId, Long eventId, Long commentId) {
         Event event = eventRepository
                 .findById(eventId)
@@ -675,6 +732,86 @@ public class EventService {
         ensureUserInOrganization(event.getOrganizationId(), currentUserId);
 
         eventCommentRepository.delete(comment);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EventCommentDTO> getEventCommentsPage(Long organizationId, Long eventId, Pageable pageable) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(organizationId, currentUserId);
+
+        Event event = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
+
+        Page<EventComment> page = eventCommentRepository.findByEventIdOrderByCreatedAtDesc(eventId, pageable);
+        Set<Long> authorUserIds = page.getContent().stream()
+                .map(EventComment::getAuthorUserId)
+                .collect(Collectors.toSet());
+        Map<Long, User> usersById = userRepository.findAllById(authorUserIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        return page.map(c -> {
+            User author = usersById.get(c.getAuthorUserId());
+            return EventCommentDTO.builder()
+                    .id(c.getId())
+                    .authorUserId(c.getAuthorUserId())
+                    .authorName(author != null ? author.getName() : null)
+                    .authorProfileImageFileId(author != null ? author.getProfileImageFileId() : null)
+                    .text(c.getText())
+                    .rating(c.getRating())
+                    .createdAt(c.getCreatedAt())
+                    .build();
+        });
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EventAttendanceRowDTO> getEventParticipantsPaged(
+            Long organizationId, Long eventId, String nameSearch, Pageable pageable) {
+        Long currentUserId = securityUtils.getCurrentUserId();
+        ensureUserInOrganization(organizationId, currentUserId);
+
+        Event event = eventRepository
+                .findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+        validateEventOrganization(event, organizationId);
+
+        List<EventParticipant> participants = eventParticipantRepository.findByEventId(eventId);
+        if (participants.isEmpty()) {
+            return org.springframework.data.domain.Page.empty(pageable);
+        }
+
+        Set<Long> userIds = participants.stream().map(EventParticipant::getUserId).collect(Collectors.toSet());
+        Map<Long, User> usersById = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        String normalizedSearch = nameSearch != null ? nameSearch.trim().toLowerCase() : null;
+        List<EventAttendanceRowDTO> rows = participants.stream()
+                .filter(p -> {
+                    if (normalizedSearch == null || normalizedSearch.isEmpty()) {
+                        return true;
+                    }
+                    User u = usersById.get(p.getUserId());
+                    return u != null && u.getName() != null
+                            && u.getName().toLowerCase().contains(normalizedSearch);
+                })
+                .map(p -> {
+                    User u = usersById.get(p.getUserId());
+                    return EventAttendanceRowDTO.builder()
+                            .userId(p.getUserId())
+                            .name(u != null ? u.getName() : null)
+                            .profileImageFileId(u != null ? u.getProfileImageFileId() : null)
+                            .rsvpStatus(p.getRsvpStatus())
+                            .attendanceStatus(p.getAttendanceStatus())
+                            .build();
+                })
+                .toList();
+
+        int total = rows.size();
+        int from = (int) pageable.getOffset();
+        int to = Math.min(from + pageable.getPageSize(), total);
+        List<EventAttendanceRowDTO> pageContent = from >= total ? List.of() : rows.subList(from, to);
+        return new PageImpl<>(pageContent, pageable, total);
     }
 
     @Transactional(readOnly = true)
@@ -795,9 +932,11 @@ public class EventService {
 
         EventUserCalendarRequestDTO calendarRequest = request != null ? request : new EventUserCalendarRequestDTO();
         CalendarRange range = resolveCalendarRange(calendarRequest.getFrom(), calendarRequest.getTo());
+        Specification<Event> participantOrCreator = EventSpecifications.hasParticipantUser(currentUserId)
+                .or(EventSpecifications.isCreatedByUser(currentUserId));
         Specification<Event> spec = Specification.where(EventSpecifications.organizationEquals(organizationId))
                 .and(EventSpecifications.intersectsDateRange(range.from(), range.to()))
-                .and(EventSpecifications.hasParticipantUser(currentUserId))
+                .and(participantOrCreator)
                 .and(EventSpecifications.titleContains(calendarRequest.normalizedTitle()))
                 .and(EventSpecifications.hasAnyTag(calendarRequest.normalizedTags()));
 
@@ -807,7 +946,8 @@ public class EventService {
                 pageable,
                 EventCalendarScope.ORGANIZATION,
                 new EventCalendarRequestDTO(),
-                true);
+                true,
+                currentUserId);
     }
 
     @Transactional(readOnly = true)
@@ -1035,22 +1175,26 @@ public class EventService {
         Set<Long> authorUserIds = comments.stream()
                 .map(EventComment::getAuthorUserId)
                 .collect(Collectors.toSet());
-        Map<Long, String> userNamesById = userRepository.findAllById(authorUserIds).stream()
-                .collect(Collectors.toMap(User::getId, User::getName));
+        Map<Long, User> usersById = userRepository.findAllById(authorUserIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
 
         Map<Long, List<EventCommentDTO>> commentsByEventId = comments.stream()
                 .collect(Collectors.groupingBy(
                         EventComment::getEventId,
                         LinkedHashMap::new,
                         Collectors.mapping(
-                                c -> EventCommentDTO.builder()
-                                        .id(c.getId())
-                                        .authorUserId(c.getAuthorUserId())
-                                        .authorName(userNamesById.get(c.getAuthorUserId()))
-                                        .text(c.getText())
-                                        .rating(c.getRating())
-                                        .createdAt(c.getCreatedAt())
-                                        .build(),
+                                c -> {
+                                    User author = usersById.get(c.getAuthorUserId());
+                                    return EventCommentDTO.builder()
+                                            .id(c.getId())
+                                            .authorUserId(c.getAuthorUserId())
+                                            .authorName(author != null ? author.getName() : null)
+                                            .authorProfileImageFileId(author != null ? author.getProfileImageFileId() : null)
+                                            .text(c.getText())
+                                            .rating(c.getRating())
+                                            .createdAt(c.getCreatedAt())
+                                            .build();
+                                },
                                 Collectors.toList())));
 
         return eventIds.stream()
@@ -1453,6 +1597,16 @@ public class EventService {
             EventCalendarScope scope,
             EventCalendarRequestDTO request,
             boolean includeOrgWide) {
+        return toGroupedCalendarResponse(eventsPage, pageable, scope, request, includeOrgWide, null);
+    }
+
+    private EventCalendarGroupedResponseDTO toGroupedCalendarResponse(
+            Page<Event> eventsPage,
+            Pageable pageable,
+            EventCalendarScope scope,
+            EventCalendarRequestDTO request,
+            boolean includeOrgWide,
+            Long creatorUserIdForFallback) {
         List<Event> events = eventsPage.getContent();
         if (events.isEmpty()) {
             return EventCalendarGroupedResponseDTO.builder()
@@ -1499,6 +1653,13 @@ public class EventService {
                 for (Long sectionId : eventSectionIds) {
                     grouped.computeIfAbsent(sectionId, ignored -> new ArrayList<>()).add(dto);
                 }
+            }
+
+            if (creatorUserIdForFallback != null
+                    && creatorUserIdForFallback.equals(event.getCreatorUserId())
+                    && !event.isIncludeAllOrganizationMembers()
+                    && eventSectionIds.isEmpty()) {
+                organizationWideEvents.add(dto);
             }
         }
 
@@ -1564,10 +1725,18 @@ public class EventService {
     private EventDTO buildEventDto(Event event) {
         EventDTO dto = eventMapper.toDto(event);
 
+        dto.setCreatedByUserId(event.getCreatorUserId());
+
         List<EventParticipant> participants = eventParticipantRepository.findByEventId(event.getId());
         List<Long> participantIds = participants.stream()
                 .map(EventParticipant::getUserId)
                 .toList();
+
+        Long currentUserId = securityUtils.getCurrentUserId();
+        participants.stream()
+                .filter(p -> p.getUserId().equals(currentUserId))
+                .findFirst()
+                .ifPresent(p -> dto.setMyRsvpStatus(p.getRsvpStatus()));
 
         dto.setParticipantUserIds(participantIds);
         dto.setIncludeAllOrganizationMembers(event.isIncludeAllOrganizationMembers());
@@ -1612,11 +1781,16 @@ public class EventService {
             return dtos;
         }
 
+        Long currentUserId = securityUtils.getCurrentUserId();
         List<Long> eventIds = events.stream().map(Event::getId).toList();
         List<EventParticipant> participants = eventParticipantRepository.findByEventIdIn(eventIds);
         List<EventSection> eventSections = eventSectionRepository.findByEventIdIn(eventIds);
         List<EventFile> eventFiles = eventFileRepository.findByEventIdIn(eventIds);
         List<EventSong> eventSongs = eventSongRepository.findByEventIdIn(eventIds);
+
+        Map<Long, EventRsvpStatus> myRsvpByEventId = participants.stream()
+                .filter(p -> p.getUserId().equals(currentUserId))
+                .collect(Collectors.toMap(EventParticipant::getEventId, EventParticipant::getRsvpStatus, (a, b) -> a));
 
         Map<Long, List<Long>> eventParticipantsMap = participants.stream()
                 .collect(Collectors.groupingBy(
@@ -1639,6 +1813,9 @@ public class EventService {
         for (int i = 0; i < events.size(); i++) {
             Event event = events.get(i);
             EventDTO dto = dtos.get(i);
+
+            dto.setCreatedByUserId(event.getCreatorUserId());
+            dto.setMyRsvpStatus(myRsvpByEventId.get(event.getId()));
 
             List<Long> participantIds = eventParticipantsMap.getOrDefault(event.getId(), List.of());
             dto.setParticipantUserIds(participantIds);

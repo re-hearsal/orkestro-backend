@@ -16,6 +16,14 @@ public class WebSocketNotificationService {
     private final InAppNotificationRepository inAppNotificationRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
+    public void sendToTopic(String destination, Object payload) {
+        try {
+            messagingTemplate.convertAndSend(destination, payload);
+        } catch (Exception ex) {
+            log.error("Failed to push WebSocket message to topic {}", destination, ex);
+        }
+    }
+
     public void send(Long userId, InAppNotificationDTO dto) {
         try {
             InAppNotification entity = InAppNotification.builder()

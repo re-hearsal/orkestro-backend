@@ -235,7 +235,10 @@ CREATE TABLE song (
     title TEXT NOT NULL,
     composer TEXT,
     duration_seconds INT,
-    description TEXT CHECK (description IS NULL OR char_length(description) <= 3000),
+    description TEXT CHECK (
+        description IS NULL
+        OR char_length (description) <= 3000
+    ),
     video_url TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (organization_id) REFERENCES organization (id),
@@ -472,7 +475,11 @@ CREATE UNIQUE INDEX ux_users_telegram_user_id ON users (telegram_user_id);
 ALTER TABLE users
 ADD CONSTRAINT fk_users_profile_image_file FOREIGN KEY (profile_image_file_id) REFERENCES file (id);
 
-CREATE INDEX idx_events_org_start_id ON events (organization_id, start_time, id);
+CREATE INDEX idx_events_org_start_id ON events (
+    organization_id,
+    start_time,
+    id
+);
 
 CREATE INDEX idx_events_org_end_id ON events (organization_id, end_time, id);
 
@@ -480,8 +487,7 @@ CREATE INDEX idx_event_sections_section_event ON event_sections (section_id, eve
 
 CREATE INDEX idx_event_participants_user_event ON event_participants (user_id, event_id);
 
-CREATE INDEX idx_event_comment_event_id_created_at
-    ON event_comment (event_id, created_at DESC);
+CREATE INDEX idx_event_comment_event_id_created_at ON event_comment (event_id, created_at DESC);
 
 INSERT INTO
     permission (code, description)
@@ -570,8 +576,8 @@ VALUES (
         'Mark attendance of event participants'
     ),
     (
-        'EVENT_DELETION',
-        'Delete events'
+        'EVENT_MANAGE',
+        'Manage events'
     ),
     ('TASK_MANAGE', 'Create tasks'),
     (
@@ -643,8 +649,11 @@ VALUES
         'REPERTOIRE_MANAGE_INSTRUMENTATION'
     ),
     (1, 'EVENT_MARK_ATTENDANCE'),
-    (1, 'EVENT_DELETION'),
-    (1, 'EVENT_MANAGE_DESCRIPTIONS'),
+    (1, 'EVENT_MANAGE'),
+    (
+        1,
+        'EVENT_MANAGE_DESCRIPTIONS'
+    ),
     (1, 'TASK_MANAGE'),
     (1, 'ORG_WRITE_INFO'),
     (1, 'ORG_FUND_MANIPULATION'),
@@ -664,8 +673,11 @@ VALUES
         'REPERTOIRE_MANAGE_INSTRUMENTATION'
     ),
     (2, 'EVENT_MARK_ATTENDANCE'),
-    (2, 'EVENT_DELETION'),
-    (2, 'EVENT_MANAGE_DESCRIPTIONS'),
+    (2, 'EVENT_MANAGE'),
+    (
+        2,
+        'EVENT_MANAGE_DESCRIPTIONS'
+    ),
     (2, 'TASK_MANAGE'),
     (2, 'ORG_WRITE_INFO'),
     (2, 'ORG_FUND_MANIPULATION'),

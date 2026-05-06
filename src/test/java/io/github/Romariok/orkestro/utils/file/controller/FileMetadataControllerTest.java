@@ -1,4 +1,4 @@
-package io.github.Romariok.orkestro.repertoire.controller;
+package io.github.Romariok.orkestro.utils.file.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;

@@ -55,6 +55,15 @@ public final class EventSpecifications {
         };
     }
 
+    public static Specification<Event> isCreatedByUser(Long userId) {
+        return (root, query, cb) -> {
+            if (userId == null) {
+                return cb.disjunction();
+            }
+            return cb.equal(root.get("creatorUserId"), userId);
+        };
+    }
+
     public static Specification<Event> hasParticipantUser(Long userId) {
         return (root, query, cb) -> {
             if (userId == null) {

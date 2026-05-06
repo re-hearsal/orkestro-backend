@@ -1,5 +1,11 @@
 package io.github.Romariok.orkestro.organization.service;
 
+import io.github.Romariok.orkestro.event.models.EventParticipant;
+import io.github.Romariok.orkestro.event.models.enums.EventAttendanceStatus;
+import io.github.Romariok.orkestro.event.models.enums.EventParticipantSourceType;
+import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
+import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
+import io.github.Romariok.orkestro.event.repository.EventRepository;
 import io.github.Romariok.orkestro.organization.dto.OrgMemberContextDTO;
 import io.github.Romariok.orkestro.organization.dto.OrganizationDTO;
 import io.github.Romariok.orkestro.organization.models.Organization;
@@ -26,6 +32,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.domain.Page;
@@ -52,6 +59,8 @@ public class OrganizationUserService {
       private final SecurityUtils securityUtils;
       private final OrganizationMemberMapper organizationMemberMapper;
       private final OrgNotificationService orgNotificationService;
+      private final EventRepository eventRepository;
+      private final EventParticipantRepository eventParticipantRepository;
 
       @Transactional(readOnly = true)
       @PreAuthorize("@organizationPermissionChecker.isAcceptedOrganizationMember(#organizationId)")
@@ -233,10 +242,35 @@ public class OrganizationUserService {
             organizationUserRepository.save(organizationUser);
 
             organizationService.syncOrganizationLeadershipRoles(organizationId);
+            addUserToFutureOrganizationEvents(organizationId, userId);
 
             String orgName = organizationRepository.findById(organizationId)
                         .map(Organization::getName).orElse("");
             orgNotificationService.notifyJoinRequestApproved(organizationId, userId, orgName);
+      }
+
+      private void addUserToFutureOrganizationEvents(Long organizationId, Long userId) {
+            Instant now = Instant.now();
+            Set<Long> alreadyParticipating = eventParticipantRepository.findByUserId(userId).stream()
+                        .map(EventParticipant::getEventId)
+                        .collect(Collectors.toSet());
+
+            List<EventParticipant> toSave = eventRepository
+                        .findByOrganizationIdAndIncludeAllOrganizationMembersTrueAndStartTimeAfter(organizationId, now)
+                        .stream()
+                        .filter(event -> !alreadyParticipating.contains(event.getId()))
+                        .map(event -> EventParticipant.builder()
+                                    .eventId(event.getId())
+                                    .userId(userId)
+                                    .source(EventParticipantSourceType.ORGANIZATION)
+                                    .rsvpStatus(EventRsvpStatus.PENDING)
+                                    .attendanceStatus(EventAttendanceStatus.UNKNOWN)
+                                    .build())
+                        .toList();
+
+            if (!toSave.isEmpty()) {
+                  eventParticipantRepository.saveAll(toSave);
+            }
       }
 
       @Transactional

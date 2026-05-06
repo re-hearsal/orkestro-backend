@@ -18,6 +18,9 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
 
     List<Event> findByRemindBeforeMinutesIsNotNull();
 
+    List<Event> findByOrganizationIdAndIncludeAllOrganizationMembersTrueAndStartTimeAfter(
+            Long organizationId, Instant startTimeAfter);
+
     @Query("""
             select distinct tag
             from Event e

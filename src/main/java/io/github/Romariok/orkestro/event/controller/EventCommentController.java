@@ -20,6 +20,7 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -81,6 +82,27 @@ public class EventCommentController {
             @Valid @RequestBody EventCommentCreateRequestDTO request) {
         EventCommentDTO created = eventService.createEventComment(organizationId, eventId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @Operation(
+            summary = "Получить комментарии одного мероприятия (постранично)",
+            description = "Возвращает пагинированный список комментариев для одного мероприятия, отсортированных по убыванию даты создания."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Комментарии получены",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = Page.class))),
+            @ApiResponse(responseCode = "401", description = "Не аутентифицирован", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Событие не найдено", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    @GetMapping("/{eventId}/comments/page")
+    public ResponseEntity<Page<EventCommentDTO>> getEventCommentsPage(
+            @Parameter(description = "ID организации", required = true) @PathVariable @Positive Long organizationId,
+            @Parameter(description = "ID мероприятия", required = true) @PathVariable @Positive Long eventId,
+            @ParameterObject @PageableDefault(size = 3) Pageable pageable) {
+        return ResponseEntity.ok(eventService.getEventCommentsPage(organizationId, eventId, pageable));
     }
 
     @Operation(

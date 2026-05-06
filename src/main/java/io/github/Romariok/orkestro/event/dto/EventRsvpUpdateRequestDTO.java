@@ -1,25 +1,16 @@
 package io.github.Romariok.orkestro.event.dto;
 
-import io.github.Romariok.orkestro.event.models.enums.EventAttendanceStatus;
 import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class EventAttendanceRowDTO {
+public class EventRsvpUpdateRequestDTO {
 
-    private Long userId;
-
-    private String name;
-
-    private Long profileImageFileId;
-
+    @NotNull
     private EventRsvpStatus rsvpStatus;
-
-    private EventAttendanceStatus attendanceStatus;
 }

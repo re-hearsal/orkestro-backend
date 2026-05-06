@@ -1,4 +1,4 @@
-package io.github.Romariok.orkestro.repertoire.dto;
+package io.github.Romariok.orkestro.utils.file.dto;
 
 import io.github.Romariok.orkestro.utils.file.FileType;
 import lombok.AllArgsConstructor;
