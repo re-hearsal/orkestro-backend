@@ -15,12 +15,12 @@ public class SongFileUploadRequestDTO {
    private MultipartFile file;
 
    @AssertTrue(message = "File is required")
-   private boolean isFilePresent() {
+   boolean isFilePresent() {
       return file != null && !file.isEmpty() && file.getSize() > 0;
    }
 
    @AssertTrue(message = "File name is required")
-   private boolean isFileNamePresent() {
+   boolean isFileNamePresent() {
       if (file == null) {
          return false;
       }

@@ -27,7 +27,7 @@ public class UserProfileUpdateRequestDTO {
    private UserLanguageType preferredLanguage;
 
    @AssertTrue(message = "At least one field must be provided")
-   private boolean isAnyFieldProvided() {
+   boolean isAnyFieldProvided() {
       return name != null
             || email != null
             || location != null
@@ -36,17 +36,17 @@ public class UserProfileUpdateRequestDTO {
    }
 
    @AssertTrue(message = "Name cannot be blank")
-   private boolean isNameValid() {
+   boolean isNameValid() {
       return name == null || name.matches(".*\\S.*");
    }
 
    @AssertTrue(message = "Email cannot be blank")
-   private boolean isEmailValid() {
+   boolean isEmailValid() {
       return email == null || email.matches(".*\\S.*");
    }
 
    @AssertTrue(message = "Location cannot be blank")
-   private boolean isLocationValid() {
+   boolean isLocationValid() {
       return location == null || location.matches(".*\\S.*");
    }
 }

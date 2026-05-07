@@ -44,7 +44,7 @@ public class EmailRsvpService {
             return accepted
                     ? messageSource.getMessage("notification.email.rsvp.accepted", null, locale)
                     : messageSource.getMessage("notification.email.rsvp.declined", null, locale);
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
             return messageSource.getMessage("notification.email.rsvp.expired", null, Locale.forLanguageTag("ru"));
         }
     }

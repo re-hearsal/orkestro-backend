@@ -19,7 +19,7 @@ public class TaskFileAttachRequestDTO {
     private MultipartFile file;
 
     @AssertTrue(message = "File must be non-empty with valid name")
-    private boolean isFileValid() {
+    boolean isFileValid() {
         if (file == null) {
             return false;
         }

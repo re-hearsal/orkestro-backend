@@ -1,6 +1,7 @@
 package io.github.Romariok.orkestro.event.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import io.github.Romariok.orkestro.mail.service.JcaEmailService;
 import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
@@ -81,7 +82,7 @@ public class EmailNotificationListener {
             }
 
             jcaEmailService.sendTemplateMessage(message.to(), message.subject(), templateName, templateModel);
-        } catch (Exception ex) {
+        } catch (IOException | RuntimeException ex) {
             log.error("Failed to process RabbitMQ email notification message", ex);
         }
     }

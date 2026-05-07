@@ -186,6 +186,7 @@ public class EventService {
                 .build();
 
         List<Long> uploadedFileIds = List.of();
+        boolean createEventSuccess = false;
         try {
             uploadedFileIds = uploadEventFiles(request.getFiles());
 
@@ -222,10 +223,13 @@ public class EventService {
                 }
             }
 
-            return buildEventDto(saved);
-        } catch (RuntimeException ex) {
-            fileRollbackHelper.deleteFilesSafely(uploadedFileIds);
-            throw ex;
+            EventDTO result = buildEventDto(saved);
+            createEventSuccess = true;
+            return result;
+        } finally {
+            if (!createEventSuccess) {
+                fileRollbackHelper.deleteFilesSafely(uploadedFileIds);
+            }
         }
     }
 
@@ -540,6 +544,7 @@ public class EventService {
 
         StoredFile stored = fileStorageService.uploadForCurrentUser(file, FileTypeDetector.detect(file));
         Long fileId = stored.getId();
+        boolean uploadEventFileSuccess = false;
         try {
             if (!eventFileRepository.existsByEventIdAndFileId(eventId, fileId)) {
                 EventFile eventFile = new EventFile();
@@ -547,10 +552,13 @@ public class EventService {
                 eventFile.setFileId(fileId);
                 eventFileRepository.save(eventFile);
             }
-            return buildEventDto(event);
-        } catch (RuntimeException ex) {
-            fileRollbackHelper.deleteFilesSafely(List.of(fileId));
-            throw ex;
+            EventDTO result = buildEventDto(event);
+            uploadEventFileSuccess = true;
+            return result;
+        } finally {
+            if (!uploadEventFileSuccess) {
+                fileRollbackHelper.deleteFilesSafely(List.of(fileId));
+            }
         }
     }
 
@@ -803,7 +811,7 @@ public class EventService {
         Map<Long, User> usersById = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
 
-        String normalizedSearch = nameSearch != null ? nameSearch.trim().toLowerCase() : null;
+        String normalizedSearch = nameSearch != null ? nameSearch.trim().toLowerCase(Locale.ROOT) : null;
         List<EventAttendanceRowDTO> rows = participants.stream()
                 .filter(p -> {
                     if (normalizedSearch == null || normalizedSearch.isEmpty()) {
@@ -811,7 +819,7 @@ public class EventService {
                     }
                     User u = usersById.get(p.getUserId());
                     return u != null && u.getName() != null
-                            && u.getName().toLowerCase().contains(normalizedSearch);
+                            && u.getName().toLowerCase(Locale.ROOT).contains(normalizedSearch);
                 })
                 .map(p -> {
                     User u = usersById.get(p.getUserId());

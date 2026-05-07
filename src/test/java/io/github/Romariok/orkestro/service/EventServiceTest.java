@@ -15,6 +15,10 @@ import static org.mockito.Mockito.lenient;
 
 import io.github.Romariok.orkestro.event.dto.EventAttendanceRowDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarDTO;
+import io.github.Romariok.orkestro.event.models.EventSong;
+import io.github.Romariok.orkestro.repertoire.models.Song;
+import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
+import org.springframework.data.domain.Page;
 import io.github.Romariok.orkestro.event.dto.EventCalendarGroupedResponseDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO;
 import io.github.Romariok.orkestro.event.dto.EventCalendarScope;
@@ -147,6 +151,9 @@ class EventServiceTest {
 
         @Mock
         private EventNotificationService eventNotificationService;
+
+        @Mock
+        private SongRepository songRepository;
 
         @BeforeEach
         void setup() {
@@ -1853,6 +1860,751 @@ class EventServiceTest {
                                 () -> eventService.updateEvent(organizationId, eventId, request));
 
                 verify(eventRepository, never()).save(any());
+        }
+
+        // ===== duplicateEvent =====
+
+        @Test
+        void duplicateEvent_emptyStartTimes_throwsIllegalArgumentException() {
+                assertThrows(IllegalArgumentException.class,
+                                () -> eventService.duplicateEvent(1L, 100L, List.of()));
+        }
+
+        @Test
+        void duplicateEvent_nullStartTimes_throwsIllegalArgumentException() {
+                assertThrows(IllegalArgumentException.class,
+                                () -> eventService.duplicateEvent(1L, 100L, null));
+        }
+
+        @Test
+        void duplicateEvent_eventNotFound_throwsEntityNotFoundException() {
+                when(eventRepository.findById(100L)).thenReturn(Optional.empty());
+                assertThrows(EntityNotFoundException.class,
+                                () -> eventService.duplicateEvent(1L, 100L, List.of(Instant.now().plusSeconds(3600))));
+        }
+
+        @Test
+        void duplicateEvent_nullInStartTimesList_throwsIllegalArgumentException() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long userId = 10L;
+
+                Event source = Event.builder()
+                                .id(eventId).organizationId(organizationId).title("Source")
+                                .startTime(Instant.parse("2025-06-01T10:00:00Z"))
+                                .endTime(Instant.parse("2025-06-01T12:00:00Z"))
+                                .createdAt(Instant.now()).build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(source));
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of());
+                when(eventFileRepository.findByEventId(eventId)).thenReturn(List.of());
+                when(eventSongRepository.findByEventId(eventId)).thenReturn(List.of());
+
+                java.util.List<Instant> startTimesWithNull = new java.util.ArrayList<>();
+                startTimesWithNull.add(null);
+
+                assertThrows(IllegalArgumentException.class,
+                                () -> eventService.duplicateEvent(organizationId, eventId, startTimesWithNull));
+        }
+
+        @Test
+        void duplicateEvent_success_createsNewEventCopyingParticipantsFilesAndSongs() {
+                Long organizationId = 1L;
+                Long sourceEventId = 100L;
+                Long newEventId = 500L;
+                Long userId = 10L;
+                Long participantId = 20L;
+                Long fileId = 30L;
+                Long songId = 40L;
+                Long sectionId = 50L;
+
+                Instant sourceStart = Instant.parse("2025-06-01T10:00:00Z");
+                Instant sourceEnd = Instant.parse("2025-06-01T12:00:00Z");
+                Instant newStart = Instant.parse("2025-07-01T10:00:00Z");
+
+                Event sourceEvent = Event.builder()
+                                .id(sourceEventId).organizationId(organizationId).title("Source Event")
+                                .eventType(EventType.REHEARSAL)
+                                .startTime(sourceStart).endTime(sourceEnd)
+                                .includeAllOrganizationMembers(false).createdAt(Instant.now()).build();
+
+                when(eventRepository.findById(sourceEventId)).thenReturn(Optional.of(sourceEvent));
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+
+                EventParticipant sourceParticipant = EventParticipant.builder()
+                                .eventId(sourceEventId).userId(participantId)
+                                .source(EventParticipantSourceType.MANUAL)
+                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                .attendanceStatus(EventAttendanceStatus.ATTENDED).build();
+                when(eventParticipantRepository.findByEventId(sourceEventId)).thenReturn(List.of(sourceParticipant));
+
+                EventFile sourceFile = new EventFile();
+                sourceFile.setEventId(sourceEventId);
+                sourceFile.setFileId(fileId);
+                when(eventFileRepository.findByEventId(sourceEventId)).thenReturn(List.of(sourceFile));
+
+                EventSong sourceSong = new EventSong();
+                sourceSong.setEventId(sourceEventId);
+                sourceSong.setSongId(songId);
+                sourceSong.setPosition(0);
+                when(eventSongRepository.findByEventId(sourceEventId)).thenReturn(List.of(sourceSong));
+
+                EventSection sourceSection = new EventSection();
+                sourceSection.setEventId(sourceEventId);
+                sourceSection.setSectionId(sectionId);
+                when(eventSectionRepository.findByEventId(sourceEventId)).thenReturn(List.of(sourceSection));
+
+                Event savedNew = Event.builder()
+                                .id(newEventId).organizationId(organizationId).title("Source Event")
+                                .startTime(newStart).endTime(newStart.plusSeconds(7200)).build();
+                when(eventRepository.save(any(Event.class))).thenReturn(savedNew);
+                when(eventParticipantRepository.findByEventId(newEventId)).thenReturn(List.of());
+                when(eventFileRepository.findByEventId(newEventId)).thenReturn(List.of());
+                when(eventSongRepository.findByEventId(newEventId)).thenReturn(List.of());
+                when(eventMapper.toDto(any(Event.class))).thenReturn(EventDTO.builder().id(newEventId).build());
+
+                List<EventDTO> result = eventService.duplicateEvent(organizationId, sourceEventId, List.of(newStart));
+
+                assertEquals(1, result.size());
+                assertEquals(newEventId, result.get(0).getId());
+
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<EventParticipant>> participantsCaptor =
+                                (ArgumentCaptor<List<EventParticipant>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
+                verify(eventParticipantRepository).saveAll(participantsCaptor.capture());
+                List<EventParticipant> savedParticipants = participantsCaptor.getValue();
+                assertEquals(1, savedParticipants.size());
+                assertEquals(newEventId, savedParticipants.get(0).getEventId());
+                assertEquals(participantId, savedParticipants.get(0).getUserId());
+                assertEquals(EventRsvpStatus.PENDING, savedParticipants.get(0).getRsvpStatus());
+                assertEquals(EventAttendanceStatus.UNKNOWN, savedParticipants.get(0).getAttendanceStatus());
+
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<EventFile>> filesCaptor =
+                                (ArgumentCaptor<List<EventFile>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
+                verify(eventFileRepository).saveAll(filesCaptor.capture());
+                assertEquals(1, filesCaptor.getValue().size());
+                assertEquals(fileId, filesCaptor.getValue().get(0).getFileId());
+
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<EventSong>> songsCaptor =
+                                (ArgumentCaptor<List<EventSong>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
+                verify(eventSongRepository).saveAll(songsCaptor.capture());
+                assertEquals(1, songsCaptor.getValue().size());
+                assertEquals(songId, songsCaptor.getValue().get(0).getSongId());
+                assertEquals(0, songsCaptor.getValue().get(0).getPosition());
+
+                @SuppressWarnings("unchecked")
+                ArgumentCaptor<List<EventSection>> sectionsCaptor =
+                                (ArgumentCaptor<List<EventSection>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
+                verify(eventSectionRepository).saveAll(sectionsCaptor.capture());
+                assertEquals(1, sectionsCaptor.getValue().size());
+                assertEquals(sectionId, sectionsCaptor.getValue().get(0).getSectionId());
+        }
+
+        @Test
+        void duplicateEvent_multipleStartTimes_createsOneEventPerTime() {
+                Long organizationId = 1L;
+                Long sourceEventId = 100L;
+                Long userId = 10L;
+
+                Instant sourceStart = Instant.parse("2025-06-01T10:00:00Z");
+                Instant sourceEnd = Instant.parse("2025-06-01T12:00:00Z");
+
+                Event sourceEvent = Event.builder()
+                                .id(sourceEventId).organizationId(organizationId).title("Source")
+                                .startTime(sourceStart).endTime(sourceEnd)
+                                .includeAllOrganizationMembers(false).createdAt(Instant.now()).build();
+
+                when(eventRepository.findById(sourceEventId)).thenReturn(Optional.of(sourceEvent));
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventParticipantRepository.findByEventId(sourceEventId)).thenReturn(List.of());
+                when(eventFileRepository.findByEventId(sourceEventId)).thenReturn(List.of());
+                when(eventSongRepository.findByEventId(sourceEventId)).thenReturn(List.of());
+
+                Event saved1 = Event.builder().id(201L).organizationId(organizationId).title("Source").build();
+                Event saved2 = Event.builder().id(202L).organizationId(organizationId).title("Source").build();
+                when(eventRepository.save(any(Event.class))).thenReturn(saved1, saved2);
+
+                lenient().when(eventParticipantRepository.findByEventId(201L)).thenReturn(List.of());
+                lenient().when(eventParticipantRepository.findByEventId(202L)).thenReturn(List.of());
+                lenient().when(eventFileRepository.findByEventId(201L)).thenReturn(List.of());
+                lenient().when(eventFileRepository.findByEventId(202L)).thenReturn(List.of());
+                lenient().when(eventSongRepository.findByEventId(201L)).thenReturn(List.of());
+                lenient().when(eventSongRepository.findByEventId(202L)).thenReturn(List.of());
+                when(eventMapper.toDto(any(Event.class)))
+                                .thenReturn(EventDTO.builder().id(201L).build(), EventDTO.builder().id(202L).build());
+
+                List<Instant> startTimes = List.of(
+                                Instant.parse("2025-07-01T10:00:00Z"),
+                                Instant.parse("2025-08-01T10:00:00Z"));
+                List<EventDTO> result = eventService.duplicateEvent(organizationId, sourceEventId, startTimes);
+
+                assertEquals(2, result.size());
+                verify(eventRepository, org.mockito.Mockito.times(2)).save(any(Event.class));
+        }
+
+        // ===== updateMyRsvp =====
+
+        @Test
+        void updateMyRsvp_success_updatesRsvpStatus() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long userId = 10L;
+
+                Event event = Event.builder()
+                                .id(eventId).organizationId(organizationId)
+                                .startTime(Instant.now()).endTime(Instant.now().plusSeconds(3600))
+                                .createdAt(Instant.now()).build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+
+                EventParticipant participant = EventParticipant.builder()
+                                .eventId(eventId).userId(userId)
+                                .rsvpStatus(EventRsvpStatus.PENDING).attendanceStatus(EventAttendanceStatus.UNKNOWN).build();
+                when(eventParticipantRepository.findByEventIdAndUserId(eventId, userId))
+                                .thenReturn(Optional.of(participant));
+                when(eventParticipantRepository.save(any(EventParticipant.class))).thenReturn(participant);
+
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of(participant));
+                when(eventFileRepository.findByEventId(eventId)).thenReturn(List.of());
+                when(eventSongRepository.findByEventId(eventId)).thenReturn(List.of());
+                when(eventMapper.toDto(any(Event.class))).thenReturn(EventDTO.builder().id(eventId).build());
+
+                eventService.updateMyRsvp(organizationId, eventId, EventRsvpStatus.ACCEPTED);
+
+                ArgumentCaptor<EventParticipant> captor = ArgumentCaptor.forClass(EventParticipant.class);
+                verify(eventParticipantRepository).save(captor.capture());
+                assertEquals(EventRsvpStatus.ACCEPTED, captor.getValue().getRsvpStatus());
+        }
+
+        @Test
+        void updateMyRsvp_nullStatus_throwsIllegalArgumentException() {
+                assertThrows(IllegalArgumentException.class,
+                                () -> eventService.updateMyRsvp(1L, 100L, null));
+                verify(eventRepository, never()).findById(anyLong());
+        }
+
+        @Test
+        void updateMyRsvp_eventNotFound_throwsEntityNotFoundException() {
+                when(eventRepository.findById(100L)).thenReturn(Optional.empty());
+                assertThrows(EntityNotFoundException.class,
+                                () -> eventService.updateMyRsvp(1L, 100L, EventRsvpStatus.ACCEPTED));
+        }
+
+        @Test
+        void updateMyRsvp_notParticipant_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long userId = 10L;
+
+                Event event = Event.builder()
+                                .id(eventId).organizationId(organizationId)
+                                .startTime(Instant.now()).endTime(Instant.now().plusSeconds(3600))
+                                .createdAt(Instant.now()).build();
+
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventParticipantRepository.findByEventIdAndUserId(eventId, userId))
+                                .thenReturn(Optional.empty());
+
+                assertThrows(BusinessException.class,
+                                () -> eventService.updateMyRsvp(organizationId, eventId, EventRsvpStatus.ACCEPTED));
+                verify(eventParticipantRepository, never()).save(any());
+        }
+
+        // ===== getEventCommentsPage =====
+
+        @Test
+        void getEventCommentsPage_success_returnsPageWithAuthorNames() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long userId = 10L;
+                Long authorId = 20L;
+                Pageable pageable = PageRequest.of(0, 10);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+
+                Event event = Event.builder().id(eventId).organizationId(organizationId).build();
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+                EventComment comment = EventComment.builder()
+                                .id(1L).eventId(eventId).authorUserId(authorId)
+                                .text("Great rehearsal!").createdAt(Instant.now()).build();
+                Page<EventComment> commentPage = new PageImpl<>(List.of(comment), pageable, 1);
+                when(eventCommentRepository.findByEventIdOrderByCreatedAtDesc(eventId, pageable))
+                                .thenReturn(commentPage);
+                when(userRepository.findAllById(anyCollection()))
+                                .thenReturn(List.of(User.builder().id(authorId).name("Conductor").profileImageFileId(5L).build()));
+
+                Page<EventCommentDTO> result = eventService.getEventCommentsPage(organizationId, eventId, pageable);
+
+                assertEquals(1, result.getTotalElements());
+                assertEquals("Great rehearsal!", result.getContent().get(0).getText());
+                assertEquals("Conductor", result.getContent().get(0).getAuthorName());
+                assertEquals(authorId, result.getContent().get(0).getAuthorUserId());
+                assertEquals(5L, result.getContent().get(0).getAuthorProfileImageFileId());
+        }
+
+        @Test
+        void getEventCommentsPage_eventNotFound_throwsEntityNotFoundException() {
+                Long organizationId = 1L;
+                Long eventId = 999L;
+                Long userId = 10L;
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventRepository.findById(eventId)).thenReturn(Optional.empty());
+
+                assertThrows(EntityNotFoundException.class,
+                                () -> eventService.getEventCommentsPage(organizationId, eventId, PageRequest.of(0, 10)));
+                verify(eventCommentRepository, never()).findByEventIdOrderByCreatedAtDesc(anyLong(), any());
+        }
+
+        // ===== deleteEventComment =====
+
+        @Test
+        void deleteEventComment_success_deletesComment() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long commentId = 1L;
+                Long userId = 10L;
+
+                Event event = Event.builder()
+                                .id(eventId).organizationId(organizationId).creatorUserId(userId).build();
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+                EventComment comment = EventComment.builder()
+                                .id(commentId).eventId(eventId).authorUserId(userId).text("Nice!").build();
+                when(eventCommentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+
+                eventService.deleteEventComment(organizationId, eventId, commentId);
+
+                verify(eventCommentRepository).delete(comment);
+        }
+
+        @Test
+        void deleteEventComment_commentNotFound_throwsEntityNotFoundException() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long commentId = 999L;
+
+                Event event = Event.builder()
+                                .id(eventId).organizationId(organizationId).creatorUserId(1L).build();
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(eventCommentRepository.findById(commentId)).thenReturn(Optional.empty());
+
+                assertThrows(EntityNotFoundException.class,
+                                () -> eventService.deleteEventComment(organizationId, eventId, commentId));
+                verify(eventCommentRepository, never()).delete(any(EventComment.class));
+        }
+
+        @Test
+        void deleteEventComment_commentBelongsToDifferentEvent_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long commentId = 1L;
+                Long userId = 10L;
+
+                Event event = Event.builder()
+                                .id(eventId).organizationId(organizationId).creatorUserId(userId).build();
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+                EventComment comment = EventComment.builder()
+                                .id(commentId).eventId(200L).authorUserId(userId).text("Other event").build();
+                when(eventCommentRepository.findById(commentId)).thenReturn(Optional.of(comment));
+
+                assertThrows(BusinessException.class,
+                                () -> eventService.deleteEventComment(organizationId, eventId, commentId));
+                verify(eventCommentRepository, never()).delete(any(EventComment.class));
+        }
+
+        // ===== getEventParticipantsPaged =====
+
+        @Test
+        void getEventParticipantsPaged_success_noFilter_returnsAllPaged() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long userId = 10L;
+                Long p1Id = 20L;
+                Long p2Id = 30L;
+                Pageable pageable = PageRequest.of(0, 10);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(
+                                Event.builder().id(eventId).organizationId(organizationId).build()));
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of(
+                                EventParticipant.builder().eventId(eventId).userId(p1Id)
+                                                .rsvpStatus(EventRsvpStatus.ACCEPTED).attendanceStatus(EventAttendanceStatus.ATTENDED).build(),
+                                EventParticipant.builder().eventId(eventId).userId(p2Id)
+                                                .rsvpStatus(EventRsvpStatus.DECLINED).attendanceStatus(EventAttendanceStatus.ABSENT).build()));
+                when(userRepository.findAllById(anyCollection())).thenReturn(List.of(
+                                User.builder().id(p1Id).name("Alice").profileImageFileId(1L).build(),
+                                User.builder().id(p2Id).name("Bob").profileImageFileId(2L).build()));
+
+                Page<EventAttendanceRowDTO> result = eventService.getEventParticipantsPaged(
+                                organizationId, eventId, null, pageable);
+
+                assertEquals(2, result.getTotalElements());
+                assertEquals(2, result.getContent().size());
+        }
+
+        @Test
+        void getEventParticipantsPaged_withNameFilter_returnsOnlyMatchingParticipants() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long userId = 10L;
+                Long p1Id = 20L;
+                Long p2Id = 30L;
+                Pageable pageable = PageRequest.of(0, 10);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(
+                                Event.builder().id(eventId).organizationId(organizationId).build()));
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of(
+                                EventParticipant.builder().eventId(eventId).userId(p1Id)
+                                                .rsvpStatus(EventRsvpStatus.ACCEPTED).attendanceStatus(EventAttendanceStatus.ATTENDED).build(),
+                                EventParticipant.builder().eventId(eventId).userId(p2Id)
+                                                .rsvpStatus(EventRsvpStatus.PENDING).attendanceStatus(EventAttendanceStatus.UNKNOWN).build()));
+                when(userRepository.findAllById(anyCollection())).thenReturn(List.of(
+                                User.builder().id(p1Id).name("Alice Smith").profileImageFileId(1L).build(),
+                                User.builder().id(p2Id).name("Bob Johnson").profileImageFileId(2L).build()));
+
+                Page<EventAttendanceRowDTO> result = eventService.getEventParticipantsPaged(
+                                organizationId, eventId, "alice", pageable);
+
+                assertEquals(1, result.getTotalElements());
+                assertEquals("Alice Smith", result.getContent().get(0).getName());
+        }
+
+        @Test
+        void getEventParticipantsPaged_emptyParticipants_returnsEmptyPage() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long userId = 10L;
+                Pageable pageable = PageRequest.of(0, 10);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(
+                                Event.builder().id(eventId).organizationId(organizationId).build()));
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of());
+
+                Page<EventAttendanceRowDTO> result = eventService.getEventParticipantsPaged(
+                                organizationId, eventId, null, pageable);
+
+                assertTrue(result.isEmpty());
+                verify(userRepository, never()).findAllById(anyCollection());
+        }
+
+        // ===== exportEventAttendanceMatrixAsCsv =====
+
+        @Test
+        void exportEventAttendanceMatrixAsCsv_success_returnsCsvWithHeaderAndParticipantRows() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long currentUserId = 99L;
+                Long participantId = 10L;
+
+                Event event = Event.builder()
+                                .id(eventId).organizationId(organizationId)
+                                .startTime(Instant.now()).endTime(Instant.now().plusSeconds(3600)).createdAt(Instant.now()).build();
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(currentUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of(
+                                EventParticipant.builder().eventId(eventId).userId(participantId)
+                                                .rsvpStatus(EventRsvpStatus.ACCEPTED)
+                                                .attendanceStatus(EventAttendanceStatus.ATTENDED).build()));
+                when(userRepository.findAllById(anyCollection())).thenReturn(List.of(
+                                User.builder().id(participantId).name("John Doe")
+                                                .email("john@example.com").password("p").profileImageFileId(1L)
+                                                .createdAt(Instant.now()).updatedAt(Instant.now()).build()));
+
+                String csv = eventService.exportEventAttendanceMatrixAsCsv(organizationId, eventId);
+
+                assertTrue(csv.startsWith("name,rsvp_status,attendance_status\n"));
+                assertTrue(csv.contains("ACCEPTED"));
+                assertTrue(csv.contains("ATTENDED"));
+                assertTrue(csv.contains("John Doe"));
+        }
+
+        @Test
+        void exportEventAttendanceMatrixAsCsv_noParticipants_returnsOnlyHeader() {
+                Long organizationId = 1L;
+                Long eventId = 100L;
+                Long currentUserId = 99L;
+
+                Event event = Event.builder()
+                                .id(eventId).organizationId(organizationId)
+                                .startTime(Instant.now()).endTime(Instant.now().plusSeconds(3600)).createdAt(Instant.now()).build();
+                when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(currentUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventParticipantRepository.findByEventId(eventId)).thenReturn(List.of());
+
+                String csv = eventService.exportEventAttendanceMatrixAsCsv(organizationId, eventId);
+
+                assertEquals("name,rsvp_status,attendance_status\n", csv);
+        }
+
+        // ===== getEventsForCurrentUserInOrganization =====
+
+        @Test
+        void getEventsForCurrentUserInOrganization_noEvents_returnsEmptyList() {
+                Long organizationId = 1L;
+                Long userId = 10L;
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(eventRepository.findByOrganizationId(organizationId)).thenReturn(List.of());
+
+                List<EventDTO> result = eventService.getEventsForCurrentUserInOrganization(organizationId);
+
+                assertTrue(result.isEmpty());
+                verify(eventMapper, never()).toDtoList(any());
+        }
+
+        @Test
+        void getEventsForCurrentUserInOrganization_success_returnsBatchLoadedDtoList() {
+                Long organizationId = 1L;
+                Long userId = 10L;
+                Long eventId = 100L;
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+
+                Event event = Event.builder().id(eventId).organizationId(organizationId)
+                                .title("Orchestra Rehearsal").startTime(Instant.now()).endTime(Instant.now().plusSeconds(3600))
+                                .createdAt(Instant.now()).build();
+                when(eventRepository.findByOrganizationId(organizationId)).thenReturn(List.of(event));
+
+                EventDTO dto = EventDTO.builder().id(eventId).organizationId(organizationId).title("Orchestra Rehearsal").build();
+                when(eventMapper.toDtoList(any())).thenReturn(new java.util.ArrayList<>(List.of(dto)));
+
+                when(eventParticipantRepository.findByEventIdIn(anyCollection())).thenReturn(List.of(
+                                EventParticipant.builder().eventId(eventId).userId(userId)
+                                                .rsvpStatus(EventRsvpStatus.ACCEPTED).build()));
+
+                List<EventDTO> result = eventService.getEventsForCurrentUserInOrganization(organizationId);
+
+                assertEquals(1, result.size());
+                assertEquals(eventId, result.get(0).getId());
+                assertEquals("Orchestra Rehearsal", result.get(0).getTitle());
+                assertEquals(EventRsvpStatus.ACCEPTED, result.get(0).getMyRsvpStatus());
+        }
+
+        // ===== validateSongsForOrganization (via createEventInOrganization) =====
+
+        @Test
+        void createEventInOrganization_songNotFound_throwsEntityNotFoundException() {
+                Long organizationId = 1L;
+                Long currentUserId = 99L;
+                Long songId = 500L;
+
+                Instant start = Instant.parse("2025-01-01T10:00:00Z");
+                Instant end = Instant.parse("2025-01-01T12:00:00Z");
+
+                EventCreateRequestDTO request = EventCreateRequestDTO.builder()
+                                .title("Event with Song").eventType(EventType.CONCERT)
+                                .startTime(start).endTime(end).songIds(List.of(songId)).build();
+
+                when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(
+                                Organization.builder().id(organizationId).name("Orchestra").location("City").profileImageFileId(1L).build()));
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(currentUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(songRepository.findAllById(anyCollection())).thenReturn(List.of());
+
+                assertThrows(EntityNotFoundException.class,
+                                () -> eventService.createEventInOrganization(organizationId, request));
+                verify(eventRepository, never()).save(any());
+        }
+
+        @Test
+        void createEventInOrganization_songBelongsToDifferentOrganization_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long currentUserId = 99L;
+                Long songId = 500L;
+
+                Instant start = Instant.parse("2025-01-01T10:00:00Z");
+                Instant end = Instant.parse("2025-01-01T12:00:00Z");
+
+                EventCreateRequestDTO request = EventCreateRequestDTO.builder()
+                                .title("Event with Song").eventType(EventType.CONCERT)
+                                .startTime(start).endTime(end).songIds(List.of(songId)).build();
+
+                when(organizationRepository.findById(organizationId)).thenReturn(Optional.of(
+                                Organization.builder().id(organizationId).name("Orchestra").location("City").profileImageFileId(1L).build()));
+                when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, currentUserId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(currentUserId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+
+                Song song = Song.builder().id(songId).organizationId(99L).title("Wrong Org Song").build();
+                when(songRepository.findAllById(anyCollection())).thenReturn(List.of(song));
+
+                assertThrows(BusinessException.class,
+                                () -> eventService.createEventInOrganization(organizationId, request));
+                verify(eventRepository, never()).save(any());
+        }
+
+        // ===== validateSectionBelongsToOrganization and ensureSectionCalendarAccess =====
+
+        @Test
+        void getCalendarForCurrentUserInOrganization_sectionScopeNotFound_throwsEntityNotFoundException() {
+                Long organizationId = 1L;
+                Long userId = 10L;
+                Long sectionId = 200L;
+                Instant from = Instant.parse("2030-01-01T00:00:00Z");
+                Instant to = Instant.parse("2030-01-05T00:00:00Z");
+                PageRequest pageable = PageRequest.of(0, 20);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.empty());
+
+                io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO request =
+                                new io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO();
+                request.setScope(io.github.Romariok.orkestro.event.dto.EventCalendarScope.SECTION.name());
+                request.setSectionId(sectionId);
+                request.setFrom(from);
+                request.setTo(to);
+
+                assertThrows(EntityNotFoundException.class,
+                                () -> eventService.getCalendarForCurrentUserInOrganization(organizationId, request, pageable));
+        }
+
+        @Test
+        void getCalendarForCurrentUserInOrganization_sectionScopeAccessDenied_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long userId = 10L;
+                Long sectionId = 200L;
+                Instant from = Instant.parse("2030-01-01T00:00:00Z");
+                Instant to = Instant.parse("2030-01-05T00:00:00Z");
+                PageRequest pageable = PageRequest.of(0, 20);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+
+                Section section = new Section();
+                section.setId(sectionId);
+                section.setOrganizationId(organizationId);
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+
+                when(organizationPermissionChecker.isSectionMember(sectionId)).thenReturn(false);
+                when(organizationPermissionChecker.hasSectionPermission(sectionId, "EVENT_VIEW_SECTION_CALENDAR"))
+                                .thenReturn(false);
+                when(organizationPermissionChecker.hasOrganizationPermission(organizationId, "EVENT_VIEW_SECTION_CALENDAR"))
+                                .thenReturn(false);
+
+                io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO request =
+                                new io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO();
+                request.setScope(io.github.Romariok.orkestro.event.dto.EventCalendarScope.SECTION.name());
+                request.setSectionId(sectionId);
+                request.setFrom(from);
+                request.setTo(to);
+
+                assertThrows(BusinessException.class,
+                                () -> eventService.getCalendarForCurrentUserInOrganization(organizationId, request, pageable));
+        }
+
+        @Test
+        void getCalendarForCurrentUserInOrganization_sectionScopeWrongOrganization_throwsBusinessException() {
+                Long organizationId = 1L;
+                Long userId = 10L;
+                Long sectionId = 200L;
+                Instant from = Instant.parse("2030-01-01T00:00:00Z");
+                Instant to = Instant.parse("2030-01-05T00:00:00Z");
+                PageRequest pageable = PageRequest.of(0, 20);
+
+                when(securityUtils.getCurrentUserId()).thenReturn(userId);
+                when(organizationUserRepository.findByOrganizationIdAndUserId(organizationId, userId))
+                                .thenReturn(Optional.of(OrganizationUser.builder()
+                                                .organizationId(organizationId).userId(userId)
+                                                .status(OrganizationUserStatusType.ACCEPTED).joinedAt(Instant.now()).build()));
+
+                Section section = new Section();
+                section.setId(sectionId);
+                section.setOrganizationId(99L);
+                when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+
+                io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO request =
+                                new io.github.Romariok.orkestro.event.dto.EventCalendarRequestDTO();
+                request.setScope(io.github.Romariok.orkestro.event.dto.EventCalendarScope.SECTION.name());
+                request.setSectionId(sectionId);
+                request.setFrom(from);
+                request.setTo(to);
+
+                assertThrows(BusinessException.class,
+                                () -> eventService.getCalendarForCurrentUserInOrganization(organizationId, request, pageable));
         }
 
         @Test

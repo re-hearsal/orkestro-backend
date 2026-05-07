@@ -44,7 +44,7 @@ public class TaskCreateRequestDTO {
     private List<MultipartFile> files;
 
     @AssertTrue(message = "Files must be non-empty with valid names")
-    private boolean isFilesValid() {
+    boolean isFilesValid() {
         if (files == null || files.isEmpty()) {
             return true;
         }

@@ -92,6 +92,7 @@ public class OrganizationService {
       String normalizedDescription = request.getDescription() == null ? null : request.getDescription().trim();
 
       StoredFile file = null;
+      boolean createOrgSuccess = false;
       try {
          if (request.getProfileImage() != null && !request.getProfileImage().isEmpty()) {
             validateProfileImageFile(request.getProfileImage());
@@ -133,10 +134,13 @@ public class OrganizationService {
 
          createOrRegenerateInvite(saved.getId(), creatorId);
 
-         return buildOrganizationDto(saved);
-      } catch (RuntimeException ex) {
-         fileRollbackHelper.deleteFilesSafely(file != null ? List.of(file.getId()) : List.of());
-         throw ex;
+         OrganizationDTO result = buildOrganizationDto(saved);
+         createOrgSuccess = true;
+         return result;
+      } finally {
+         if (!createOrgSuccess) {
+            fileRollbackHelper.deleteFilesSafely(file != null ? List.of(file.getId()) : List.of());
+         }
       }
    }
 

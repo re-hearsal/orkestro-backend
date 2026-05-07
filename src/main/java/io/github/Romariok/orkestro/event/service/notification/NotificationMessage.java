@@ -9,4 +9,8 @@ public record NotificationMessage(
         String messageType,
         String text,
         Map<String, Object> extra
-) {}
+) {
+    public NotificationMessage {
+        extra = extra != null ? Map.copyOf(extra) : null;
+    }
+}

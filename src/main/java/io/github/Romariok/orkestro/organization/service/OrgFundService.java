@@ -115,7 +115,7 @@ public class OrgFundService {
                         + t.getCreatedAt() + "\n");
             }
         } catch (IOException e) {
-            throw new RuntimeException("Failed to generate CSV", e);
+            throw new IllegalStateException("Failed to generate CSV", e);
         }
         return baos.toByteArray();
     }

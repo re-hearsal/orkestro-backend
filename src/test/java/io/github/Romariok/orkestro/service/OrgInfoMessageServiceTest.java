@@ -19,7 +19,9 @@ import io.github.Romariok.orkestro.messaging.service.OrgInfoMessageService;
 import io.github.Romariok.orkestro.organization.models.OrganizationUser;
 import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.organization.models.enums.OrganizationUserStatusType;
+import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
+import org.springframework.context.MessageSource;
 import io.github.Romariok.orkestro.section.models.Section;
 import io.github.Romariok.orkestro.section.models.SectionUser;
 import io.github.Romariok.orkestro.section.repository.SectionRepository;
@@ -77,6 +79,12 @@ class OrgInfoMessageServiceTest {
 
     @Mock
     private WebSocketNotificationService webSocketNotificationService;
+
+    @Mock
+    private OrganizationRepository organizationRepository;
+
+    @Mock
+    private MessageSource messageSource;
 
     @InjectMocks
     private OrgInfoMessageService orgInfoMessageService;

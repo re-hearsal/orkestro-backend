@@ -42,7 +42,7 @@ public class OrganizationCreateRequestDTO {
    private List<@Valid @NotNull OrganizationLinkDTO> links;
 
    @AssertTrue(message = "Profile image must be a non-empty image")
-   private boolean isProfileImageValid() {
+   boolean isProfileImageValid() {
       if (profileImage == null) {
          return true;
       }
@@ -54,7 +54,7 @@ public class OrganizationCreateRequestDTO {
    }
 
    @AssertTrue(message = "Links must not contain duplicates")
-   private boolean isLinksUnique() {
+   boolean isLinksUnique() {
       if (links == null || links.isEmpty()) {
          return true;
       }

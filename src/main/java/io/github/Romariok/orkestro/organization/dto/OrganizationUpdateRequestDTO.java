@@ -43,7 +43,7 @@ public class OrganizationUpdateRequestDTO {
    private List<@Valid @NotNull OrganizationLinkDTO> links;
 
    @AssertTrue(message = "At least one field must be provided")
-   private boolean isAnyFieldProvided() {
+   boolean isAnyFieldProvided() {
       return name != null
             || location != null
             || description != null
@@ -52,7 +52,7 @@ public class OrganizationUpdateRequestDTO {
    }
 
    @AssertTrue(message = "Links must not contain duplicates")
-   private boolean isLinksUnique() {
+   boolean isLinksUnique() {
       if (links == null || links.isEmpty()) {
          return true;
       }

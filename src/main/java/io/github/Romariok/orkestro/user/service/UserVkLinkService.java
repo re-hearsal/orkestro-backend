@@ -1,5 +1,6 @@
 package io.github.Romariok.orkestro.user.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.Romariok.orkestro.organization.models.enums.NotificationChannelType;
 import io.github.Romariok.orkestro.security.SecurityUtils;
@@ -95,7 +96,7 @@ public class UserVkLinkService {
                     "type", "telegram.unlink");
             String json = objectMapper.writeValueAsString(payload);
             rabbitTemplate.convertAndSend(telegramBotMessageQueueName, json);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             log.warn("Failed to send Telegram unlink notification for telegramUserId={}", telegramUserId, e);
         }
     }
@@ -108,7 +109,7 @@ public class UserVkLinkService {
                     "type", "vk.unlink");
             String json = objectMapper.writeValueAsString(payload);
             rabbitTemplate.convertAndSend(vkBotMessageQueueName, json);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             log.warn("Failed to send VK unlink notification for vkUserId={}", vkUserId, e);
         }
     }

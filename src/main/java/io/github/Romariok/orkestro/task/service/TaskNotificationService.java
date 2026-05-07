@@ -250,7 +250,7 @@ public class TaskNotificationService {
                     "buttons", List.of());
             String json = objectMapper.writeValueAsString(payload);
             rabbitTemplate.convertAndSend("telegram_bot_messages", json);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             log.warn("Failed to send Telegram notification to user {}, falling back to email", user.getId());
             sendEmailNotification(user, text, text);
         }
@@ -263,7 +263,7 @@ public class TaskNotificationService {
                     "text", text);
             String json = objectMapper.writeValueAsString(payload);
             rabbitTemplate.convertAndSend("vk_bot_messages", json);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             log.warn("Failed to send VK notification to user {}, falling back to email", user.getId());
             sendEmailNotification(user, text, text);
         }

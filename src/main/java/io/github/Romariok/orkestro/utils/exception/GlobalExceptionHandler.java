@@ -2,9 +2,11 @@ package io.github.Romariok.orkestro.utils.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.NoSuchElementException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -196,6 +198,61 @@ public class GlobalExceptionHandler {
             return buildResponse(
                         HttpStatus.FORBIDDEN,
                         "Access denied",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
+      @ExceptionHandler(ServiceException.class)
+      public ResponseEntity<ApiErrorResponse> handleServiceException(
+                  ServiceException ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Service error",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
+      @ExceptionHandler(UncheckedIOException.class)
+      public ResponseEntity<ApiErrorResponse> handleUncheckedIO(
+                  UncheckedIOException ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "I/O error",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
+      @ExceptionHandler(NoSuchElementException.class)
+      public ResponseEntity<ApiErrorResponse> handleNoSuchElement(
+                  NoSuchElementException ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.NOT_FOUND,
+                        "Resource not found",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
+      @ExceptionHandler(IllegalStateException.class)
+      public ResponseEntity<ApiErrorResponse> handleIllegalState(
+                  IllegalStateException ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.CONFLICT,
+                        "Invalid state",
+                        ex.getMessage(),
+                        request.getRequestURI(),
+                        Collections.emptyList());
+      }
+
+      @ExceptionHandler(UnsupportedOperationException.class)
+      public ResponseEntity<ApiErrorResponse> handleUnsupportedOperation(
+                  UnsupportedOperationException ex, HttpServletRequest request) {
+            return buildResponse(
+                        HttpStatus.NOT_IMPLEMENTED,
+                        "Operation not supported",
                         ex.getMessage(),
                         request.getRequestURI(),
                         Collections.emptyList());

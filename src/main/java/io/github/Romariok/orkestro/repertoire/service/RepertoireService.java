@@ -75,6 +75,7 @@ public class RepertoireService {
 
       List<String> normalizedTags = normalizeTags(request.getTags());
       List<Long> uploadedFileIds = List.of();
+      boolean createSongSuccess = false;
       try {
          uploadedFileIds = uploadSongFilesForCreate(request.getFiles());
 
@@ -98,10 +99,13 @@ public class RepertoireService {
          validateSongTotalFilesCount(uploadedFileIds);
          saveSongFiles(saved.getId(), uploadedFileIds);
 
-         return buildSongDto(saved);
-      } catch (RuntimeException ex) {
-         fileRollbackHelper.deleteFilesSafely(uploadedFileIds);
-         throw ex;
+         SongDTO result = buildSongDto(saved);
+         createSongSuccess = true;
+         return result;
+      } finally {
+         if (!createSongSuccess) {
+            fileRollbackHelper.deleteFilesSafely(uploadedFileIds);
+         }
       }
    }
 
@@ -182,16 +186,20 @@ public class RepertoireService {
       StoredFile stored = fileStorageService.uploadForCurrentUser(
             request.getFile(),
             detectedType);
+      boolean uploadSongFileSuccess = false;
       try {
          SongFile link = new SongFile();
          link.setSongId(songId);
          link.setFileId(stored.getId());
          songFileRepository.save(link);
 
-         return buildSongDto(song);
-      } catch (RuntimeException ex) {
-         fileRollbackHelper.deleteFilesSafely(List.of(stored.getId()));
-         throw ex;
+         SongDTO result = buildSongDto(song);
+         uploadSongFileSuccess = true;
+         return result;
+      } finally {
+         if (!uploadSongFileSuccess) {
+            fileRollbackHelper.deleteFilesSafely(List.of(stored.getId()));
+         }
       }
    }
 
@@ -484,13 +492,6 @@ public class RepertoireService {
          throw new IllegalArgumentException(
                "Song cannot have more than " + fileLimitsProperties.getSongMaxFiles() + " files");
       }
-   }
-
-   private FileBuckets bucketizeSongFiles(Long songId) {
-      List<Long> fileIds = songFileRepository.findBySongId(songId).stream()
-            .map(SongFile::getFileId)
-            .toList();
-      return bucketizeFileIds(fileIds);
    }
 
    private FileBuckets bucketizeFileIds(List<Long> fileIds) {

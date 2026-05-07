@@ -42,15 +42,13 @@ public class EmailRsvpController {
     @GetMapping(produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> confirmAttendance(@Parameter(description = "Токен подтверждения из email", required = true) @RequestParam() String token) {
         String message = emailRsvpService.confirmAttendanceByToken(token);
-        String html = """
-                <!doctype html>
-                <html lang="ru">
-                <head><meta charset="UTF-8"><title>RSVP</title></head>
-                <body style="font-family: Arial, sans-serif; padding: 24px;">
-                  <h2>%s</h2>
-                </body>
-                </html>
-                """.formatted(message);
+        String html = "<!doctype html>"
+                + "<html lang=\"ru\">"
+                + "<head><meta charset=\"UTF-8\"><title>RSVP</title></head>"
+                + "<body style=\"font-family: Arial, sans-serif; padding: 24px;\">"
+                + "  <h2>" + message + "</h2>"
+                + "</body>"
+                + "</html>";
         return ResponseEntity.ok(html);
     }
 }

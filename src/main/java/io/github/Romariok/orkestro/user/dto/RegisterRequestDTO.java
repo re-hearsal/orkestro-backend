@@ -51,7 +51,7 @@ public class RegisterRequestDTO {
    private MultipartFile avatar;
 
    @AssertTrue(message = "Avatar file must be a non-empty image")
-   private boolean isAvatarValid() {
+   boolean isAvatarValid() {
       if (avatar == null) {
          return true;
       }

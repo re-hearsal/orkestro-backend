@@ -103,6 +103,7 @@ public class TaskService {
         validateVisibilityRolesForOrganization(organization.getId(), visibility, request.getVisibilityRoleIds());
 
         List<Long> uploadedFileIds = List.of();
+        boolean createTaskSuccess = false;
         try {
             uploadedFileIds = uploadTaskFilesForCreate(request.getFiles());
 
@@ -128,10 +129,13 @@ public class TaskService {
                 saveTaskVisibilityRoles(saved.getId(), request.getVisibilityRoleIds());
             }
 
-            return buildTaskDto(saved);
-        } catch (RuntimeException ex) {
-            fileRollbackHelper.deleteFilesSafely(uploadedFileIds);
-            throw ex;
+            TaskDTO result = buildTaskDto(saved);
+            createTaskSuccess = true;
+            return result;
+        } finally {
+            if (!createTaskSuccess) {
+                fileRollbackHelper.deleteFilesSafely(uploadedFileIds);
+            }
         }
     }
 
@@ -315,7 +319,6 @@ public class TaskService {
         validateTaskOrganization(task, organizationId);
 
         Long currentUserId = securityUtils.getCurrentUserId();
-        List<Long> existingAssigneeIds = getAssigneeIds(taskId);
         List<Long> newlyAddedIds = new ArrayList<>();
 
         for (Long userId : userIds) {
@@ -470,8 +473,10 @@ public class TaskService {
 
         StoredFile stored = fileStorageService.uploadForCurrentUser(file, FileTypeDetector.detect(file));
         Long fileId = stored.getId();
+        boolean uploadTaskFileSuccess = false;
         try {
             if (taskFileRepository.existsByTaskIdAndFileId(taskId, fileId)) {
+                uploadTaskFileSuccess = true;
                 return buildTaskDto(task);
             }
 
@@ -483,10 +488,13 @@ public class TaskService {
             task.setUpdatedAt(Instant.now());
             taskRepository.save(task);
 
-            return buildTaskDto(task);
-        } catch (RuntimeException ex) {
-            fileRollbackHelper.deleteFilesSafely(List.of(fileId));
-            throw ex;
+            TaskDTO result = buildTaskDto(task);
+            uploadTaskFileSuccess = true;
+            return result;
+        } finally {
+            if (!uploadTaskFileSuccess) {
+                fileRollbackHelper.deleteFilesSafely(List.of(fileId));
+            }
         }
     }
 
@@ -557,9 +565,8 @@ public class TaskService {
 
     private void validateStatusTransition(TaskStatus from, TaskStatus to) {
         boolean valid = switch (from) {
-            case OPEN -> to == TaskStatus.IN_PROGRESS || to == TaskStatus.CANCELLED;
+            case OPEN, DONE -> to == TaskStatus.IN_PROGRESS || to == TaskStatus.CANCELLED;
             case IN_PROGRESS -> to == TaskStatus.DONE || to == TaskStatus.CANCELLED;
-            case DONE -> to == TaskStatus.IN_PROGRESS || to == TaskStatus.CANCELLED;
             case CANCELLED -> to == TaskStatus.IN_PROGRESS || to == TaskStatus.DONE;
         };
         if (!valid) {

@@ -15,7 +15,9 @@ import io.github.Romariok.orkestro.event.repository.EventRepository;
 import io.github.Romariok.orkestro.event.service.EventNotificationService;
 import io.github.Romariok.orkestro.event.service.EventReminderService;
 import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
+import io.github.Romariok.orkestro.user.repository.UserRepository;
 import java.time.Instant;
+import org.springframework.context.MessageSource;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -38,6 +40,12 @@ class EventReminderServiceTest {
 
         @Mock
         private WebSocketNotificationService webSocketNotificationService;
+
+        @Mock
+        private UserRepository userRepository;
+
+        @Mock
+        private MessageSource messageSource;
 
         @InjectMocks
         private EventReminderService eventReminderService;

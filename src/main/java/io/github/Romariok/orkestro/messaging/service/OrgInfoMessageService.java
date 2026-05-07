@@ -208,7 +208,7 @@ public class OrgInfoMessageService {
                 rabbitTemplate.convertAndSend(emailQueueName, objectMapper.writeValueAsString(emailMsg));
             }
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize notification message", e);
+            throw new IllegalStateException("Failed to serialize notification message", e);
         }
 
         try {

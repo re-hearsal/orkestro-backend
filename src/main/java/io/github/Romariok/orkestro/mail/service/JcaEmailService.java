@@ -29,10 +29,10 @@ public class JcaEmailService {
             log.info("Template email sent to {} using template {}", to, templateName);
         } catch (ResourceException ex) {
             log.error("Failed to send template email to {} via SMTP RA", to, ex);
-            throw new RuntimeException("Failed to send template email", ex);
+            throw new IllegalStateException("Failed to send template email", ex);
         } catch (IllegalStateException ex) {
             log.error("Failed to load email template {}", templateName, ex);
-            throw new RuntimeException("Failed to load email template", ex);
+            throw ex;
         }
     }
 
