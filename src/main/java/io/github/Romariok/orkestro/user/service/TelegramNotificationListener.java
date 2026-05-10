@@ -147,8 +147,7 @@ public class TelegramNotificationListener {
          if (requestId != null) {
             payload.put("request_id", requestId);
          }
-         String json = objectMapper.writeValueAsString(payload);
-         rabbitTemplate.convertAndSend(telegramBotMessageQueueName, json);
+         rabbitTemplate.convertAndSend(telegramBotMessageQueueName, objectMapper.writeValueAsBytes(payload));
       } catch (JsonProcessingException e) {
          log.error("Failed to serialize Telegram result message", e);
       } catch (Exception e) {

@@ -54,7 +54,6 @@ class TelegramNotificationListenerTest {
 
       @BeforeEach
       void setUp() throws Exception {
-            // Устанавливаем имя очереди для отправки сообщений боту
             Field field = TelegramNotificationListener.class.getDeclaredField("telegramBotMessageQueueName");
             field.setAccessible(true);
             field.set(listener, "telegram_bot_messages");
@@ -99,13 +98,13 @@ class TelegramNotificationListenerTest {
 
             when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
                         .thenReturn(parsed);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":false}");
+            when(objectMapper.writeValueAsBytes(any())).thenReturn("{\"ok\":false}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             listener.handleTelegramRegistration(amqp);
 
             verifyNoInteractions(tokenService);
             verifyNoInteractions(userRepository);
-            verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), anyString());
+            verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), any(byte[].class));
       }
 
       @Test
@@ -119,13 +118,13 @@ class TelegramNotificationListenerTest {
             when(tokenService.parseToken(token)).thenThrow(new IllegalArgumentException("bad token"));
             when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
                         .thenReturn(parsed);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":false}");
+            when(objectMapper.writeValueAsBytes(any())).thenReturn("{\"ok\":false}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             listener.handleTelegramRegistration(amqp);
 
             verify(tokenService).parseToken(token);
             verifyNoInteractions(userRepository);
-            verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), anyString());
+            verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), any(byte[].class));
       }
 
       @Test
@@ -149,13 +148,13 @@ class TelegramNotificationListenerTest {
             when(userRepository.findByTelegramUserId(telegramUserId)).thenReturn(Optional.of(otherUser));
             when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
                         .thenReturn(parsed);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":false}");
+            when(objectMapper.writeValueAsBytes(any())).thenReturn("{\"ok\":false}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             listener.handleTelegramRegistration(amqp);
 
             verify(tokenService).parseToken(token);
             verify(userRepository).findByTelegramUserId(telegramUserId);
-            verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), anyString());
+            verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), any(byte[].class));
       }
 
       @Test
@@ -181,15 +180,12 @@ class TelegramNotificationListenerTest {
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
                         .thenReturn(parsed);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
+            when(objectMapper.writeValueAsBytes(any())).thenReturn("{\"ok\":true}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             listener.handleTelegramRegistration(amqp);
 
-            // Проверяем, что linkTelegram вызван с правильными параметрами
             verify(userTelegramLinkService).linkTelegram(userId, telegramUserId);
-
-            // И что в брокер отправлено сообщение об успешной привязке
-            verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), anyString());
+            verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), any(byte[].class));
       }
 
       @Test
@@ -215,13 +211,12 @@ class TelegramNotificationListenerTest {
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(objectMapper.readValue(any(byte[].class), eq(TelegramNotificationListener.TelegramRegistrationMessage.class)))
                         .thenReturn(parsed);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
+            when(objectMapper.writeValueAsBytes(any())).thenReturn("{\"ok\":true}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             org.mockito.Mockito.doThrow(new RuntimeException("Broker down"))
-                        .when(rabbitTemplate).convertAndSend(anyString(), anyString());
+                        .when(rabbitTemplate).convertAndSend(anyString(), any(byte[].class));
 
             assertDoesNotThrow(() -> listener.handleTelegramRegistration(amqp));
 
-            // Несмотря на падение брокера, linkTelegram должен быть вызван
             verify(userTelegramLinkService).linkTelegram(userId, telegramUserId);
       }
 }

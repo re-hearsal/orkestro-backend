@@ -52,8 +52,7 @@ public class TelegramEventNotificationService implements EventNotificationSender
                                     "event_id", event.getId(),
                                     "action", "DECLINE")));
 
-            String json = objectMapper.writeValueAsString(payload);
-            rabbitTemplate.convertAndSend(telegramBotMessageQueueName, json);
+            rabbitTemplate.convertAndSend(telegramBotMessageQueueName, objectMapper.writeValueAsBytes(payload));
             return true;
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize Telegram event invite message for user {}", user.getId(), e);
@@ -81,8 +80,7 @@ public class TelegramEventNotificationService implements EventNotificationSender
                     "text", text,
                     "locale", locale);
 
-            String json = objectMapper.writeValueAsString(payload);
-            rabbitTemplate.convertAndSend(telegramBotMessageQueueName, json);
+            rabbitTemplate.convertAndSend(telegramBotMessageQueueName, objectMapper.writeValueAsBytes(payload));
             return true;
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize Telegram event comment message for user {}", user.getId(), e);

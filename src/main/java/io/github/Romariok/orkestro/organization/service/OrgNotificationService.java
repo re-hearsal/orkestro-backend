@@ -163,8 +163,7 @@ public class OrgNotificationService {
                     "text", text,
                     "locale", user.getPreferredLanguage() == UserLanguageType.EN ? "en" : "ru",
                     "buttons", List.of());
-            String json = objectMapper.writeValueAsString(payload);
-            rabbitTemplate.convertAndSend("telegram_bot_messages", json);
+            rabbitTemplate.convertAndSend("telegram_bot_messages", objectMapper.writeValueAsBytes(payload));
         } catch (JsonProcessingException e) {
             log.warn("Failed to send Telegram notification to user {}, falling back to email", user.getId());
             sendEmailNotification(user, text, text);

@@ -188,7 +188,7 @@ public class OrgInfoMessageService {
                         "telegram_user_id", user.getTelegramUserId(),
                         "text", telegramText,
                         "buttons", List.of());
-                rabbitTemplate.convertAndSend(telegramBotMessageQueueName, objectMapper.writeValueAsString(payload));
+                rabbitTemplate.convertAndSend(telegramBotMessageQueueName, objectMapper.writeValueAsBytes(payload));
             } else if (channel == NotificationChannelType.VK && user.getVkUserId() != null) {
                 String vkText = buildTelegramText(locale, text, authorName, orgName, sectionName);
                 Map<String, Object> payload = Map.of(
