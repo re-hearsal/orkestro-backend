@@ -60,13 +60,13 @@ class TelegramEventNotificationServiceTest {
                 .preferredLanguage(UserLanguageType.EN)
                 .build();
 
-        when(objectMapper.writeValueAsString(any())).thenReturn("{\"telegram_user_id\":12345}");
+        when(objectMapper.writeValueAsBytes(any())).thenReturn("{\"telegram_user_id\":12345}".getBytes());
 
         boolean result = telegramEventNotificationService.sendEventCreatedNotification(
                 event, "Orchestra", user, "You have an event!");
 
         assertTrue(result);
-        verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), anyString());
+        verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), any(byte[].class));
     }
 
     @Test
@@ -89,7 +89,7 @@ class TelegramEventNotificationServiceTest {
                 event, "Orchestra", user, "You have an event!");
 
         assertFalse(result);
-        verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString());
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), any(Object.class));
     }
 
     @Test
@@ -107,8 +107,6 @@ class TelegramEventNotificationServiceTest {
                 .telegramUserId(99999L)
                 .preferredLanguage(UserLanguageType.RU)
                 .build();
-
-        when(objectMapper.writeValueAsString(any())).thenReturn("{\"locale\":\"ru\"}");
 
         boolean result = telegramEventNotificationService.sendEventCreatedNotification(
                 event, "Оркестр", user, "У вас событие!");
@@ -133,13 +131,13 @@ class TelegramEventNotificationServiceTest {
                 .preferredLanguage(UserLanguageType.EN)
                 .build();
 
-        when(objectMapper.writeValueAsString(any())).thenReturn("{\"telegram_user_id\":12345}");
+        when(objectMapper.writeValueAsBytes(any())).thenReturn("{\"telegram_user_id\":12345}".getBytes());
 
         boolean result = telegramEventNotificationService.sendEventCommentNotification(
                 event, "Orchestra", user, "New comment on the event");
 
         assertTrue(result);
-        verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), anyString());
+        verify(rabbitTemplate).convertAndSend(eq("telegram_bot_messages"), any(byte[].class));
     }
 
     @Test
@@ -162,7 +160,7 @@ class TelegramEventNotificationServiceTest {
                 event, "Orchestra", user, "Comment text");
 
         assertFalse(result);
-        verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString());
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), any(Object.class));
     }
 
     @Test
@@ -182,13 +180,13 @@ class TelegramEventNotificationServiceTest {
                 .preferredLanguage(UserLanguageType.EN)
                 .build();
 
-        when(objectMapper.writeValueAsString(any()))
+        when(objectMapper.writeValueAsBytes(any()))
                 .thenThrow(new JsonProcessingException("Serialization error") {});
 
         boolean result = telegramEventNotificationService.sendEventCreatedNotification(
                 event, "Orchestra", user, "Text");
 
         assertFalse(result);
-        verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString());
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), any(Object.class));
     }
 }
