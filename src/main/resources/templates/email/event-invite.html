@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="{{lang}}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{emailTitle}}</title>
+</head>
+<body>
+<p>{{text}}</p>
+<p>
+    <b>{{organizationLabel}}</b> {{organizationName}}<br/>
+    <b>{{eventLabel}}</b> {{eventTitle}}
+</p>
+{{#includeRsvpForm}}
+    <p>
+        <a href="{{attendUrl}}" style="display:inline-block;padding:10px 16px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;">{{attendButtonLabel}}</a>
+        &nbsp;
+        <a href="{{absentUrl}}" style="display:inline-block;padding:10px 16px;background:#dc2626;color:#fff;text-decoration:none;border-radius:6px;">{{absentButtonLabel}}</a>
+    </p>
+{{/includeRsvpForm}}
+</body>
+</html>

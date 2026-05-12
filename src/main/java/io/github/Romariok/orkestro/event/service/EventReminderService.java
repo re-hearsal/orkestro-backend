@@ -1,0 +1,122 @@
+package io.github.Romariok.orkestro.event.service;
+
+import io.github.Romariok.orkestro.event.models.Event;
+import io.github.Romariok.orkestro.event.models.EventParticipant;
+import io.github.Romariok.orkestro.event.models.enums.EventRsvpStatus;
+import io.github.Romariok.orkestro.event.repository.EventParticipantRepository;
+import io.github.Romariok.orkestro.event.repository.EventRepository;
+import io.github.Romariok.orkestro.notification.WebSocketNotificationService;
+import io.github.Romariok.orkestro.notification.dto.InAppNotificationDTO;
+import io.github.Romariok.orkestro.notification.models.enums.InAppNotificationType;
+import io.github.Romariok.orkestro.user.models.User;
+import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
+import io.github.Romariok.orkestro.user.repository.UserRepository;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.MessageSource;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Периодически проверяет предстоящие события и отправляет напоминания
+ * участникам за заданное количество минут до начала.
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class EventReminderService {
+
+    private final EventRepository eventRepository;
+    private final EventParticipantRepository eventParticipantRepository;
+    private final EventNotificationService eventNotificationService;
+    private final WebSocketNotificationService webSocketNotificationService;
+    private final UserRepository userRepository;
+    private final MessageSource messageSource;
+
+    /**
+     * Периодическая проверка событий, для которых пора отправить напоминание.
+     * Запускается каждые 60 секунд (по умолчанию), значение можно переопределить
+     * через свойство application: orkestro.events.reminder-check-interval-ms.
+     */
+    @Scheduled(fixedDelayString = "${orkestro.events.reminder-check-interval-ms:60000}")
+    @Transactional
+    public void processDueEventReminders() {
+        Instant now = Instant.now();
+        List<Event> eventsWithReminders = eventRepository.findByRemindBeforeMinutesIsNotNull();
+        if (eventsWithReminders.isEmpty()) {
+            return;
+        }
+
+        for (Event event : eventsWithReminders) {
+            Integer minutesBefore = event.getRemindBeforeMinutes();
+            if (minutesBefore == null) {
+                continue;
+            }
+            Instant startTime = event.getStartTime();
+            if (startTime == null) {
+                continue;
+            }
+
+            Instant reminderTime = startTime.minus(minutesBefore.longValue(), ChronoUnit.MINUTES);
+
+            if (now.isBefore(reminderTime) || !startTime.isAfter(now)) {
+                continue;
+            }
+
+            List<EventParticipant> participants = eventParticipantRepository.findByEventId(event.getId());
+            List<Long> userIds = participants.stream()
+                    .filter(p -> p.getRsvpStatus() != EventRsvpStatus.DECLINED)
+                    .map(EventParticipant::getUserId)
+                    .collect(Collectors.toList());
+
+            if (userIds.isEmpty()) {
+                event.setRemindBeforeMinutes(null);
+                continue;
+            }
+
+            try {
+                eventNotificationService.sendEventReminderNotifications(event, userIds);
+
+                Map<Long, User> usersById = userRepository.findAllById(userIds).stream()
+                        .collect(Collectors.toMap(User::getId, u -> u));
+                for (Long userId : userIds) {
+                    try {
+                        Locale locale = resolveLocale(usersById.get(userId));
+                        String title = messageSource.getMessage("notification.inapp.event.reminder.title",
+                                new Object[]{event.getTitle()}, locale);
+                        String body = messageSource.getMessage("notification.inapp.event.reminder.body", null, locale);
+                        webSocketNotificationService.send(userId, InAppNotificationDTO.builder()
+                                .type(InAppNotificationType.REMINDER)
+                                .title(title)
+                                .body(body)
+                                .entityId(event.getId())
+                                .entityType("EVENT")
+                                .build());
+                    } catch (Exception wsEx) {
+                        log.warn("Failed to send WebSocket reminder for event {} to user {}", event.getId(), userId, wsEx);
+                    }
+                }
+
+                event.setRemindBeforeMinutes(null);
+            } catch (Exception ex) {
+                log.error("Failed to send reminder for event {}", event.getId(), ex);
+            }
+        }
+
+        eventRepository.saveAll(eventsWithReminders);
+    }
+
+    private Locale resolveLocale(User user) {
+        if (user != null && user.getPreferredLanguage() == UserLanguageType.EN) {
+            return Locale.ENGLISH;
+        }
+        return Locale.forLanguageTag("ru");
+    }
+}

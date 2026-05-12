@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.0.0</version>
+		<version>4.0.6</version>
 		<relativePath /> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>io.github.Romariok</groupId>
@@ -31,10 +31,55 @@
 	<properties>
 		<java.version>21</java.version>
 	</properties>
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>com.fasterxml.jackson.core</groupId>
+				<artifactId>jackson-core</artifactId>
+				<version>2.21.2</version>
+			</dependency>
+			<dependency>
+				<groupId>tools.jackson.core</groupId>
+				<artifactId>jackson-core</artifactId>
+				<version>3.1.1</version>
+			</dependency>
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>1.21.0</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.commons</groupId>
+				<artifactId>commons-compress</artifactId>
+				<version>1.27.1</version>
+			</dependency>
+			<dependency>
+				<groupId>io.netty</groupId>
+				<artifactId>netty-codec-compression</artifactId>
+				<version>4.2.13.Final</version>
+			</dependency>
+			<dependency>
+				<groupId>io.netty</groupId>
+				<artifactId>netty-codec</artifactId>
+				<version>4.2.13.Final</version>
+			</dependency>
+			<dependency>
+				<groupId>org.bouncycastle</groupId>
+				<artifactId>bcprov-jdk18on</artifactId>
+				<version>1.84</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -44,11 +89,9 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
-
 		<dependency>
-			<groupId>org.postgresql</groupId>
-			<artifactId>postgresql</artifactId>
-			<scope>runtime</scope>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
@@ -72,6 +115,17 @@
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.assertj</groupId>
+			<artifactId>assertj-core</artifactId>
+			<version>3.27.7</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
@@ -81,12 +135,46 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.liquibase</groupId>
-			<artifactId>liquibase-core</artifactId>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>rabbitmq</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>toxiproxy</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-liquibase</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.resource</groupId>
+			<artifactId>jakarta.resource-api</artifactId>
+			<version>2.1.0</version>
 		</dependency>
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
@@ -113,13 +201,38 @@
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
-			<version>42.7.7</version>
+			<version>42.7.11</version>
 			<scope>runtime</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.mapstruct</groupId>
 			<artifactId>mapstruct</artifactId>
 			<version>1.5.5.Final</version>
+		</dependency>
+		<dependency>
+			<groupId>io.minio</groupId>
+			<artifactId>minio</artifactId>
+			<version>8.6.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.squareup.okhttp3</groupId>
+			<artifactId>okhttp</artifactId>
+			<version>4.12.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>2.8.4</version>
+		</dependency>
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-classic</artifactId>
+			<version>1.5.25</version>
+		</dependency>
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-core</artifactId>
+			<version>1.5.25</version>
 		</dependency>
 	</dependencies>
 
@@ -128,11 +241,14 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.11.0</version>
 				<configuration>
+					<release>${java.version}</release>
 					<annotationProcessorPaths>
 						<path>
 							<groupId>org.projectlombok</groupId>
 							<artifactId>lombok</artifactId>
+							<version>${lombok.version}</version>
 						</path>
 						<path>
 							<groupId>org.mapstruct</groupId>
@@ -173,7 +289,145 @@
 					</execution>
 				</executions>
 			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.5.2</version>
+				<configuration>
+					<argLine>--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED ${surefireArgLine}</argLine>
+					<testFailureIgnore>false</testFailureIgnore>
+					<forkCount>2</forkCount>
+					<reuseForks>true</reuseForks>
+				</configuration>
+			 </plugin>
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.11</version>
+				<executions>
+				  <execution>
+					 <id>default-prepare-agent</id>
+					 <goals>
+						<goal>prepare-agent</goal>
+					 </goals>
+					 <configuration>
+						<destFile>${project.build.directory}/coverage-reports/jacoco.exec</destFile>
+						<propertyName>surefireArgLine</propertyName>
+					 </configuration>
+				  </execution>
+				  <execution>
+					 <id>default-report</id>
+					 <phase>test</phase>
+					 <goals>
+						<goal>report</goal>
+					 </goals>
+					 <configuration>
+						<dataFile>${project.build.directory}/coverage-reports/jacoco.exec</dataFile>
+						<outputDirectory>${project.reporting.outputDirectory}/jacoco</outputDirectory>
+						<excludes>
+						  <exclude>**/dto/**</exclude>
+						  <exclude>**/models/**</exclude>
+						  <exclude>**/config/**</exclude>
+						  <exclude>**/mapper/**</exclude>
+						  <exclude>**/*Application.class</exclude>
+						  <exclude>**/*ServletInitializer.class</exclude>
+						  <exclude>**/*Email*.class</exclude>
+						  <exclude>**/*Rsvp*.class</exclude>
+						  <exclude>**/*EmailNotification*.class</exclude>
+						  <exclude>**/utils/file/**</exclude>
+						  <exclude>**/*Listener.class</exclude>
+						  <exclude>**/*Evaluator.class</exclude>
+						  <exclude>**/security/**</exclude>
+						  <exclude>**/utils/exception/**</exclude>
+						  <exclude>**/utils/helper/**</exclude>
+						  <exclude>**/mail/jca/**</exclude>
+						  <exclude>**/dao/**</exclude>
+						</excludes>
+					 </configuration>
+				  </execution>
+				  <execution>
+					 <id>default-check</id>
+					 <goals>
+						<goal>check</goal>
+					 </goals>
+					 <configuration>
+						<dataFile>${project.build.directory}/coverage-reports/jacoco.exec</dataFile>
+						<excludes>
+						  <exclude>**/dto/**</exclude>
+						  <exclude>**/models/**</exclude>
+						  <exclude>**/config/**</exclude>
+						  <exclude>**/mapper/**</exclude>
+						  <exclude>**/*Application.class</exclude>
+						  <exclude>**/*ServletInitializer.class</exclude>
+						  <exclude>**/*Email*.class</exclude>
+						  <exclude>**/*Rsvp*.class</exclude>
+						  <exclude>**/*EmailNotification*.class</exclude>
+						  <exclude>**/utils/file/**</exclude>
+						  <exclude>**/*Listener.class</exclude>
+						  <exclude>**/*Evaluator.class</exclude>
+						  <exclude>**/security/**</exclude>
+						  <exclude>**/utils/exception/**</exclude>
+						  <exclude>**/utils/helper/**</exclude>
+						  <exclude>**/mail/jca/**</exclude>
+						  <exclude>**/dao/**</exclude>
+						</excludes>
+						<rules>
+						  <rule>
+							 <element>BUNDLE</element>
+							 <limits>
+								<limit>
+								  <counter>LINE</counter>
+								  <value>COVEREDRATIO</value>
+								  <minimum>0.70</minimum>
+								</limit>
+							 </limits>
+						  </rule>
+						</rules>
+					 </configuration>
+				  </execution>
+				</executions>
+			 </plugin>
+			<plugin>
+				<groupId>org.springdoc</groupId>
+				<artifactId>springdoc-openapi-maven-plugin</artifactId>
+				<version>1.4</version>
+			</plugin>
 		</plugins>
 	</build>
+
+
+	<profiles>
+		<profile>
+			<id>unit-tests</id>
+			<activation>
+				<activeByDefault>true</activeByDefault>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<excludedGroups>integration</excludedGroups>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<profile>
+			<id>integration-tests</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<groups>integration</groups>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>

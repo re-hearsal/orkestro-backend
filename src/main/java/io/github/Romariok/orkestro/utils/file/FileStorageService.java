@@ -1,0 +1,190 @@
+package io.github.Romariok.orkestro.utils.file;
+
+import io.github.Romariok.orkestro.config.MinioProperties;
+import io.github.Romariok.orkestro.security.SecurityUtils;
+import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
+import io.github.Romariok.orkestro.utils.exception.InternalServiceException;
+import io.minio.GetObjectArgs;
+import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
+import io.minio.errors.ErrorResponseException;
+import io.minio.errors.InsufficientDataException;
+import io.minio.errors.InternalException;
+import io.minio.errors.InvalidResponseException;
+import io.minio.errors.ServerException;
+import io.minio.errors.XmlParserException;
+import io.minio.http.Method;
+import java.io.IOException;
+import java.io.InputStream;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class FileStorageService {
+
+   private final MinioClient minioClient;
+   private final MinioProperties minioProperties;
+   private final StoredFileRepository storedFileRepository;
+   private final SecurityUtils securityUtils;
+
+   @Transactional
+   public StoredFile uploadForCurrentUser(MultipartFile file, FileType fileType) {
+      Long userId = securityUtils.getCurrentUserId();
+      return upload(file, fileType, userId);
+   }
+
+   @Transactional
+   public StoredFile upload(MultipartFile file, FileType fileType, Long uploadedByUserId) {
+      String bucket = minioProperties.getBucket();
+      String originalName = sanitizeFilename(file.getOriginalFilename());
+      String objectName = UUID.randomUUID() + "-" + originalName;
+
+      try (InputStream inputStream = file.getInputStream()) {
+         PutObjectArgs putArgs = PutObjectArgs.builder()
+               .bucket(bucket)
+               .object(objectName)
+               .stream(inputStream, file.getSize(), -1)
+               .contentType(file.getContentType())
+               .build();
+
+         minioClient.putObject(putArgs);
+
+         StoredFile stored = StoredFile.builder()
+               .name(originalName)
+               .fileType(fileType != null ? fileType : FileTypeDetector.detect(file))
+               .bucketName(bucket)
+               .objectName(objectName)
+               .size(file.getSize())
+               .createdAt(Instant.now())
+               .uploadedByUserId(uploadedByUserId)
+               .build();
+
+         return storedFileRepository.save(stored);
+      } catch (ErrorResponseException
+               | InsufficientDataException
+               | InternalException
+               | InvalidKeyException
+               | InvalidResponseException
+               | IOException
+               | NoSuchAlgorithmException
+               | ServerException
+               | XmlParserException e) {
+         log.error("Failed to upload file {} for user {}",
+               originalName,
+               uploadedByUserId,
+               e);
+         throw new InternalServiceException(
+               "Error uploading file: " + originalName, e);
+      }
+   }
+
+   @Transactional(readOnly = true)
+   public InputStream download(Long fileId) {
+      StoredFile storedFile = storedFileRepository
+            .findById(fileId)
+            .orElseThrow(() -> new EntityNotFoundException("File not found: " + fileId));
+
+      try {
+         GetObjectArgs args = GetObjectArgs.builder()
+               .bucket(storedFile.getBucketName())
+               .object(storedFile.getObjectName())
+               .build();
+         return minioClient.getObject(args);
+      } catch (ErrorResponseException
+               | InsufficientDataException
+               | InternalException
+               | InvalidKeyException
+               | InvalidResponseException
+               | IOException
+               | NoSuchAlgorithmException
+               | ServerException
+               | XmlParserException e) {
+         throw new InternalServiceException("Error downloading file: " + fileId, e);
+      }
+   }
+
+   @Transactional
+   public void delete(Long fileId) {
+      StoredFile storedFile = storedFileRepository
+            .findById(fileId)
+            .orElseThrow(() -> new EntityNotFoundException("File not found: " + fileId));
+
+      try {
+         RemoveObjectArgs removeArgs = RemoveObjectArgs.builder()
+               .bucket(storedFile.getBucketName())
+               .object(storedFile.getObjectName())
+               .build();
+         minioClient.removeObject(removeArgs);
+      } catch (ErrorResponseException
+               | InsufficientDataException
+               | InternalException
+               | InvalidKeyException
+               | InvalidResponseException
+               | IOException
+               | NoSuchAlgorithmException
+               | ServerException
+               | XmlParserException e) {
+                  log.error("Failed to delete file {}", fileId, e);
+                  throw new InternalServiceException("Error deleting file from storage: " + fileId, e);
+      }
+
+      storedFileRepository.delete(storedFile);
+   }
+
+   @Transactional(readOnly = true)
+   public String generateDownloadUrl(Long fileId, Duration expiry) {
+      StoredFile storedFile = storedFileRepository
+            .findById(fileId)
+            .orElseThrow(() -> new EntityNotFoundException("File not found: " + fileId));
+
+      int seconds = (int) expiry.getSeconds();
+      if (seconds <= 0) {
+         seconds = (int) Duration.ofMinutes(15).getSeconds();
+      }
+
+      try {
+         GetPresignedObjectUrlArgs args = GetPresignedObjectUrlArgs.builder()
+               .method(Method.GET)
+               .bucket(storedFile.getBucketName())
+               .object(storedFile.getObjectName())
+               .expiry(seconds)
+               .build();
+
+         return minioClient.getPresignedObjectUrl(args);
+      } catch (ErrorResponseException
+               | InsufficientDataException
+               | InternalException
+               | InvalidKeyException
+               | InvalidResponseException
+               | IOException
+               | NoSuchAlgorithmException
+               | ServerException
+               | XmlParserException e) {
+         log.error("Failed to generate download URL for file {}", fileId, e);
+         throw new InternalServiceException(
+               "Error generating download URL for file: " + fileId, e);
+      }
+   }
+
+   private String sanitizeFilename(String originalFilename) {
+      String name = originalFilename != null ? originalFilename : "file";
+      name = name.replace("\\", "/");
+      int lastSlash = name.lastIndexOf('/');
+      if (lastSlash >= 0 && lastSlash < name.length() - 1) {
+         name = name.substring(lastSlash + 1);
+      }
+      return name;
+   }
+}

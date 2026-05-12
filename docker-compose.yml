@@ -1,0 +1,93 @@
+version: "3.9"
+services:
+  postgres:
+    container_name: postgres_orkestro
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: "postgres"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "pgpwd"
+      PGDATA: "/var/lib/postgresql/data/pgdata"
+    volumes:
+      - ./InitDatabase:/docker-entrypoint-initdb.d
+      - ./pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 4G
+    networks:
+      - postgres
+
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "alexeasy11@gmail.com"
+      PGADMIN_DEFAULT_PASSWORD: "pgadminpwd"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - ./pgadmin:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+    networks:
+      - postgres
+    user: root
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
+      - "mkdir -p /var/lib/pgadmin/sessions && chown -R 5050:5050 /var/lib/pgadmin && /entrypoint.sh"
+
+  minio:
+    container_name: minio
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - ./minio-data:/data
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: unless-stopped
+    networks:
+      - postgres
+
+  rabbitmq:
+    container_name: rabbitmq_orkestro
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - postgres
+
+networks:
+  postgres:
+    driver: bridge

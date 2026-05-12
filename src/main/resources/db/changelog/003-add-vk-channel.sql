@@ -1,0 +1,4 @@
+ALTER TYPE notification_channel_type ADD VALUE IF NOT EXISTS 'VK';
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS vk_user_id BIGINT UNIQUE;

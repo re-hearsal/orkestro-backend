@@ -1,0 +1,66 @@
+name: vulnerabilities check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build + SpotBugs
+        run: mvn -B compile
+
+      - name: Set up Snyk CLI
+        uses: snyk/actions/setup@master
+
+      - name: Snyk auth
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk auth "$SNYK_TOKEN"
+
+      - name: Run Snyk to check for vulnerabilities
+        working-directory: .
+        run: |
+          chmod +x mvnw || true
+          snyk test --maven --file=pom.xml --json-file-output=../snyk-report.json --exclude-licenses
+
+      - name: Upload Snyk report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-report
+          path: snyk-report.json
+          if-no-files-found: warn
+
+      - name: Upload SpotBugs report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotbugs-report
+          path: |
+            **/target/spotbugsXml.xml
+            **/target/spotbugs-sarif.xml
+          if-no-files-found: warn

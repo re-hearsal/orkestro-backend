@@ -1,17 +1,106 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <databaseChangeLog
-        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
-         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.17.xsd">
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.17.xsd">
 
     <changeSet id="001-initial-schema" author="romariok">
         <sqlFile
-                path="db/changelog/001-initial-schema.sql"
-                relativeToChangelogFile="true"
-                stripComments="false"
-                splitStatements="true"
-                endDelimiter=";"/>
+            path="001-initial-schema.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="002-remove-org-visibility" author="romariok">
+        <sqlFile
+            path="002-remove-org-visibility.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="003-add-vk-channel" author="romariok">
+        <sqlFile
+            path="003-add-vk-channel.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="004-event-description-templates" author="romariok">
+        <sqlFile
+            path="004-event-description-templates.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="005-event-comment-rating" author="romariok">
+        <sqlFile
+            path="005-event-comment-rating.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="006-task-assignees" author="romariok">
+        <sqlFile
+            path="006-task-assignees.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="007-messaging" author="romariok">
+        <sqlFile
+            path="007-messaging.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="008-org-fund" author="romariok">
+        <sqlFile
+            path="008-org-fund.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="009-in-app-notifications" author="romariok">
+        <sqlFile
+            path="009-in-app-notifications.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="010-remove-task-section-id" author="romariok">
+        <sqlFile
+            path="010-remove-task-section-id.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="011-task-deadline" author="romariok">
+        <sqlFile
+            path="011-task-deadline.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
     </changeSet>
 
 </databaseChangeLog>
