@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -104,8 +105,9 @@ class TelegramRabbitMQIntegrationTest extends AbstractRabbitMQIntegrationTest {
         // then
         assertThat(result).isTrue();
         Object received = rabbitTemplate.receiveAndConvert(telegramBotMessageQueue, 5000);
-        assertThat(received).isNotNull().isInstanceOf(String.class);
-        assertThat((String) received).contains("telegram_user_id").contains("123456");
+        assertThat(received).isNotNull().isInstanceOf(byte[].class);
+        String receivedStr = new String((byte[]) received, StandardCharsets.UTF_8);
+        assertThat(receivedStr).contains("telegram_user_id").contains("123456");
     }
 
     /**
