@@ -13,4 +13,6 @@ public class MinioProperties {
    private String secretKey;
 
    private String bucket;
+
+   private String region = "us-east-1";
 }
