@@ -375,6 +375,35 @@ public class TechnicalRoleService {
             return;
         }
 
+        if (role.isSystem() && "Leader".equals(role.getName())) {
+            roleRepository.findByScopeAndOrganizationIdAndName(RoleScopeType.ORGANIZATION, organizationId, "Co-leader")
+                    .ifPresent(coLeaderRole -> {
+                        List<UserRole> currentLeaders = userRoleRepository.findByRoleId(roleId);
+                        for (UserRole currentLeader : currentLeaders) {
+                            if (!currentLeader.getUserId().equals(userId)) {
+                                userRoleRepository.deleteById(UserRoleId.builder()
+                                        .userId(currentLeader.getUserId())
+                                        .roleId(roleId)
+                                        .build());
+                                UserRoleId coLeaderId = UserRoleId.builder()
+                                        .userId(currentLeader.getUserId())
+                                        .roleId(coLeaderRole.getId())
+                                        .build();
+                                if (!userRoleRepository.existsById(coLeaderId)) {
+                                    userRoleRepository.save(UserRole.builder()
+                                            .userId(currentLeader.getUserId())
+                                            .roleId(coLeaderRole.getId())
+                                            .build());
+                                }
+                            }
+                        }
+                        userRoleRepository.deleteById(UserRoleId.builder()
+                                .userId(userId)
+                                .roleId(coLeaderRole.getId())
+                                .build());
+                    });
+        }
+
         UserRole userRole = UserRole.builder()
                 .userId(userId)
                 .roleId(role.getId())

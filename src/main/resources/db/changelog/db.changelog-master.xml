@@ -103,4 +103,13 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="012-add-instruments" author="romariok">
+        <sqlFile
+            path="012-add-instruments.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>
