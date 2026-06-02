@@ -12,6 +12,7 @@ import io.github.Romariok.orkestro.utils.file.FileType;
 import io.github.Romariok.orkestro.utils.file.StoredFile;
 import io.github.Romariok.orkestro.utils.helper.FileRollbackHelper;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
+import io.github.Romariok.orkestro.utils.exception.EmailNotFoundException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.exception.InternalServiceException;
 import java.time.Instant;
@@ -46,6 +47,10 @@ public class AuthService {
     @Transactional
     public AuthResponseDTO register(RegisterRequestDTO request) {
         String username = request.getUsername() == null ? null : request.getUsername().trim();
+        if (username == null || !username.matches("^[a-zA-Z0-9]+$")) {
+            throw new BusinessException("Username must contain only Latin letters and digits");
+        }
+
         String name = request.getName() == null ? null : request.getName().trim();
         String email = request.getEmail() == null ? null : request.getEmail().trim();
         String location = request.getLocation() == null ? null : request.getLocation().trim();
@@ -55,6 +60,11 @@ public class AuthService {
         if (userService.existsByUsername(username)) {
             log.warn("Username already taken: {}", username);
             throw new BusinessException("Username is already taken");
+        }
+
+        if (userService.existsByEmail(email)) {
+            log.warn("Email already taken: {}", email);
+            throw new BusinessException("Email is already taken");
         }
 
         Long uploadedAvatarId = null;
@@ -70,7 +80,8 @@ public class AuthService {
                     .createdAt(now)
                     .updatedAt(now)
                     .notificationChannel(NotificationChannelType.EMAIL)
-                    .preferredLanguage(request.getPreferredLanguage() == null ? UserLanguageType.RU : request.getPreferredLanguage())
+                    .preferredLanguage(request.getPreferredLanguage() == null ? UserLanguageType.RU
+                            : request.getPreferredLanguage())
                     .build();
             userService.saveUser(user);
 
@@ -98,24 +109,32 @@ public class AuthService {
     }
 
     public AuthResponseDTO login(LoginRequestDTO request) {
-        log.info("Processing login for user: {}", request.getUsername());
+        boolean loginIsEmail = request.getLogin().contains("@");
+        log.info("Processing login for" + (loginIsEmail ? "email" : "user") + ": {}",
+                request.getLogin());
 
         try {
+            String username = loginIsEmail ? userService.findByEmail(request.getLogin()).getUsername()
+                    : request.getLogin();
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
-                            request.getUsername(),
+                            username,
                             request.getPassword()));
             SecurityContextHolder.getContext().setAuthentication(authentication);
-            log.info("User authenticated successfully: {}", request.getUsername());
-            String token = generateTokenForUser(request.getUsername());
-            log.info("Token generated for user: {}", request.getUsername());
+            log.info("User authenticated successfully: {}", username);
+            String token = generateTokenForUser(username);
+            log.info("Token generated for user: {}", username);
 
-            return new AuthResponseDTO(token, request.getUsername());
+            return new AuthResponseDTO(token, username);
         } catch (BadCredentialsException e) {
-            log.error("Authentication failed for user {}: {}", request.getUsername(), e.getMessage());
+            log.error("Authentication failed for user {}: {}", request.getLogin(), e.getMessage());
             throw e;
-        } catch (Exception e) {
-            log.error("Authentication failed for user {}: {}", request.getUsername(), e.getMessage(), e);
+        } catch (EmailNotFoundException e) {
+            log.error("User not found for email {}: {}", request.getLogin(), e.getMessage());
+            throw new BadCredentialsException("User not found for provided email", e);
+        }
+        catch (Exception e) {
+            log.error("Authentication failed for user {}: {}", request.getLogin(), e.getMessage(), e);
             throw new InternalServiceException("Error during user login", e);
         }
     }
