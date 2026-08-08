@@ -92,7 +92,7 @@ public class OrgInfoMessageService {
                 .filter(id -> !id.equals(authorId))
                 .distinct()
                 .toList();
-        sendNotificationsToUsers(memberUserIds, text, saved.getId(), authorName, orgName, null);
+        sendNotificationsToUsers(memberUserIds, text, saved.getId(), authorName, orgName, null, organizationId, null);
 
         return dto;
     }
@@ -125,7 +125,8 @@ public class OrgInfoMessageService {
                 .filter(id -> !id.equals(authorId))
                 .distinct()
                 .toList();
-        sendNotificationsToUsers(memberUserIds, text, saved.getId(), authorName, orgName, section.getName());
+        sendNotificationsToUsers(memberUserIds, text, saved.getId(), authorName, orgName, section.getName(),
+                section.getOrganizationId(), sectionId);
 
         return dto;
     }
@@ -163,14 +164,16 @@ public class OrgInfoMessageService {
     }
 
     private void sendNotificationsToUsers(List<Long> userIds, String text, Long messageId,
-                                          String authorName, String orgName, String sectionName) {
+                                          String authorName, String orgName, String sectionName,
+                                          Long organizationId, Long sectionId) {
         if (userIds.isEmpty()) {
             return;
         }
         List<User> users = userRepository.findAllById(userIds);
         for (User user : users) {
             try {
-                sendNotificationToUser(user, text, messageId, authorName, orgName, sectionName);
+                sendNotificationToUser(user, text, messageId, authorName, orgName, sectionName, organizationId,
+                        sectionId);
             } catch (Exception e) {
                 log.error("Failed to send info message notification to user {}", user.getId(), e);
             }
@@ -178,7 +181,8 @@ public class OrgInfoMessageService {
     }
 
     private void sendNotificationToUser(User user, String text, Long messageId,
-                                        String authorName, String orgName, String sectionName) {
+                                        String authorName, String orgName, String sectionName,
+                                        Long organizationId, Long sectionId) {
         NotificationChannelType channel = user.getNotificationChannel();
         Locale locale = resolveLocale(user);
         try {
@@ -218,6 +222,8 @@ public class OrgInfoMessageService {
                     .body(text)
                     .entityId(messageId)
                     .entityType("ORG_INFO_MESSAGE")
+                    .organizationId(organizationId)
+                    .sectionId(sectionId)
                     .build());
         } catch (Exception e) {
             log.error("Failed to send WebSocket notification for info message {} to user {}", messageId, user.getId(), e);

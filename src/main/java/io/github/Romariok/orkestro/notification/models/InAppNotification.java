@@ -39,6 +39,12 @@ public class InAppNotification {
     @Column(name = "entity_type")
     private String entityType;
 
+    @Column(name = "organization_id")
+    private Long organizationId;
+
+    @Column(name = "section_id")
+    private Long sectionId;
+
     @Column(name = "is_read", nullable = false)
     @Builder.Default
     private Boolean isRead = false;

@@ -60,6 +60,8 @@ public class NotificationController {
                 .body(n.getBody())
                 .entityId(n.getEntityId())
                 .entityType(n.getEntityType())
+                .organizationId(n.getOrganizationId())
+                .sectionId(n.getSectionId())
                 .isRead(n.getIsRead())
                 .createdAt(n.getCreatedAt())
                 .build();

@@ -71,7 +71,8 @@ public class OrgNotificationService {
                         title,
                         body,
                         organizationId,
-                        "organization");
+                        "ORGANIZATION",
+                        organizationId);
             } catch (Exception e) {
                 log.error("Failed to send join request received notification to user {}", userId, e);
             }
@@ -84,7 +85,7 @@ public class OrgNotificationService {
         Locale locale = resolveLocale(user);
         String title = getMessage("notification.org.join-request.approved.title", locale, orgName);
         String body = getMessage("notification.org.join-request.approved.body", locale, orgName);
-        sendWsAndPreferredChannel(user, InAppNotificationType.JOIN_REQUEST_APPROVED, title, body, organizationId, "organization");
+        sendWsAndPreferredChannel(user, InAppNotificationType.JOIN_REQUEST_APPROVED, title, body, organizationId, "ORGANIZATION", organizationId);
     }
 
     public void notifyJoinRequestRejected(Long organizationId, Long applicantUserId, String orgName) {
@@ -93,7 +94,7 @@ public class OrgNotificationService {
         Locale locale = resolveLocale(user);
         String title = getMessage("notification.org.join-request.rejected.title", locale, orgName);
         String body = getMessage("notification.org.join-request.rejected.body", locale, orgName);
-        sendWsAndPreferredChannel(user, InAppNotificationType.JOIN_REQUEST_REJECTED, title, body, organizationId, "organization");
+        sendWsAndPreferredChannel(user, InAppNotificationType.JOIN_REQUEST_REJECTED, title, body, organizationId, "ORGANIZATION", organizationId);
     }
 
 
@@ -103,7 +104,7 @@ public class OrgNotificationService {
         Locale locale = resolveLocale(user);
         String title = getMessage("notification.org.role.assigned.title", locale, orgName);
         String body = getMessage("notification.org.role.assigned.body", locale, roleName, orgName);
-        sendWsAndPreferredChannel(user, InAppNotificationType.ROLE_ASSIGNED, title, body, organizationId, "organization");
+        sendWsAndPreferredChannel(user, InAppNotificationType.ROLE_ASSIGNED, title, body, organizationId, "ORGANIZATION", organizationId);
     }
 
 
@@ -113,11 +114,11 @@ public class OrgNotificationService {
         Locale locale = resolveLocale(user);
         String title = getMessage("notification.org.role.removed.title", locale, orgName);
         String body = getMessage("notification.org.role.removed.body", locale, roleName, orgName);
-        sendWsAndPreferredChannel(user, InAppNotificationType.ROLE_REMOVED, title, body, organizationId, "organization");
+        sendWsAndPreferredChannel(user, InAppNotificationType.ROLE_REMOVED, title, body, organizationId, "ORGANIZATION", organizationId);
     }
 
     private void sendWsAndPreferredChannel(User user, InAppNotificationType type,
-            String title, String body, Long entityId, String entityType) {
+            String title, String body, Long entityId, String entityType, Long organizationId) {
         try {
             wsNotificationService.send(user.getId(), InAppNotificationDTO.builder()
                     .type(type)
@@ -125,6 +126,7 @@ public class OrgNotificationService {
                     .body(body)
                     .entityId(entityId)
                     .entityType(entityType)
+                    .organizationId(organizationId)
                     .build());
         } catch (Exception e) {
             log.error("Failed to send WS notification to user {}", user.getId(), e);

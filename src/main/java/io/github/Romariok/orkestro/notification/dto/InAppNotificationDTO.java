@@ -18,6 +18,8 @@ public class InAppNotificationDTO {
     private String body;
     private Long entityId;
     private String entityType;
+    private Long organizationId;
+    private Long sectionId;
     private Boolean isRead;
     private Instant createdAt;
 }

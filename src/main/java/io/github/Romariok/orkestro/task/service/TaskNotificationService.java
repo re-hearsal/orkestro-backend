@@ -52,7 +52,7 @@ public class TaskNotificationService {
                 Locale locale = resolveLocale(user);
                 String title = getMessage("notification.task.updated.title", locale, taskTitle);
                 String body = getMessage("notification.task.updated.body", locale, taskTitle, orgName);
-                sendWsAndPreferredChannel(user, InAppNotificationType.TASK_UPDATED, title, body, taskId, "TASK");
+                sendWsAndPreferredChannel(user, InAppNotificationType.TASK_UPDATED, title, body, taskId, "TASK", organizationId);
             } catch (Exception e) {
                 log.error("Failed to send TASK_UPDATED notification to user {}", userId, e);
             }
@@ -74,7 +74,7 @@ public class TaskNotificationService {
                 Locale locale = resolveLocale(user);
                 String title = getMessage("notification.task.deleted.title", locale, taskTitle);
                 String body = getMessage("notification.task.deleted.body", locale, taskTitle, orgName);
-                sendWsAndPreferredChannel(user, InAppNotificationType.TASK_DELETED, title, body, taskId, "TASK");
+                sendWsAndPreferredChannel(user, InAppNotificationType.TASK_DELETED, title, body, taskId, "TASK", organizationId);
             } catch (Exception e) {
                 log.error("Failed to send TASK_DELETED notification to user {}", userId, e);
             }
@@ -93,7 +93,7 @@ public class TaskNotificationService {
             Locale locale = resolveLocale(user);
             String title = getMessage("notification.task.assignee.added.title", locale);
             String body = getMessage("notification.task.assignee.added.body", locale, taskTitle, orgName);
-            sendWsAndPreferredChannel(user, InAppNotificationType.TASK_ASSIGNEE_ADDED, title, body, taskId, "TASK");
+            sendWsAndPreferredChannel(user, InAppNotificationType.TASK_ASSIGNEE_ADDED, title, body, taskId, "TASK", organizationId);
         } catch (Exception e) {
             log.error("Failed to send TASK_ASSIGNEE_ADDED notification to user {}", addedUserId, e);
         }
@@ -110,7 +110,7 @@ public class TaskNotificationService {
             Locale locale = resolveLocale(user);
             String title = getMessage("notification.task.assignee.removed.title", locale);
             String body = getMessage("notification.task.assignee.removed.body", locale, taskTitle, orgName);
-            sendWsAndPreferredChannel(user, InAppNotificationType.TASK_ASSIGNEE_REMOVED, title, body, taskId, "TASK");
+            sendWsAndPreferredChannel(user, InAppNotificationType.TASK_ASSIGNEE_REMOVED, title, body, taskId, "TASK", organizationId);
         } catch (Exception e) {
             log.error("Failed to send TASK_ASSIGNEE_REMOVED notification to user {}", removedUserId, e);
         }
@@ -145,7 +145,7 @@ public class TaskNotificationService {
                 Locale locale = resolveLocale(user);
                 String title = getMessage("notification.task.assignees.changed.title", locale, taskTitle);
                 String body = getMessage("notification.task.assignees.changed.body", locale, taskTitle, orgName);
-                sendWsAndPreferredChannel(user, InAppNotificationType.TASK_UPDATED, title, body, taskId, "TASK");
+                sendWsAndPreferredChannel(user, InAppNotificationType.TASK_UPDATED, title, body, taskId, "TASK", organizationId);
             } catch (Exception e) {
                 log.error("Failed to send assignees-changed notification to user {}", userId, e);
             }
@@ -167,7 +167,7 @@ public class TaskNotificationService {
                 Locale locale = resolveLocale(user);
                 String title = getMessage("notification.task.deadline.overdue.title", locale, taskTitle);
                 String body = getMessage("notification.task.deadline.overdue.body", locale, taskTitle, orgName);
-                sendWsAndPreferredChannel(user, InAppNotificationType.TASK_DEADLINE_OVERDUE, title, body, taskId, "TASK");
+                sendWsAndPreferredChannel(user, InAppNotificationType.TASK_DEADLINE_OVERDUE, title, body, taskId, "TASK", organizationId);
             } catch (Exception e) {
                 log.error("Failed to send TASK_DEADLINE_OVERDUE notification to user {}", userId, e);
             }
@@ -202,7 +202,7 @@ public class TaskNotificationService {
     }
 
     private void sendWsAndPreferredChannel(User user, InAppNotificationType type,
-            String title, String body, Long entityId, String entityType) {
+            String title, String body, Long entityId, String entityType, Long organizationId) {
         try {
             wsNotificationService.send(user.getId(), InAppNotificationDTO.builder()
                     .type(type)
@@ -210,6 +210,7 @@ public class TaskNotificationService {
                     .body(body)
                     .entityId(entityId)
                     .entityType(entityType)
+                    .organizationId(organizationId)
                     .build());
         } catch (Exception e) {
             log.error("Failed to send WS notification to user {}", user.getId(), e);
