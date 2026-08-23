@@ -23,6 +23,7 @@ import io.github.Romariok.orkestro.organization.repository.OrgFundRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationInviteRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationLinkRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationRepository;
+import io.github.Romariok.orkestro.messaging.repository.OrgInfoMessageRepository;
 import io.github.Romariok.orkestro.organization.repository.OrganizationUserRepository;
 import io.github.Romariok.orkestro.organization.service.OrganizationService;
 import io.github.Romariok.orkestro.config.FileLimitsProperties;
@@ -109,6 +110,9 @@ class OrganizationServiceTest {
 
       @Mock
       private SectionUserRepository sectionUserRepository;
+
+      @Mock
+      private OrgInfoMessageRepository orgInfoMessageRepository;
 
       @Mock
       private OrganizationInviteRepository organizationInviteRepository;
@@ -678,6 +682,7 @@ class OrganizationServiceTest {
 
             organizationService.deleteOrganization(1L);
 
+            verify(orgInfoMessageRepository).deleteByOrganizationId(1L);
             verify(organizationLinkRepository).deleteByOrganizationId(1L);
             verify(organizationUserRepository).deleteByOrganizationId(1L);
             verify(songRepository).findByOrganizationId(1L, Pageable.unpaged());

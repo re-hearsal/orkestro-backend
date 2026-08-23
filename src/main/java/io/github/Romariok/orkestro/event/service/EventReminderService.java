@@ -98,6 +98,7 @@ public class EventReminderService {
                                 .body(body)
                                 .entityId(event.getId())
                                 .entityType("EVENT")
+                                .organizationId(event.getOrganizationId())
                                 .build());
                     } catch (Exception wsEx) {
                         log.warn("Failed to send WebSocket reminder for event {} to user {}", event.getId(), userId, wsEx);

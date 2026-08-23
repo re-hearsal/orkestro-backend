@@ -103,4 +103,49 @@
             endDelimiter=";" />
     </changeSet>
 
+    <changeSet id="012-add-instruments" author="romariok">
+        <sqlFile
+            path="012-add-instruments.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="013-notification-organization-id" author="romariok">
+        <sqlFile
+            path="013-notification-organization-id.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="014-backfill-notification-organization-id" author="romariok">
+        <sqlFile
+            path="014-backfill-notification-organization-id.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="015-notification-section-id" author="romariok">
+        <sqlFile
+            path="015-notification-section-id.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
+    <changeSet id="016-backfill-notification-section-id" author="romariok">
+        <sqlFile
+            path="016-backfill-notification-section-id.sql"
+            relativeToChangelogFile="true"
+            stripComments="false"
+            splitStatements="true"
+            endDelimiter=";" />
+    </changeSet>
+
 </databaseChangeLog>

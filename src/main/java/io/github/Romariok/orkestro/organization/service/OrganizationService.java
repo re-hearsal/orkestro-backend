@@ -23,6 +23,7 @@ import io.github.Romariok.orkestro.repertoire.repository.SongRepository;
 import io.github.Romariok.orkestro.section.models.Section;
 import io.github.Romariok.orkestro.section.repository.SectionRepository;
 import io.github.Romariok.orkestro.section.repository.SectionUserRepository;
+import io.github.Romariok.orkestro.messaging.repository.OrgInfoMessageRepository;
 import io.github.Romariok.orkestro.task.models.Task;
 import io.github.Romariok.orkestro.task.repository.TaskRepository;
 import io.github.Romariok.orkestro.config.FileLimitsProperties;
@@ -84,6 +85,7 @@ public class OrganizationService {
    private final TaskRepository taskRepository;
    private final SectionRepository sectionRepository;
    private final SectionUserRepository sectionUserRepository;
+   private final OrgInfoMessageRepository orgInfoMessageRepository;
 
    @Transactional
    public OrganizationDTO createOrganization(OrganizationCreateRequestDTO request) {
@@ -299,6 +301,7 @@ public class OrganizationService {
       }
 
       // 6. Delete remaining org data
+      orgInfoMessageRepository.deleteByOrganizationId(organizationId);
       organizationInviteRepository.deleteById(organizationId);
       organizationLinkRepository.deleteByOrganizationId(organizationId);
       organizationUserRepository.deleteByOrganizationId(organizationId);

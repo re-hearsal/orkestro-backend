@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
-import static org.mockito.ArgumentMatchers.anyString;
+
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -163,8 +163,7 @@ class AuthServiceTest {
 
       @Test
       void register_usernameAlreadyTaken_throwsBusinessException() {
-            io.github.Romariok.orkestro.user.dto.RegisterRequestDTO request =
-                        new io.github.Romariok.orkestro.user.dto.RegisterRequestDTO();
+            io.github.Romariok.orkestro.user.dto.RegisterRequestDTO request = new io.github.Romariok.orkestro.user.dto.RegisterRequestDTO();
             request.setUsername("existingUser");
             request.setName("Existing User");
             request.setEmail("existing@example.com");
@@ -182,7 +181,7 @@ class AuthServiceTest {
       @Test
       void login_success_returnsAuthResponseWithToken() {
             LoginRequestDTO request = new LoginRequestDTO();
-            request.setUsername("user");
+            request.setLogin("user");
             request.setPassword("password");
 
             Authentication auth = new UsernamePasswordAuthenticationToken("user", "password", List.of());
@@ -203,7 +202,7 @@ class AuthServiceTest {
       @Test
       void login_badCredentials_throwsBadCredentialsException() {
             LoginRequestDTO request = new LoginRequestDTO();
-            request.setUsername("user");
+            request.setLogin("user");
             request.setPassword("wrong");
 
             when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
@@ -213,9 +212,46 @@ class AuthServiceTest {
       }
 
       @Test
+      void login_withEmail_success_returnsAuthResponseWithToken() {
+            LoginRequestDTO request = new LoginRequestDTO();
+            request.setLogin("user@example.com");
+            request.setPassword("password");
+
+            User user = new User();
+            user.setUsername("user");
+
+            when(userService.findByEmail("user@example.com")).thenReturn(user);
+
+            Authentication auth = new UsernamePasswordAuthenticationToken("user", "password", List.of());
+            when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(auth);
+
+            UserDetails userDetails = org.mockito.Mockito.mock(UserDetails.class);
+            when(userDetails.getAuthorities()).thenReturn(List.of());
+            when(userService.loadUserByUsername("user")).thenReturn(userDetails);
+            when(jwtUtil.generateToken(eq("user"), anySet())).thenReturn("jwt-token");
+
+            AuthResponseDTO result = authService.login(request);
+
+            assertNotNull(result);
+            assertEquals("jwt-token", result.getToken());
+            assertEquals("user", result.getUsername());
+      }
+
+      @Test
+      void login_withEmail_userNotFound_throwsException() {
+            LoginRequestDTO request = new LoginRequestDTO();
+            request.setLogin("notfound@example.com");
+            request.setPassword("password");
+
+            when(userService.findByEmail("notfound@example.com"))
+                        .thenThrow(new BadCredentialsException("User not found for provided email"));
+
+            assertThrows(BadCredentialsException.class, () -> authService.login(request));
+      }
+
+      @Test
       void register_success_noAvatar_returnsAuthResponse() {
-            io.github.Romariok.orkestro.user.dto.RegisterRequestDTO request =
-                        new io.github.Romariok.orkestro.user.dto.RegisterRequestDTO();
+            io.github.Romariok.orkestro.user.dto.RegisterRequestDTO request = new io.github.Romariok.orkestro.user.dto.RegisterRequestDTO();
             request.setUsername("newUser");
             request.setName("New User");
             request.setEmail("new@example.com");

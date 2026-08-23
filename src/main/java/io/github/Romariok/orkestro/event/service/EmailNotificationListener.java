@@ -79,6 +79,13 @@ public class EmailNotificationListener {
                     templateModel.put("attendUrl", buildRsvpUrl(message.eventId(), message.userId(), true));
                     templateModel.put("absentUrl", buildRsvpUrl(message.eventId(), message.userId(), false));
                 }
+                boolean hasEventLink = message.eventLink() != null && !message.eventLink().isBlank();
+                templateModel.put("hasEventLink", hasEventLink);
+                if (hasEventLink) {
+                    templateModel.put("eventLink", message.eventLink());
+                    templateModel.put("viewEventButtonLabel",
+                            messageSource.getMessage("notification.email.template.button.view-event", null, locale));
+                }
             }
 
             jcaEmailService.sendTemplateMessage(message.to(), message.subject(), templateName, templateModel);

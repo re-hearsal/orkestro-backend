@@ -33,6 +33,8 @@ public class WebSocketNotificationService {
                     .body(dto.getBody())
                     .entityId(dto.getEntityId())
                     .entityType(dto.getEntityType())
+                    .organizationId(dto.getOrganizationId())
+                    .sectionId(dto.getSectionId())
                     .isRead(false)
                     .build();
             InAppNotification saved = inAppNotificationRepository.save(entity);
@@ -60,6 +62,8 @@ public class WebSocketNotificationService {
                 .body(n.getBody())
                 .entityId(n.getEntityId())
                 .entityType(n.getEntityType())
+                .organizationId(n.getOrganizationId())
+                .sectionId(n.getSectionId())
                 .isRead(n.getIsRead())
                 .createdAt(n.getCreatedAt())
                 .build();

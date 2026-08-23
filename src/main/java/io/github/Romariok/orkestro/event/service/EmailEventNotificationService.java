@@ -25,6 +25,9 @@ public class EmailEventNotificationService implements EventNotificationSender {
     @Value("${orkestro.email.queue-name:email_notifications}")
     private String emailQueueName;
 
+    @Value("${orkestro.frontend.base-url}")
+    private String frontendBaseUrl;
+
     @Override
     public boolean sendEventCreatedNotification(Event event, String organizationName, User user, String text) {
         if (user.getEmail() == null || user.getEmail().isBlank()) {
@@ -40,6 +43,7 @@ public class EmailEventNotificationService implements EventNotificationSender {
                     : messageSource.getMessage("notification.event.title.untitled", null, locale);
             String subject = messageSource.getMessage("notification.event.email.subject.created",
                     new Object[] { eventTitle }, locale);
+            String eventLink = buildEventLink(event);
             EmailNotificationMessage message = new EmailNotificationMessage(
                     user.getId(),
                     event.getId(),
@@ -49,7 +53,8 @@ public class EmailEventNotificationService implements EventNotificationSender {
                     organizationName,
                     eventTitle,
                     true,
-                    null, null, null);
+                    null, null, null,
+                    eventLink);
             String payload = objectMapper.writeValueAsString(message);
             rabbitTemplate.convertAndSend(emailQueueName, payload);
             return true;
@@ -85,7 +90,8 @@ public class EmailEventNotificationService implements EventNotificationSender {
                     organizationName,
                     eventTitle,
                     false,
-                    null, null, null);
+                    null, null, null,
+                    null);
             String payload = objectMapper.writeValueAsString(message);
             rabbitTemplate.convertAndSend(emailQueueName, payload);
             return true;
@@ -96,5 +102,9 @@ public class EmailEventNotificationService implements EventNotificationSender {
             log.error("Failed to publish email comment notification to queue {} for user {}", emailQueueName, user.getId(), e);
             return false;
         }
+    }
+
+    private String buildEventLink(Event event) {
+        return frontendBaseUrl + "/organizations/" + event.getOrganizationId() + "/events/" + event.getId();
     }
 }

@@ -14,6 +14,7 @@ import io.github.Romariok.orkestro.user.repository.UserInstrumentRepository;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
 import io.github.Romariok.orkestro.user.repository.UserRoleRepository;
 import io.github.Romariok.orkestro.utils.exception.BusinessException;
+import io.github.Romariok.orkestro.utils.exception.EmailNotFoundException;
 import io.github.Romariok.orkestro.utils.exception.EntityNotFoundException;
 import io.github.Romariok.orkestro.utils.file.FileStorageService;
 import io.github.Romariok.orkestro.utils.file.FileReferenceService;
@@ -103,6 +104,17 @@ public class UserService implements UserDetailsService {
    }
 
    @Transactional(readOnly = true)
+   public User findByEmail(String email) {
+      return userRepository.findByEmail(email)
+            .orElseThrow(() -> new EmailNotFoundException("User not found with email: " + email));
+   }
+
+   @Transactional(readOnly = true)
+   public boolean existsByEmail(String email) {
+      return userRepository.existsByEmail(email);
+   }
+
+   @Transactional(readOnly = true)
    public PublicUserProfileDTO getPublicUserProfile(Long userId) {
       User user = userRepository.findById(userId)
             .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
@@ -134,7 +146,11 @@ public class UserService implements UserDetailsService {
          user.setName(request.getName().trim());
       }
       if (request.getEmail() != null) {
-         user.setEmail(request.getEmail().trim());
+         String newEmail = request.getEmail().trim();
+         if (existsByEmail(newEmail)) {
+            throw new BusinessException("Email is already taken");
+         }
+         user.setEmail(newEmail);
       }
       if (request.getLocation() != null) {
          user.setLocation(request.getLocation().trim());
@@ -158,8 +174,7 @@ public class UserService implements UserDetailsService {
       messagingTemplate.convertAndSendToUser(
             String.valueOf(currentUserId),
             "/queue/profile-updated",
-            profileDTO
-      );
+            profileDTO);
       return updated;
    }
 

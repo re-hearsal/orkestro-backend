@@ -133,7 +133,7 @@ public class AuthController {
 
     @Operation(
             summary = "Вход в систему",
-            description = "Аутентифицирует пользователя по имени и паролю. Возвращает JWT токен для доступа к защищенным ресурсам."
+            description = "Аутентифицирует пользователя по имени/почте и паролю. Возвращает JWT токен для доступа к защищенным ресурсам."
     )
     @ApiResponses({
             @ApiResponse(
@@ -193,7 +193,7 @@ public class AuthController {
                     content = @Content(
                             examples = @ExampleObject(
                                     name = "Пример входа",
-                                    value = "{\"username\": \"john_doe\", \"password\": \"securePassword123\"}"
+                                    value = "{\"login\": \"john_doe\", \"password\": \"securePassword123\"}"
                             )
                     )
             )

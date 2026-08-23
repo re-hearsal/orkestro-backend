@@ -43,3 +43,5 @@ build/
 .DS_STORE
 
 /tasks
+.claude
+.agents

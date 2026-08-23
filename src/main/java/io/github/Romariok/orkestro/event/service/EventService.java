@@ -215,6 +215,7 @@ public class EventService {
                                 .body(saved.getDescription())
                                 .entityId(saved.getId())
                                 .entityType("EVENT")
+                                .organizationId(saved.getOrganizationId())
                                 .build());
                     } catch (Exception ex) {
                         log.warn("Failed to send WebSocket notification for event {} to user {}", saved.getId(),
@@ -710,6 +711,7 @@ public class EventService {
                             .body(normalizedText)
                             .entityId(eventId)
                             .entityType("EVENT")
+                            .organizationId(organizationId)
                             .build());
                 } catch (Exception ex) {
                     log.warn("Failed to send WebSocket notification for event comment {} to user {}", saved.getId(),
