@@ -208,7 +208,7 @@ public class OrgInfoMessageService {
                 EmailNotificationMessage emailMsg = new EmailNotificationMessage(
                         user.getId(), null, user.getEmail(), subject, text,
                         orgName, null, false,
-                        "org-notification.html", authorName, sectionName);
+                        "org-notification.html", authorName, sectionName, null);
                 rabbitTemplate.convertAndSend(emailQueueName, objectMapper.writeValueAsString(emailMsg));
             }
         } catch (JsonProcessingException e) {

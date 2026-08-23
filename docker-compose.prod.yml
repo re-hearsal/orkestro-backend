@@ -76,6 +76,7 @@ services:
       SMTP_AUTH: "true"
       SMTP_STARTTLS: "true"
       EMAIL_RSVP_BASE_URL: https://${DOMAIN}
+      FRONTEND_BASE_URL: https://${DOMAIN}
     depends_on:
       postgres:
         condition: service_healthy

@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.github.Romariok.orkestro.event.models.Event;
 import io.github.Romariok.orkestro.event.service.EmailEventNotificationService;
 import io.github.Romariok.orkestro.event.service.EventNotificationService;
@@ -25,10 +27,13 @@ import java.util.Locale;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.MessageSource;
+import org.springframework.context.support.ResourceBundleMessageSource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class EventNotificationServiceTest {
@@ -455,5 +460,63 @@ class EventNotificationServiceTest {
                                 .sendEventCommentNotification(eq(event), eq("Orchestra"), eq(user), any());
                 verify(emailEventNotificationService, never())
                                 .sendEventCommentNotification(any(), any(), any(), any());
+        }
+
+        @Test
+        void sendEventCreatedNotifications_buildsTextWithDateLocationDescriptionAndDeepLink() {
+                ResourceBundleMessageSource realMessageSource = new ResourceBundleMessageSource();
+                realMessageSource.setBasename("messages");
+                realMessageSource.setDefaultEncoding("UTF-8");
+                ReflectionTestUtils.setField(eventNotificationService, "frontendBaseUrl", "https://orkestro.example");
+
+                Event event = Event.builder()
+                                .id(7L)
+                                .organizationId(3L)
+                                .title("Concert")
+                                .location("Main Hall")
+                                .description("Season opening")
+                                .startTime(Instant.parse("2026-01-15T18:30:00Z"))
+                                .createdAt(Instant.now())
+                                .build();
+
+                Long userId = 42L;
+                User user = User.builder()
+                                .id(userId)
+                                .username("user")
+                                .telegramUserId(1000L)
+                                .notificationChannel(NotificationChannelType.TELEGRAM)
+                                .preferredLanguage(UserLanguageType.EN)
+                                .createdAt(Instant.now())
+                                .updatedAt(Instant.now())
+                                .build();
+
+                Organization organization = Organization.builder()
+                                .id(3L)
+                                .name("Orchestra")
+                                .location("City")
+                                .build();
+
+                when(userRepository.findAllById(anyCollection())).thenReturn(List.of(user));
+                when(organizationRepository.findById(3L)).thenReturn(Optional.of(organization));
+                ReflectionTestUtils.setField(eventNotificationService, "messageSource", realMessageSource);
+                when(telegramEventNotificationService
+                                .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user), any()))
+                                .thenReturn(true);
+
+                eventNotificationService.sendEventCreatedNotifications(event, List.of(userId));
+
+                ArgumentCaptor<String> textCaptor = ArgumentCaptor.forClass(String.class);
+                verify(telegramEventNotificationService)
+                                .sendEventCreatedNotification(eq(event), eq("Orchestra"), eq(user), textCaptor.capture());
+                String text = textCaptor.getValue();
+
+                assertTrue(text.contains("Concert"), "text should contain event title");
+                assertTrue(text.contains("Main Hall"), "text should contain location");
+                assertTrue(text.contains("Season opening"), "text should contain description");
+                assertTrue(text.contains("15.01.2026"), "text should contain the formatted date");
+                assertTrue(text.contains("21:30"), "text should contain the formatted time (Europe/Moscow)");
+                assertTrue(
+                                text.contains("https://orkestro.example/organizations/3/events/7"),
+                                "text should contain the deep link");
         }
 }

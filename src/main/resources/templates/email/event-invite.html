@@ -17,5 +17,10 @@
         <a href="{{absentUrl}}" style="display:inline-block;padding:10px 16px;background:#dc2626;color:#fff;text-decoration:none;border-radius:6px;">{{absentButtonLabel}}</a>
     </p>
 {{/includeRsvpForm}}
+{{#hasEventLink}}
+    <p>
+        <a href="{{eventLink}}" style="display:inline-block;padding:10px 16px;background:#0f3eb5;color:#fff;text-decoration:none;border-radius:6px;">{{viewEventButtonLabel}}</a>
+    </p>
+{{/hasEventLink}}
 </body>
 </html>

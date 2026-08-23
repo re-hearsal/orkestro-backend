@@ -234,7 +234,7 @@ public class TaskNotificationService {
         if (user.getEmail() == null || user.getEmail().isBlank()) return;
         try {
             EmailNotificationMessage message = new EmailNotificationMessage(
-                    user.getId(), null, user.getEmail(), subject, text, null, null, false, null, null, null);
+                    user.getId(), null, user.getEmail(), subject, text, null, null, false, null, null, null, null);
             String payload = objectMapper.writeValueAsString(message);
             rabbitTemplate.convertAndSend(emailQueueName, payload);
         } catch (JsonProcessingException e) {

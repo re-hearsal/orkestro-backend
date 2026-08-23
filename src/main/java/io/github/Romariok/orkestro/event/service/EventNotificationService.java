@@ -7,6 +7,9 @@ import io.github.Romariok.orkestro.organization.repository.OrganizationRepositor
 import io.github.Romariok.orkestro.user.models.User;
 import io.github.Romariok.orkestro.user.models.enums.UserLanguageType;
 import io.github.Romariok.orkestro.user.repository.UserRepository;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -14,6 +17,7 @@ import java.util.Locale;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 
@@ -23,12 +27,21 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class EventNotificationService {
 
+    private static final ZoneId EVENT_DISPLAY_ZONE = ZoneId.of("Europe/Moscow");
+    private static final DateTimeFormatter EVENT_DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy").withZone(EVENT_DISPLAY_ZONE);
+    private static final DateTimeFormatter EVENT_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("HH:mm").withZone(EVENT_DISPLAY_ZONE);
+
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
     private final TelegramEventNotificationService telegramEventNotificationService;
     private final VkEventNotificationService vkEventNotificationService;
     private final EmailEventNotificationService emailEventNotificationService;
     private final MessageSource messageSource;
+
+    @Value("${orkestro.frontend.base-url}")
+    private String frontendBaseUrl;
 
     public void sendEventCreatedNotifications(Event event, Collection<Long> participantUserIds) {
         if (participantUserIds == null || participantUserIds.isEmpty()) {
@@ -162,14 +175,25 @@ public class EventNotificationService {
     private String buildInviteText(Event event, String organizationName, UserLanguageType language) {
         Locale locale = toLocale(language);
         String title = event.getTitle() != null ? event.getTitle() : defaultTitle(language);
-        return getMessage("notification.event.created.text", locale, title, organizationName);
+        String date = formatEventDate(event.getStartTime(), language);
+        String time = formatEventTime(event.getStartTime(), language);
+        String location = resolveLocation(event.getLocation(), language);
+        String description = resolveDescription(event.getDescription(), language);
+        String link = buildEventLink(event);
+        return getMessage(
+                "notification.event.created.text", locale, title, organizationName, date, time, location, description, link);
     }
 
     private String buildReminderText(Event event, String organizationName, UserLanguageType language) {
         Locale locale = toLocale(language);
         String title = event.getTitle() != null ? event.getTitle() : defaultTitle(language);
-        String startTime = event.getStartTime() != null ? event.getStartTime().toString() : defaultStartTime(language);
-        return getMessage("notification.event.reminder.text", locale, title, organizationName, startTime);
+        String date = formatEventDate(event.getStartTime(), language);
+        String time = formatEventTime(event.getStartTime(), language);
+        String location = resolveLocation(event.getLocation(), language);
+        String description = resolveDescription(event.getDescription(), language);
+        String link = buildEventLink(event);
+        return getMessage(
+                "notification.event.reminder.text", locale, title, organizationName, date, time, location, description, link);
     }
 
     private String buildCommentText(
@@ -238,6 +262,32 @@ public class EventNotificationService {
             return organizationName;
         }
         return getMessage("notification.event.organization.fallback", toLocale(language));
+    }
+
+    private String formatEventDate(Instant startTime, UserLanguageType language) {
+        return startTime != null ? EVENT_DATE_FORMATTER.format(startTime) : defaultStartTime(language);
+    }
+
+    private String formatEventTime(Instant startTime, UserLanguageType language) {
+        return startTime != null ? EVENT_TIME_FORMATTER.format(startTime) : defaultStartTime(language);
+    }
+
+    private String resolveLocation(String location, UserLanguageType language) {
+        if (location != null && !location.isBlank()) {
+            return location;
+        }
+        return getMessage("notification.event.location.not-specified", toLocale(language));
+    }
+
+    private String resolveDescription(String description, UserLanguageType language) {
+        if (description != null && !description.isBlank()) {
+            return description;
+        }
+        return getMessage("notification.event.description.not-specified", toLocale(language));
+    }
+
+    private String buildEventLink(Event event) {
+        return frontendBaseUrl + "/organizations/" + event.getOrganizationId() + "/events/" + event.getId();
     }
 
     private Locale toLocale(UserLanguageType language) {
